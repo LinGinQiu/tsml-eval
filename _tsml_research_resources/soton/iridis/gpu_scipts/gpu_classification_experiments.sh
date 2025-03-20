@@ -108,7 +108,7 @@ done
 
 if [ "${array_jobs}" != "" ]; then
 
-# This creates the scrip to run the job based on the info above
+# This creates the scrip to run the job based on the info above #module load conda/python3
 echo "#!/bin/bash
 #SBATCH --gres=gpu:1
 #SBATCH --mail-type=${mail}
