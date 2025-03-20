@@ -42,7 +42,7 @@ script_file_path="$local_path/tsml-eval/tsml_eval/experiments/classification_exp
 
 # Environment name, change accordingly, for set up, see https://github.com/time-series-machine-learning/tsml-eval/blob/main/_tsml_research_resources/soton/iridis/iridis_python.md
 # Separate environments for GPU and CPU are recommended
-env_name="tsml-eval"
+env_name="/scratch/cq2u24/conda-envs/deeplearning_pytorch"
 
 # Classifiers to loop over. Must be seperated by a space
 # See list of potential classifiers in set_classifier
@@ -127,7 +127,7 @@ echo "#!/bin/bash
 
 . /etc/profile
 
-module load anaconda/py3.10
+module load conda/python3
 source activate $env_name
 
 # Input args to the default classification_experiments are in main method of

@@ -1,36 +1,38 @@
 #!/bin/bash
 
-# Iridis 专用 Conda 环境创建脚本（使用 /scratch 路径）
+set -e
 
-# 设置环境路径
-env_path=/scratch/cq2u24/conda-envs/deeplearning_pytorch
+ENV_PATH="/scratch/cq2u24/conda-envs/deeplearning_pytorch"
+PYTHON_VERSION="3.10"
 
-# 自动清理旧环境目录
-if [ -d "$env_path" ]; then
-    echo "⚠️ 发现已有环境目录，正在删除：$env_path"
-    rm -rf "$env_path"
+# 删除旧环境
+if [ -d "$ENV_PATH" ]; then
+  echo "⚠️ Found existing environment at $ENV_PATH, removing..."
+  rm -rf "$ENV_PATH"
 fi
 
-# 加载 Iridis Conda 模块
-module purge
-module load conda/python3
+# 创建 conda 环境
+echo "🛠 Creating conda environment..."
+conda create -y -p $ENV_PATH python=$PYTHON_VERSION numpy pandas scikit-learn scipy matplotlib sympy tqdm
 
-# 创建环境
-conda create -y -p $env_path python=3.10 numpy pandas matplotlib scipy scikit-learn sympy tqdm
+# 初始化 conda
+eval "$(conda shell.bash hook)"
+conda activate $ENV_PATH
 
-# 激活环境
-conda activate $env_path
+# 检测是否有 GPU
+echo "🖥 Checking for GPU..."
+if command -v nvidia-smi &> /dev/null; then
+  echo "✅ GPU detected. Installing PyTorch with CUDA support..."
+  conda install -y pytorch torchvision torchaudio pytorch-cuda=12.1 -c pytorch -c nvidia
+else
+  echo "⚠ No GPU detected. Installing CPU-only PyTorch..."
+  conda install -y pytorch torchvision torchaudio cpuonly -c pytorch
+fi
 
-# 使用 pip 安装其他依赖
-pip install \
-  einops==0.8.0 \
-  local-attention==1.9.14 \
-  patool==1.12 \
-  reformer-pytorch==1.4.4 \
-  sktime==0.36.0 \
-  PyWavelets
+# 安装 Python 其他依赖
+echo "📦 Installing additional Python libraries via pip..."
+pip install einops==0.8.0 local-attention==1.9.14 patool==1.12 reformer-pytorch==1.4.4 sktime==0.36.0
 
-# 日志和提示
-echo "✅ Iridis 环境创建完成，已安装全部依赖！"
-echo "请使用以下命令激活环境："
-echo "conda activate $env_path"
+echo "✅ Environment setup complete!"
+echo "👉 You can activate the environment by running:"
+echo "conda activate $ENV_PATH"
