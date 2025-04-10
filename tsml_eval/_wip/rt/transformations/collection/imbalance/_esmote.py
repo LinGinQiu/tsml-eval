@@ -192,6 +192,7 @@ def _generate_samples(
         nn_ts = nn_data[nn_num[i, j]]
         new_ts = curr_ts.copy()
 
+        # c = random_state.uniform(0.5, 2.0)  # Randomize MSM penalty parameter
         alignment, _ = _get_alignment_path(
             nn_ts,
             curr_ts,

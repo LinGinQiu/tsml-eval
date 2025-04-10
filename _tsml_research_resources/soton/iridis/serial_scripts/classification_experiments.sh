@@ -65,9 +65,9 @@ normalise_data="false"
 data_transform_name="smote"
 data_transform_limit="true"
 
-results_dir="${results_dir}${data_transform_name}/"
+results_dir="${results_dir%/}_${data_transform_name}/"
 results_dir=$(echo "$results_dir" | sed 's#//*#/#g')
-out_dir="${out_dir}${data_transform_name}/"
+out_dir="${out_dir%/}_${data_transform_name}/"
 out_dir=$(echo "$out_dir" | sed 's#//*#/#g')
 
 # ======================================================================================
