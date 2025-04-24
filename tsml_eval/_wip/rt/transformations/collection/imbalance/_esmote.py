@@ -44,7 +44,7 @@ class ESMOTE(BaseCollectionTransformer):
     """
 
     _tags = {
-        "capability:multivariate": False,
+        "capability:multivariate": True,
         "capability:unequal_length": False,
         "requires_y": True,
     }
@@ -95,8 +95,14 @@ class ESMOTE(BaseCollectionTransformer):
         return self
 
     def _transform(self, X, y=None):
-        # remove the channel dimension to be compatible with sklearn
-        X = np.squeeze(X, axis=1)
+        # if input is 3D (n, c, l) or 2D (n, l), proceed; otherwise fall back to original
+        if X.ndim == 3:
+            n_samples, n_channels, seq_len = X.shape
+        elif X.ndim == 2:
+            X = X[:, np.newaxis, :]
+            n_samples, n_channels, seq_len = X.shape
+        else:
+            raise ValueError("Input X must be 3D or 2D: (n_samples, (n_channels), seq_len)")
         X_resampled = [X.copy()]
         y_resampled = [y.copy()]
 
@@ -124,7 +130,6 @@ class ESMOTE(BaseCollectionTransformer):
             y_resampled.append(y_new)
         X_resampled = np.vstack(X_resampled)
         y_resampled = np.hstack(y_resampled)
-        X_resampled = X_resampled[:, np.newaxis, :]
         return X_resampled, y_resampled
 
     @threaded
@@ -179,13 +184,13 @@ def _generate_samples(
     transformed_x: Optional[np.ndarray] = None,
     transformed_y: Optional[np.ndarray] = None,
 ):
-    X_new = np.zeros((len(rows), X.shape[1]), dtype=X.dtype)
+    X_new = np.zeros((len(rows), *X.shape[1:]), dtype=X.dtype)
 
     for count in prange(len(rows)):
         i = rows[count]
         j = cols[count]
-        curr_ts = X[i]
-        nn_ts = nn_data[nn_num[i, j]]
+        curr_ts = X[i]  # shape: (c, l)
+        nn_ts = nn_data[nn_num[i, j]] # shape: (c, l)
         new_ts = curr_ts.copy()
 
         c = random_state.uniform(0.5, 2.0)  # Randomize MSM penalty parameter
@@ -207,18 +212,19 @@ def _generate_samples(
             transformed_x,
             transformed_y,
         )
-        path_list = [[] for _ in range(len(curr_ts))]
+        path_list = [[] for _ in range(curr_ts.shape[1])]
         for k, l in alignment:
             path_list[k].append(l)
 
         # num_of_alignments = np.zeros_like(curr_ts, dtype=np.int32)
-        empty_of_array = np.zeros_like(curr_ts, dtype=type(curr_ts[0]))
+        empty_of_array = np.zeros_like(curr_ts, dtype=type(curr_ts[0])) # shape: (c, l)
 
         for k, l in enumerate(path_list):
             if len(l) == 0:
                 raise ValueError("No alignment found")
             key = random_state.choice(l)
-            empty_of_array[k] = curr_ts[k] - nn_ts[key]
+            # Compute difference for all channels at this time step
+            empty_of_array[:, k] = curr_ts[:, k] - nn_ts[:, key]
 
         X_new[count]  = new_ts + steps[count] * empty_of_array  #/ num_of_alignments
 
@@ -228,11 +234,26 @@ def _generate_samples(
 
 if __name__ == "__main__":
     # Example usage
-    X = np.random.randn(100, 1, 100)
+    X = np.random.randn(100, 3, 100)
     y = np.random.choice([0, 0, 1], size=100)
     print(np.unique(y, return_counts=True))
     smote = ESMOTE(n_neighbors=5, random_state=1, distance="msm")
 
     X_resampled, y_resampled = smote.fit_transform(X, y)
+    print(X_resampled.shape)
     print(np.unique(y_resampled,return_counts=True))
     stop = ""
+    # === Multivariate SMOTE Verification ===
+    print("\n=== Multivariate SMOTE alignment test with near-identical channels ===")
+    base = np.random.randn(30, 50)
+    X = np.stack([base, base + np.random.normal(0, 1e-5, size=base.shape)], axis=1)
+    y = np.array([0] * 20 + [1] * 10)
+
+    smote.fit(X, y)
+    X_resampled, y_resampled = smote.transform(X, y)
+
+    new_samples = X_resampled[len(X):]
+    diffs = new_samples[:, 0, :] - new_samples[:, 1, :]
+    std_dev = np.std(diffs, axis=1)
+
+    print("Mean std deviation across channels (should be < 1e-4 if aligned):", np.mean(std_dev))

@@ -48,6 +48,7 @@ class OHIT(BaseCollectionTransformer):
 
     _tags = {
         "requires_y": True,
+        "capability:multivariate": True,
     }
 
     def __init__(self, k=None, kapa=None, drT=0.9, distance='euclidean' ,random_state=None):
@@ -74,7 +75,15 @@ class OHIT(BaseCollectionTransformer):
         return self
 
     def _transform(self, X, y=None):
-        X = np.squeeze(X, axis=1)
+        if X.ndim == 3:
+            # Flatten multivariate input: (n_samples, c, l) → (n_samples, c * l)
+            n, c, l = X.shape
+            X = X.reshape(n, c * l)
+        elif X.ndim == 2:
+            # Already univariate format: (n_samples, l)
+            pass
+        else:
+            raise ValueError("Input X must be 2D or 3D")
         X_resampled = [X.copy()]
         y_resampled = [y.copy()]
 
@@ -257,7 +266,7 @@ class OHIT(BaseCollectionTransformer):
 
 if __name__ == "__main__":
     # Example usage
-    X = np.random.randn(100, 1, 100)
+    X = np.random.randn(100, 3, 100)
     y = np.random.choice([0, 0, 1], size=100)
     print(np.unique(y, return_counts=True))
     tsmote = OHIT(random_state=0)

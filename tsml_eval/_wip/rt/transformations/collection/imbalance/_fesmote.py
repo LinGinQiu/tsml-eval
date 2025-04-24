@@ -1,9 +1,9 @@
 from scipy.fft import rfft, irfft
 import numpy as np
-from tsml_eval._wip.rt.transformations.collection.imbalance._smote import SMOTE
+from tsml_eval._wip.rt.transformations.collection.imbalance._esmote import ESMOTE
 from typing import Optional, Union
 
-class FrequencySMOTE(SMOTE):
+class FrequencyESMOTE(ESMOTE):
     """
     Frequency domain SMOTE.
 
@@ -18,10 +18,6 @@ class FrequencySMOTE(SMOTE):
         If `RandomState` instance, random_state is the random number generator;
         If `None`, the random number generator is the `RandomState` instance used
         by `np.random`.
-
-    See Also
-    --------
-    ADASYN
 
     References
     """
@@ -93,13 +89,12 @@ if __name__ == "__main__":
     X = np.random.randn(100, 3, 100)
     y = np.random.choice([0, 0, 1], size=100)
     print(np.unique(y, return_counts=True))
-    smote = FrequencySMOTE(
+    smote = FrequencyESMOTE(
             n_neighbors=5,
-            distance="euclidean",
-            distance_params=None,
-            weights="uniform")
+            distance="msm",)
 
-    _, y_resampled = smote.fit_transform(X, y)
+    X_resampled, y_resampled = smote.fit_transform(X, y)
+    print("Resampled shape:", X_resampled.shape)
     print(np.unique(y_resampled, return_counts=True))
     stop = ""
 
