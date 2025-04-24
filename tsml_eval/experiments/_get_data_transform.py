@@ -16,6 +16,7 @@ unbalanced_transformers = [
     "ohit",
     "esmote",
     "fsmote",
+    "fesmote",
 ]
 unequal_transformers = [
     ["padder", "zero-padder"],
@@ -199,6 +200,20 @@ def _set_unbalanced_transformer(t, random_state, n_jobs):
             top_k=None,
             n_neighbors=5,
             distance="euclidean",
+            distance_params=None,
+            weights="uniform",
+            n_jobs=n_jobs,
+            random_state=random_state,
+        )
+    elif t =="fesmote":
+        from tsml_eval._wip.rt.transformations.collection.imbalance._fesmote import (
+            FrequencyESMOTE,
+        )
+
+        return FrequencyESMOTE(
+            top_k=None,
+            n_neighbors=5,
+            distance="msm",
             distance_params=None,
             weights="uniform",
             n_jobs=n_jobs,
