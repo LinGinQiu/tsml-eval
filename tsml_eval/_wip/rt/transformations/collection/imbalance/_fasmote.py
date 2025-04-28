@@ -107,19 +107,16 @@ class FrequencyAwareSMOTE(BaseCollectionTransformer):
                 for p in range(self.top_k):
                     target_freq = freq_curr[p]
                     mag_curr_p = mag_curr[p]
-                    print("Target frequency:", target_freq)
                     # relaxed frequency matching within delta
                     mask = np.any(np.abs(freq_class - target_freq) <= self.freq_match_delta, axis=1)
                     candidates = np.where(mask)[0]
                     candidates = candidates[candidates != idx]
-                    print("Candidates length: ", len(candidates))
 
                     if len(candidates) == 0:
                         component = x_curr.copy()
                         fallback_count += 1
                     else:
                         nn_idx = self._random_state.choice(candidates)
-                        print("current frequency:", freq_class[nn_idx])
                         mag_nn_p = mag_class[nn_idx, p]
 
                         x_nn = X_class[nn_idx]
