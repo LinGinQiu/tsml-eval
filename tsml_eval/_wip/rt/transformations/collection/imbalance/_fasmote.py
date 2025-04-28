@@ -113,6 +113,7 @@ class FrequencyAwareSMOTE(BaseCollectionTransformer):
                     candidates = candidates[candidates != idx]
 
                     if len(candidates) == 0:
+                        component = x_curr.copy()
                         fallback_count += 1
                     else:
                         nn_idx = self._random_state.choice(candidates)
@@ -134,13 +135,15 @@ class FrequencyAwareSMOTE(BaseCollectionTransformer):
                         for k, l in alignment:
                             path_list[k].append(l)
 
-                        component = np.zeros_like(x_curr, dtype=type(x_curr[0]))  # shape: (l)
+                        empty_of_array = np.zeros_like(x_curr, dtype=type(x_curr[0]))  # shape: (l)
 
                         for k, l in enumerate(path_list):
                             if len(l) == 0:
                                 raise ValueError("No alignment found")
                             key = self._random_state.choice(l)
-                            component[k] = x_curr[k] - x_nn[key]
+                            empty_of_array[k] = x_curr[k] - x_nn[key]
+
+                        component = x_curr + alpha * empty_of_array
 
                     generated_components.append(weights[p] * component)
 
