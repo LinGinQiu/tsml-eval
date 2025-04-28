@@ -3,7 +3,7 @@ import warnings
 from sklearn.utils import check_random_state
 from aeon.transformations.collection import BaseCollectionTransformer
 from collections import OrderedDict
-
+from tsml_eval._wip.rt.clustering.averaging._ba_utils import _get_alignment_path
 class FrequencyAwareSMOTE(BaseCollectionTransformer):
     """
     Frequency-aware SMOTE oversampling algorithm.
@@ -113,7 +113,6 @@ class FrequencyAwareSMOTE(BaseCollectionTransformer):
                     candidates = candidates[candidates != idx]
 
                     if len(candidates) == 0:
-                        component = x_curr.copy()
                         fallback_count += 1
                     else:
                         nn_idx = self._random_state.choice(candidates)
@@ -122,7 +121,26 @@ class FrequencyAwareSMOTE(BaseCollectionTransformer):
                         x_nn = X_class[nn_idx]
                         base_alpha = mag_nn_p / (mag_curr_p + mag_nn_p + 1e-8)
                         alpha = np.clip(self._random_state.normal(loc=base_alpha, scale=0.1), 0, 1)
-                        component = x_curr + alpha * (x_nn - x_curr)
+
+
+                        c = self._random_state.uniform(0.5, 2.0)  # Randomize MSM penalty parameter
+                        alignment, _ = _get_alignment_path(
+                            x_nn,
+                            x_curr,
+                            distance='msm',
+                            c=c
+                        )
+                        path_list = [[] for _ in range(x_curr.shape[-1])]
+                        for k, l in alignment:
+                            path_list[k].append(l)
+
+                        component = np.zeros_like(x_curr, dtype=type(x_curr[0]))  # shape: (l)
+
+                        for k, l in enumerate(path_list):
+                            if len(l) == 0:
+                                raise ValueError("No alignment found")
+                            key = self._random_state.choice(l)
+                            component[k] = x_curr[k] - x_nn[key]
 
                     generated_components.append(weights[p] * component)
 
