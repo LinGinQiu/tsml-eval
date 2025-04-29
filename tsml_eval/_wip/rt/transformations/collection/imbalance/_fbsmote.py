@@ -125,29 +125,32 @@ class FrequencyBinSMOTE(BaseCollectionTransformer):
                     if len(candidates) == 0:
                         fallback_count += 1
                         continue  # no suitable neighbor for this frequency bin
+
+                    # Prefer neighbors with the smallest frequency difference
+                    probs = (self.freq_match_delta - freq_diffs[candidates]).astype(float)  # smaller diff → higher weight
+                    total = np.sum(probs)
+                    if total == 0 or np.isnan(total):
+                        nn_idx = self._random_state.choice(candidates)
                     else:
-                        # Prefer neighbors with the smallest frequency difference
-                        probs = (self.freq_match_delta - freq_diffs[candidates]).astype(float)  # smaller diff → higher weight
-                        probs /= np.sum(probs)
+                        probs /= total
                         nn_idx = self._random_state.choice(candidates, p=probs)
+                    # Compute FFT of the neighbor sample
+                    x_nn = X_class[nn_idx]
+                    F_nn = np.fft.rfft(x_nn)
 
-                        # Compute FFT of the neighbor sample
-                        x_nn = X_class[nn_idx]
-                        F_nn = np.fft.rfft(x_nn)
+                    # Interpolation weight alpha sampled around ratio of magnitudes
+                    mag_nn_p = mag_class[nn_idx, p]
+                    base_alpha = mag_nn_p / (mag_curr_p + mag_nn_p + 1e-8)
+                    # Restrict alpha to [0.2, 0.8] to avoid extreme interpolation weights
+                    # which can cause unrealistic synthetic samples or artifacts.
+                    alpha = np.clip(self._random_state.normal(loc=base_alpha, scale=0.1), 0.2, 0.8)
 
-                        # Interpolation weight alpha sampled around ratio of magnitudes
-                        mag_nn_p = mag_class[nn_idx, p]
-                        base_alpha = mag_nn_p / (mag_curr_p + mag_nn_p + 1e-8)
-                        # Restrict alpha to [0.2, 0.8] to avoid extreme interpolation weights
-                        # which can cause unrealistic synthetic samples or artifacts.
-                        alpha = np.clip(self._random_state.normal(loc=base_alpha, scale=0.1), 0.2, 0.8)
-
-                        # Interpolate in frequency domain over a bandwidth window around the target frequency
-                        # Apply decay factor based on distance from target frequency bin
-                        for idx_bin in range(target_freq - self.bandwidth, target_freq + self.bandwidth + 1):
-                            if 0 <= idx_bin < F_curr.shape[0]:
-                                decay = 1.0 / (1.0 + abs(idx_bin - target_freq))
-                                F_synthetic[idx_bin] = F_curr[idx_bin] + decay * alpha * (F_nn[idx_bin] - F_curr[idx_bin])
+                    # Interpolate in frequency domain over a bandwidth window around the target frequency
+                    # Apply decay factor based on distance from target frequency bin
+                    for idx_bin in range(target_freq - self.bandwidth, target_freq + self.bandwidth + 1):
+                        if 0 <= idx_bin < F_curr.shape[0]:
+                            decay = 1.0 / (1.0 + abs(idx_bin - target_freq))
+                            F_synthetic[idx_bin] = F_curr[idx_bin] + decay * alpha * (F_nn[idx_bin] - F_curr[idx_bin])
 
                 if fallback_count == self.top_k:
                     continue  # all top-k fallback, retry
