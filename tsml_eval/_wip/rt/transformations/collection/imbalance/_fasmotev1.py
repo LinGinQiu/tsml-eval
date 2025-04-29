@@ -3,8 +3,7 @@ import warnings
 from sklearn.utils import check_random_state
 from aeon.transformations.collection import BaseCollectionTransformer
 from collections import OrderedDict
-from tsml_eval._wip.rt.clustering.averaging._ba_utils import _get_alignment_path
-class FrequencyAwareSMOTE(BaseCollectionTransformer):
+class FrequencyBinSMOTE(BaseCollectionTransformer):
     """
     Frequency-aware SMOTE oversampling algorithm.
 
@@ -31,11 +30,13 @@ class FrequencyAwareSMOTE(BaseCollectionTransformer):
         "requires_y": True,
     }
 
-    def __init__(self, n_neighbors=5, top_k=3, freq_match_delta=2, random_state=None):
+    def __init__(self, n_neighbors=5, top_k=3, freq_match_delta=2, bandwidth=1, apply_window=False, random_state=None):
         self.random_state = random_state
         self.n_neighbors = n_neighbors
         self.top_k = top_k
         self.freq_match_delta = freq_match_delta
+        self.bandwidth = bandwidth
+        self.apply_window = apply_window
         self._random_state = None
         super().__init__()
 
@@ -99,8 +100,11 @@ class FrequencyAwareSMOTE(BaseCollectionTransformer):
                 freq_curr = freq_class[idx]
                 mag_curr = mag_class[idx]
 
-                generated_components = []
-                weights = mag_curr / np.sum(mag_curr)
+                # Compute FFT of the current sample
+                F_curr = np.fft.rfft(x_curr)
+
+                # Initialize synthetic FFT as a copy of current sample's FFT
+                F_synthetic = F_curr.copy()
 
                 fallback_count = 0
 
@@ -113,26 +117,37 @@ class FrequencyAwareSMOTE(BaseCollectionTransformer):
                     candidates = candidates[candidates != idx]
 
                     if len(candidates) == 0:
-                        component = x_curr.copy()
                         fallback_count += 1
+                        continue  # no suitable neighbor for this frequency bin
                     else:
                         nn_idx = self._random_state.choice(candidates)
-                        mag_nn_p = mag_class[nn_idx, p]
 
+                        # Compute FFT of the neighbor sample
                         x_nn = X_class[nn_idx]
+                        F_nn = np.fft.rfft(x_nn)
+
+                        # Interpolation weight alpha sampled around ratio of magnitudes
+                        mag_nn_p = mag_class[nn_idx, p]
                         base_alpha = mag_nn_p / (mag_curr_p + mag_nn_p + 1e-8)
                         alpha = np.clip(self._random_state.normal(loc=base_alpha, scale=0.1), 0, 1)
 
-                        msm_diff = self._msm_difference(x_curr, x_nn, self._random_state)
-                        component = x_curr + alpha * msm_diff
-
-                    generated_components.append(weights[p] * component)
+                        # Interpolate in frequency domain over a bandwidth window around the target frequency
+                        # Apply decay factor based on distance from target frequency bin
+                        for idx_bin in range(target_freq - self.bandwidth, target_freq + self.bandwidth + 1):
+                            if 0 <= idx_bin < F_curr.shape[0]:
+                                decay = 1.0 / (1.0 + abs(idx_bin - target_freq))
+                                F_synthetic[idx_bin] = F_curr[idx_bin] + decay * alpha * (F_nn[idx_bin] - F_curr[idx_bin])
 
                 if fallback_count == self.top_k:
                     continue  # all top-k fallback, retry
 
-                generated_components = np.stack(generated_components, axis=0)
-                x_synthetic = np.sum(generated_components, axis=0)
+                # Apply optional smoothing window in frequency domain to reduce artifacts
+                if self.apply_window:
+                    F_synthetic *= np.hanning(F_synthetic.shape[0])
+
+                # Inverse FFT to reconstruct synthetic time series
+                x_synthetic = np.fft.irfft(F_synthetic, n=seq_len)
+
                 X_gen[i] = x_synthetic
                 i += 1
 
@@ -170,37 +185,14 @@ class FrequencyAwareSMOTE(BaseCollectionTransformer):
 
         return np.array(freq_features), np.array(freq_magnitudes)
 
-    def _msm_difference(self, x_curr, x_nn, random_state):
-        """Compute MSM-based local difference between x_curr and x_nn."""
-        c = random_state.uniform(0.5, 2.0)
-        alignment, _ = _get_alignment_path(
-            x_nn,
-            x_curr,
-            distance='msm',
-            c=c
-        )
-
-        path_list = [[] for _ in range(x_curr.shape[-1])]
-        for k, l in alignment:
-            path_list[k].append(l)
-
-        empty_of_array = np.zeros_like(x_curr, dtype=x_curr.dtype)
-
-        for k, l in enumerate(path_list):
-            if len(l) == 0:
-                raise ValueError("No alignment found")
-            key = random_state.choice(l)
-            empty_of_array[k] = x_curr[k] - x_nn[key]
-
-        return empty_of_array
 
 if __name__ == "__main__":
     X = np.random.randn(100, 1, 100)
     y = np.random.choice([0, 0, 1], size=100)
     print(np.unique(y, return_counts=True))
 
-    # Initialize FrequencyAwareSMOTE
-    smote = FrequencyAwareSMOTE(n_neighbors=5, top_k=3, freq_match_delta=2, random_state=42)
+    # Initialize FrequencyBinSMOTE
+    smote = FrequencyBinSMOTE(n_neighbors=5, top_k=3, freq_match_delta=2, random_state=42)
 
     # Fit and transform
     smote.fit(X, y)
