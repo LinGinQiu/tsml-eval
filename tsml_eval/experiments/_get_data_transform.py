@@ -18,6 +18,7 @@ unbalanced_transformers = [
     "fsmote",
     "fesmote",
     "fasmote",
+    "fbsmote",
 ]
 unequal_transformers = [
     ["padder", "zero-padder"],
@@ -231,4 +232,19 @@ def _set_unbalanced_transformer(t, random_state, n_jobs):
             top_k=3,
             freq_match_delta=2,
             random_state=random_state,
+        )
+
+    elif t == "fbsmote":
+        from tsml_eval._wip.rt.transformations.collection.imbalance._fbsmote import (
+            FrequencyBinSMOTE
+        )
+
+        return FrequencyBinSMOTE(
+            n_neighbors=5,
+            top_k=3,
+            freq_match_delta=2,
+            bandwidth=1,
+            apply_window=False,
+            random_state=random_state,
+            normalize_energy=False,
         )
