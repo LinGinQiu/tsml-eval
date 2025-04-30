@@ -241,10 +241,10 @@ def _set_unbalanced_transformer(t, random_state, n_jobs):
 
         return FrequencyBinSMOTE(
             n_neighbors=5,
-            top_k=3,
+            top_k=5,
             freq_match_delta=2,
-            bandwidth=1,
-            apply_window=False,
+            bandwidth=2,
+            apply_window=True,
             random_state=random_state,
-            normalize_energy=False,
+            normalize_energy=True,
         )
