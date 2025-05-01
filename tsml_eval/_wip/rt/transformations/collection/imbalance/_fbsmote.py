@@ -3,6 +3,8 @@ import warnings
 from sklearn.utils import check_random_state
 from aeon.transformations.collection import BaseCollectionTransformer
 from collections import OrderedDict
+from tsml_eval._wip.rt.transformations.collection.imbalance._utils import SyntheticSampleSelector
+
 class FrequencyBinSMOTE(BaseCollectionTransformer):
     """
     Frequency-aware SMOTE oversampling algorithm.
@@ -34,7 +36,7 @@ class FrequencyBinSMOTE(BaseCollectionTransformer):
         "requires_y": True,
     }
 
-    def __init__(self, n_neighbors=3, top_k=3, freq_match_delta=2, bandwidth=1, apply_window=False, random_state=None, normalize_energy=False):
+    def __init__(self, n_neighbors=3, top_k=3, freq_match_delta=2, bandwidth=1, apply_window=False, random_state=None, normalize_energy=False, enable_selection=False):
         self.random_state = random_state
         self.n_neighbors = n_neighbors
         self.top_k = top_k
@@ -42,8 +44,9 @@ class FrequencyBinSMOTE(BaseCollectionTransformer):
         self.bandwidth = bandwidth
         self.apply_window = apply_window
         self.normalize_energy = normalize_energy
+        self.enable_selection = enable_selection
         self._random_state = None
-        assert n_neighbors >= top_k
+        assert n_neighbors <= top_k
         super().__init__()
 
     def _fit(self, X, y=None):
@@ -86,6 +89,8 @@ class FrequencyBinSMOTE(BaseCollectionTransformer):
         for class_sample, n_samples_gen in self.sampling_strategy_.items():
             if n_samples_gen == 0:
                 continue
+            if self.enable_selection:
+                n_samples_gen = n_samples_gen * 2
             target_class_indices = np.flatnonzero(y == class_sample)
             X_class = X[target_class_indices]
             y_class = y[target_class_indices]
@@ -105,7 +110,6 @@ class FrequencyBinSMOTE(BaseCollectionTransformer):
                 x_curr = X_class[idx]
                 freq_curr = freq_class[idx]
                 freq_curr = self._random_state.choice(freq_curr, size=self.n_neighbors, replace=False)
-                print(freq_curr)
                 mag_curr = mag_class[idx]
 
                 # Compute FFT of the current sample
@@ -190,6 +194,23 @@ class FrequencyBinSMOTE(BaseCollectionTransformer):
         X_resampled = np.concatenate(X_resampled, axis=0)
         y_resampled = np.concatenate(y_resampled, axis=0)
 
+        # Optional: apply selection mechanism to filter synthetic samples
+        if self.enable_selection:
+            from warnings import warn
+            try:
+                selector = SyntheticSampleSelector(random_state=self.random_state)
+                X_real = X_resampled[:len(X)]
+                y_real = y_resampled[:len(y)]
+                assert np.array_equal(X_real, X)
+                assert np.array_equal(y_real, y)
+                X_syn = X_resampled[len(X):]
+                y_syn = y_resampled[len(y):]
+                X_filtered, y_filtered = selector.select(X_real, y_real, X_syn, y_syn)
+                X_resampled = np.concatenate([X_real, X_filtered])
+                y_resampled = np.concatenate([y_real, y_filtered])
+            except Exception as e:
+                warn(f"Synthetic selection failed: {e}")
+
         return X_resampled[:, np.newaxis, :], y_resampled
 
     def _compute_topk_frequencies(self, X):
@@ -216,7 +237,9 @@ if __name__ == "__main__":
     print(np.unique(y, return_counts=True))
 
     # Initialize FrequencyBinSMOTE
-    smote = FrequencyBinSMOTE(n_neighbors=3, top_k=3, freq_match_delta=2, random_state=42,apply_window=True,normalize_energy=True)
+    smote = FrequencyBinSMOTE(n_neighbors=3, top_k=10, freq_match_delta=2,
+                              random_state=42,apply_window=True,normalize_energy=True,
+                              enable_selection=True)
 
     # Fit and transform
     smote.fit(X, y)
