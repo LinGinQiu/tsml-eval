@@ -109,9 +109,10 @@ class FrequencyBinSMOTE(BaseCollectionTransformer):
                 idx = self._random_state.randint(0, len(X_class))
                 x_curr = X_class[idx]
                 freq_curr = freq_class[idx]
-                freq_curr = self._random_state.choice(freq_curr, size=self.n_neighbors, replace=False)
                 mag_curr = mag_class[idx]
-
+                random_choice_list = self._random_state.choice(len(freq_curr), size=self.n_neighbors, replace=False)
+                freq_curr=  freq_curr[random_choice_list]
+                mag_curr = mag_curr[random_choice_list]
                 # Compute FFT of the current sample
                 F_curr = np.fft.rfft(x_curr)
 
