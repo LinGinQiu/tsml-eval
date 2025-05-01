@@ -54,22 +54,22 @@ class HybridWrapper(BaseCollectionTransformer):
 
     def _fit(self, X, y=None):
 
-        # Split majority indices into equal parts
-        unique, counts = np.unique(y, return_counts=True)
-        target_stats = dict(zip(unique, counts))
-        class_majority = max(target_stats, key=target_stats.get)
-        n_transformers = len(self.transformers)
-        n_sample_majority = max(target_stats.values())
+        # # Split majority indices into equal parts
+        # unique, counts = np.unique(y, return_counts=True)
+        # target_stats = dict(zip(unique, counts))
+        # class_majority = max(target_stats, key=target_stats.get)
+        # n_transformers = len(self.transformers)
+        # n_sample_majority = max(target_stats.values())
         self.fitted_transformers = []
         for i, transformer in enumerate(self.transformers):
             transformer.fit(X, y)
-            sampling_strategy = {
-                key: (n_sample_majority - value)//n_transformers
-                for (key, value) in target_stats.items()
-                if key != class_majority
-            }
-            sampling_strategy_ = OrderedDict(sorted(sampling_strategy.items()))
-            transformer.sampling_strategy_ = sampling_strategy_
+            # sampling_strategy = {
+            #     key: (n_sample_majority - value)//n_transformers
+            #     for (key, value) in target_stats.items()
+            #     if key != class_majority
+            # }
+            # sampling_strategy_ = OrderedDict(sorted(sampling_strategy.items()))
+            # transformer.sampling_strategy_ = sampling_strategy_
             self.fitted_transformers.append(transformer)
         return self
 
