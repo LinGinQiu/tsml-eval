@@ -19,6 +19,7 @@ unbalanced_transformers = [
     "fesmote",
     "fasmote",
     "fbsmote",
+    ['hw', 'hybrid-wrapper'],
 ]
 unequal_transformers = [
     ["padder", "zero-padder"],
@@ -246,5 +247,23 @@ def _set_unbalanced_transformer(t, random_state, n_jobs):
             bandwidth=1,
             apply_window=True,
             random_state=random_state,
-            normalize_energy=False,
+            normalize_energy=True,
+        )
+    elif t == "hw" or t == "hybrid-wrapper":
+        from tsml_eval._wip.rt.transformations.collection.imbalance._hwrapper import (
+            HybridWrapper
+        )
+
+        return HybridWrapper(
+            n_neighbors=5,
+            top_k=3,
+            freq_match_delta=2,
+            bandwidth=1,
+            apply_window=True,
+            random_state=random_state,
+            normalize_energy=True,
+            distance="msm",
+            distance_params=None,
+            weights="uniform",
+            n_jobs=n_jobs,
         )
