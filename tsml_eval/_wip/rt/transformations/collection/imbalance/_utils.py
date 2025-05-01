@@ -70,16 +70,20 @@ class SyntheticSampleSelector:
         for method in selectors:
             selected_mask = method(X_real, y_real, X_syn, y_syn, test_size)
             scores += selected_mask.astype(int)
-        if self.voting_threshold is None and self.n_select is None:
+        if self.n_select is None:
             _, counts = np.unique(y_real, return_counts=True)
             gap = abs(counts[0] - counts[1])
             self.n_select = max(1, gap)
-        if self.n_select is not None:
-            topk = np.argsort(-scores)[:self.n_select]
-            return X_syn[topk], y_syn[topk]
-        else:
+
+        topk = np.argsort(-scores)[:self.n_select]
+        print(topk)
+        print(scores[topk])
+        print(scores[topk[-1]])
+        if self.voting_threshold is not None and scores[topk[-1]] <= self.voting_threshold:
             keep_mask = scores >= self.voting_threshold
             return X_syn[keep_mask], y_syn[keep_mask]
+        else:
+            return X_syn[topk], y_syn[topk]
 
     def _knn_consistency(self, X_real, y_real, X_syn, y_syn, test_size):
         X_all = np.concatenate([X_real, X_syn])
