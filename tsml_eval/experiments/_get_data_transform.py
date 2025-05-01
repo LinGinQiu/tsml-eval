@@ -248,7 +248,7 @@ def _set_unbalanced_transformer(t, random_state, n_jobs):
             apply_window=True,
             random_state=random_state,
             normalize_energy=True,
-            enable_selection=True,
+            enable_selection=False,
         )
     elif t == "hw" or t == "hybrid-wrapper":
         from tsml_eval._wip.rt.transformations.collection.imbalance._hwrapper import (
