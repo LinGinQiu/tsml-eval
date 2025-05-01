@@ -96,6 +96,12 @@ class HybridWrapper(BaseCollectionTransformer):
         return X_synthetic, y_synthetic
 
 if __name__ == "__main__":
+    def has_duplicate_samples(X):
+        # Flatten each sample to 1D for comparison
+        flattened = X.reshape((X.shape[0], -1))
+        # Use numpy's unique with axis=0
+        _, idx = np.unique(flattened, axis=0, return_index=True)
+        return len(idx) != len(X)
 
     from sklearn.utils import shuffle
     np.random.seed(42)
@@ -104,11 +110,17 @@ if __name__ == "__main__":
     X = np.random.randn(100, 1, 100)
     y = np.random.choice([0, 0, 1], size=100)
     print(np.unique(y, return_counts=True))
-
+    if has_duplicate_samples(X):
+        print("Warning: Duplicate samples detected in X!")
+    else:
+        print("No duplicate samples in X.")
     wrapper = HybridWrapper()
     wrapper.fit(X, y)
     X_resampled, y_resampled = wrapper.transform(X, y)
-
+    if has_duplicate_samples(X_resampled):
+        print("Warning: Duplicate samples detected in X_resampled!")
+    else:
+        print("No duplicate samples in X_resampled.")
     print("Original shape:", X.shape)
     print("Resampled shape:", X_resampled.shape)
     print(np.unique(y_resampled, return_counts=True))
