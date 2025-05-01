@@ -34,7 +34,7 @@ class FrequencyBinSMOTE(BaseCollectionTransformer):
         "requires_y": True,
     }
 
-    def __init__(self, n_neighbors=5, top_k=3, freq_match_delta=2, bandwidth=1, apply_window=False, random_state=None, normalize_energy=False):
+    def __init__(self, n_neighbors=3, top_k=3, freq_match_delta=2, bandwidth=1, apply_window=False, random_state=None, normalize_energy=False):
         self.random_state = random_state
         self.n_neighbors = n_neighbors
         self.top_k = top_k
@@ -43,6 +43,7 @@ class FrequencyBinSMOTE(BaseCollectionTransformer):
         self.apply_window = apply_window
         self.normalize_energy = normalize_energy
         self._random_state = None
+        assert n_neighbors >= top_k
         super().__init__()
 
     def _fit(self, X, y=None):
@@ -103,6 +104,8 @@ class FrequencyBinSMOTE(BaseCollectionTransformer):
                 idx = self._random_state.randint(0, len(X_class))
                 x_curr = X_class[idx]
                 freq_curr = freq_class[idx]
+                freq_curr = self._random_state.choice(freq_curr, size=self.n_neighbors, replace=False)
+                print(freq_curr)
                 mag_curr = mag_class[idx]
 
                 # Compute FFT of the current sample
@@ -113,7 +116,7 @@ class FrequencyBinSMOTE(BaseCollectionTransformer):
 
                 fallback_count = 0
 
-                for p in range(self.top_k):
+                for p in range(self.n_neighbors):
                     target_freq = freq_curr[p]
                     mag_curr_p = mag_curr[p]
                     # Compute matching distance
@@ -213,7 +216,7 @@ if __name__ == "__main__":
     print(np.unique(y, return_counts=True))
 
     # Initialize FrequencyBinSMOTE
-    smote = FrequencyBinSMOTE(n_neighbors=5, top_k=3, freq_match_delta=2, random_state=42,apply_window=True,normalize_energy=True)
+    smote = FrequencyBinSMOTE(n_neighbors=3, top_k=3, freq_match_delta=2, random_state=42,apply_window=True,normalize_energy=True)
 
     # Fit and transform
     smote.fit(X, y)
