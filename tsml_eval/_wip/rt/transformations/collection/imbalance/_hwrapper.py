@@ -3,7 +3,7 @@ from aeon.transformations.collection import BaseCollectionTransformer
 from typing import Optional, Union
 from tsml_eval._wip.rt.transformations.collection.imbalance._esmote import ESMOTE
 from tsml_eval._wip.rt.transformations.collection.imbalance._fbsmote import FrequencyBinSMOTE
-
+from collections import OrderedDict
 
 class HybridWrapper(BaseCollectionTransformer):
 
@@ -53,26 +53,24 @@ class HybridWrapper(BaseCollectionTransformer):
 
 
     def _fit(self, X, y=None):
+
+        # Split majority indices into equal parts
         unique, counts = np.unique(y, return_counts=True)
         target_stats = dict(zip(unique, counts))
         class_majority = max(target_stats, key=target_stats.get)
-        majority_indices = np.flatnonzero(y == class_majority)
-        minority_indices = np.flatnonzero(y != class_majority)
-
-        # Split majority indices into equal parts
         n_transformers = len(self.transformers)
-        majority_split = np.array_split(majority_indices, n_transformers)
-
+        n_sample_majority = max(target_stats.values())
         self.fitted_transformers = []
-        self.datasets = []
         for i, transformer in enumerate(self.transformers):
-            # Create the subset: one part of majority + all minority
-            part_indices = np.concatenate([majority_split[i], minority_indices])
-            X_sub = X[part_indices]
-            y_sub = y[part_indices]
-            transformer.fit(X_sub, y_sub)
+            transformer.fit(X, y)
+            sampling_strategy = {
+                key: (n_sample_majority - value)//n_transformers
+                for (key, value) in target_stats.items()
+                if key != class_majority
+            }
+            sampling_strategy_ = OrderedDict(sorted(sampling_strategy.items()))
+            transformer.sampling_strategy_ = sampling_strategy_
             self.fitted_transformers.append(transformer)
-            self.datasets.append([X_sub, y_sub])
         return self
 
     def _transform(self, X, y=None):
@@ -82,16 +80,19 @@ class HybridWrapper(BaseCollectionTransformer):
         synthetic_X_parts.append(X.copy())
         synthetic_y_parts.append(y.copy())
 
-        for transformer, (X_sub, y_sub) in zip(self.fitted_transformers,self.datasets):
-            X_resampled, y_resampled = transformer.transform(X_sub, y_sub)
+        for transformer in self.fitted_transformers:
+            X_resampled, y_resampled = transformer.transform(X, y)
+
             # Assume the original samples are at the beginning
-            synthetic_X = X_resampled[len(X_sub):]
-            synthetic_y = y_resampled[len(y_sub):]
+            synthetic_X = X_resampled[len(X):]
+            synthetic_y = y_resampled[len(y):]
+
             synthetic_X_parts.append(synthetic_X)
             synthetic_y_parts.append(synthetic_y)
 
         X_synthetic = np.concatenate(synthetic_X_parts, axis=0)
         y_synthetic = np.concatenate(synthetic_y_parts, axis=0)
+
         return X_synthetic, y_synthetic
 
 if __name__ == "__main__":
@@ -100,13 +101,9 @@ if __name__ == "__main__":
     np.random.seed(42)
 
     # Create imbalanced dummy dataset
-    X_majority = np.random.rand(68, 1, 100)
-    y_majority = np.zeros(68, dtype=int)
-    X_minority = np.random.rand(32, 1, 100)
-    y_minority = np.ones(32, dtype=int)
-    X = np.concatenate([X_majority, X_minority], axis=0)
-    y = np.concatenate([y_majority, y_minority], axis=0)
-    X, y = shuffle(X, y, random_state=42)
+    X = np.random.randn(100, 1, 100)
+    y = np.random.choice([0, 0, 1], size=100)
+    print(np.unique(y, return_counts=True))
 
     wrapper = HybridWrapper()
     wrapper.fit(X, y)
@@ -114,6 +111,7 @@ if __name__ == "__main__":
 
     print("Original shape:", X.shape)
     print("Resampled shape:", X_resampled.shape)
+    print(np.unique(y_resampled, return_counts=True))
     print("Original distribution:", dict(zip(*np.unique(y, return_counts=True))))
     print("Resampled distribution:", dict(zip(*np.unique(y_resampled, return_counts=True))))
 
