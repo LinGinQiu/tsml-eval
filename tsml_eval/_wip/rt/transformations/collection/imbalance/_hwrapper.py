@@ -3,6 +3,8 @@ from aeon.transformations.collection import BaseCollectionTransformer
 from typing import Optional, Union
 from tsml_eval._wip.rt.transformations.collection.imbalance._esmote import ESMOTE
 from tsml_eval._wip.rt.transformations.collection.imbalance._fbsmote import FrequencyBinSMOTE
+from tsml_eval._wip.rt.transformations.collection.imbalance._utils import SyntheticSampleSelector
+
 from collections import OrderedDict
 
 class HybridWrapper(BaseCollectionTransformer):
@@ -13,7 +15,9 @@ class HybridWrapper(BaseCollectionTransformer):
         "requires_y": True,
     }
 
-    def __init__(self, n_neighbors=5, top_k=3, freq_match_delta=2, bandwidth=1, apply_window=False, random_state=None, normalize_energy=False,
+    def __init__(self, n_neighbors=5, top_k=3, freq_match_delta=2, bandwidth=1, apply_window=False, random_state=None,
+                 normalize_energy=True,
+                 enable_selection=False,
                  distance: Union[str, callable] = "msm",
                  distance_params: Optional[dict] = None,
                  weights: Union[str, callable] = "uniform",
@@ -25,6 +29,7 @@ class HybridWrapper(BaseCollectionTransformer):
         self.bandwidth = bandwidth
         self.apply_window = apply_window
         self.random_state = random_state
+        self.enable_selection = enable_selection
         self.normalize_energy = normalize_energy
         self.distance = distance
         self.distance_params = distance_params or {}
@@ -47,6 +52,7 @@ class HybridWrapper(BaseCollectionTransformer):
             apply_window=self.apply_window,
             random_state=self.random_state,
             normalize_energy=self.normalize_energy,
+            enable_selection=False
         )
         self.transformers = [esmote, fbsmote]
         super().__init__()
@@ -54,22 +60,9 @@ class HybridWrapper(BaseCollectionTransformer):
 
     def _fit(self, X, y=None):
 
-        # # Split majority indices into equal parts
-        # unique, counts = np.unique(y, return_counts=True)
-        # target_stats = dict(zip(unique, counts))
-        # class_majority = max(target_stats, key=target_stats.get)
-        # n_transformers = len(self.transformers)
-        # n_sample_majority = max(target_stats.values())
         self.fitted_transformers = []
         for i, transformer in enumerate(self.transformers):
             transformer.fit(X, y)
-            # sampling_strategy = {
-            #     key: (n_sample_majority - value)//n_transformers
-            #     for (key, value) in target_stats.items()
-            #     if key != class_majority
-            # }
-            # sampling_strategy_ = OrderedDict(sorted(sampling_strategy.items()))
-            # transformer.sampling_strategy_ = sampling_strategy_
             self.fitted_transformers.append(transformer)
         return self
 
@@ -92,6 +85,24 @@ class HybridWrapper(BaseCollectionTransformer):
 
         X_synthetic = np.concatenate(synthetic_X_parts, axis=0)
         y_synthetic = np.concatenate(synthetic_y_parts, axis=0)
+        # Optional: apply selection mechanism to filter synthetic samples
+        if self.enable_selection:
+            from warnings import warn
+            try:
+                selector = SyntheticSampleSelector(random_state=self.random_state)
+                X_real = X_synthetic[:len(X)]
+                y_real = y_synthetic[:len(y)]
+                assert np.array_equal(X_real, X)
+                assert np.array_equal(y_real, y)
+                X_syn = X_synthetic[len(X):]
+                y_syn = y_synthetic[len(y):]
+                X_filtered, y_filtered = selector.select(X_real, y_real, X_syn, y_syn)
+                X_synthetic = np.concatenate([X_real, X_filtered])
+                y_synthetic = np.concatenate([y_real, y_filtered])
+                if X_synthetic.ndim == 2:
+                    X_synthetic = X_synthetic[:, np.newaxis, :]
+            except Exception as e:
+                warn(f"Synthetic selection failed: {e}")
 
         return X_synthetic, y_synthetic
 
