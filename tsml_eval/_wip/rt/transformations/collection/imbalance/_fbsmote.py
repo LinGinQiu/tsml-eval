@@ -110,7 +110,7 @@ class FrequencyBinSMOTE(BaseCollectionTransformer):
                 x_curr = X_class[idx]
                 freq_curr = freq_class[idx]
                 mag_curr = mag_class[idx]
-                random_choice_list = self._random_state.choice(len(freq_curr), size=self.n_neighbors, replace=False)
+                random_choice_list = self._random_state.choice(len(freq_curr), size=(self.top_k//2), replace=False)
                 freq_curr = freq_curr[random_choice_list]
                 mag_curr = mag_curr[random_choice_list]
                 # Compute FFT of the current sample
@@ -120,48 +120,35 @@ class FrequencyBinSMOTE(BaseCollectionTransformer):
                 F_synthetic = F_curr.copy()
 
                 fallback_count = 0
-
-                for p in range(self.n_neighbors):
+                scores = np.zeros(len(X_class), dtype=int)
+                for p in range(len(freq_curr)):
                     target_freq = freq_curr[p]
-                    mag_curr_p = mag_curr[p]
-                    # Compute matching distance
-                    freq_diffs = np.min(np.abs(freq_class - target_freq), axis=1)
-                    mask = freq_diffs <= self.freq_match_delta
-                    candidates = np.where(mask)[0]
-                    candidates = candidates[candidates != idx]
-
-                    if len(candidates) == 0:
-                        fallback_count += 1
-                        continue  # no suitable neighbor for this frequency bin
-
-                    # Prefer neighbors with the smallest frequency difference
-                    probs = (self.freq_match_delta - freq_diffs[candidates]).astype(float)  # smaller diff → higher weight
-                    total = np.sum(probs)
-                    if total == 0 or np.isnan(total):
-                        nn_idx = self._random_state.choice(candidates)
-                    else:
-                        probs /= total
-                        nn_idx = self._random_state.choice(candidates, p=probs)
+                    # relaxed frequency matching within delta
+                    score = np.any(np.abs(freq_class - target_freq) <= self.freq_match_delta, axis=1).astype(int)
+                    scores += score
+                topk = np.argsort(-scores)[:self.n_neighbors]
+                for p in range(self.n_neighbors):
                     # Compute FFT of the neighbor sample
+                    nn_idx = topk[p]
                     x_nn = X_class[nn_idx]
                     F_nn = np.fft.rfft(x_nn)
+                    for f in range(len(freq_curr)):
+                        target_freq = freq_curr[p]
+                        mag_curr_p = mag_curr[p]
 
-                    # Interpolation weight alpha sampled around ratio of magnitudes
-                    mag_nn_p = mag_class[nn_idx, p]
-                    base_alpha = mag_nn_p / (mag_curr_p + mag_nn_p + 1e-8)
-                    # Restrict alpha to [0.2, 0.8] to avoid extreme interpolation weights
-                    # which can cause unrealistic synthetic samples or artifacts.
-                    alpha = np.clip(self._random_state.normal(loc=base_alpha, scale=0.1), 0.2, 0.8)
+                        # Interpolation weight alpha sampled around ratio of magnitudes
+                        mag_nn_p = mag_class[nn_idx, p]
+                        base_alpha = mag_nn_p / (mag_curr_p + mag_nn_p + 1e-8)
+                        # Restrict alpha to [0.2, 0.8] to avoid extreme interpolation weights
+                        # which can cause unrealistic synthetic samples or artifacts.
+                        alpha = np.clip(self._random_state.normal(loc=base_alpha, scale=0.1), 0.2, 0.8)
 
-                    # Interpolate in frequency domain over a bandwidth window around the target frequency
-                    # Apply decay factor based on distance from target frequency bin
-                    for idx_bin in range(target_freq - self.bandwidth, target_freq + self.bandwidth + 1):
-                        if 0 <= idx_bin < F_curr.shape[0]:
-                            decay = 1.0 / (1.0 + abs(idx_bin - target_freq))
-                            F_synthetic[idx_bin] = F_curr[idx_bin] + decay * alpha * (F_nn[idx_bin] - F_curr[idx_bin])
-
-                if fallback_count == self.top_k:
-                    continue  # all top-k fallback, retry
+                        # Interpolate in frequency domain over a bandwidth window around the target frequency
+                        # Apply decay factor based on distance from target frequency bin
+                        for idx_bin in range(target_freq - self.bandwidth, target_freq + self.bandwidth + 1):
+                            if 0 <= idx_bin < F_curr.shape[0]:
+                                decay = 1.0 / (1.0 + abs(idx_bin - target_freq))
+                                F_synthetic[idx_bin] = F_curr[idx_bin] + decay * alpha * (F_nn[idx_bin] - F_curr[idx_bin])
 
                 # Apply optional smoothing window in frequency domain to reduce artifacts
                 if self.apply_window:
@@ -179,15 +166,6 @@ class FrequencyBinSMOTE(BaseCollectionTransformer):
 
                 X_gen[i] = x_synthetic
                 i += 1
-
-            if i < n_samples_gen:
-                warnings.warn(
-                    f"Only generated {i}/{n_samples_gen} samples for class {class_sample} "
-                    f"due to insufficient frequency neighbors.",
-                    UserWarning
-                )
-                X_gen = X_gen[:i]
-                y_gen = y_gen[:i]
 
             X_resampled.append(X_gen)
             y_resampled.append(y_gen)

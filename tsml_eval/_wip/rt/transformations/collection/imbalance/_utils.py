@@ -76,9 +76,6 @@ class SyntheticSampleSelector:
             self.n_select = max(1, gap)
 
         topk = np.argsort(-scores)[:self.n_select]
-        print(topk)
-        print(scores[topk])
-        print(scores[topk[-1]])
         if self.voting_threshold is not None and scores[topk[-1]] <= self.voting_threshold:
             keep_mask = scores >= self.voting_threshold
             return X_syn[keep_mask], y_syn[keep_mask]
