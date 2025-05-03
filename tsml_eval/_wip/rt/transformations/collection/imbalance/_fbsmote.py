@@ -115,7 +115,8 @@ class FrequencyBinSMOTE(BaseCollectionTransformer):
                 mag_curr = mag_curr[random_choice_list]
                 # Compute FFT of the current sample
                 F_curr = np.fft.rfft(x_curr)
-
+                incremental_idx = []
+                incremental_value = []
                 # Initialize synthetic FFT as a copy of current sample's FFT
                 F_synthetic = F_curr.copy()
 
@@ -133,11 +134,11 @@ class FrequencyBinSMOTE(BaseCollectionTransformer):
                     x_nn = X_class[nn_idx]
                     F_nn = np.fft.rfft(x_nn)
                     for f in range(len(freq_curr)):
-                        target_freq = freq_curr[p]
-                        mag_curr_p = mag_curr[p]
+                        target_freq = freq_curr[f]
+                        mag_curr_p = mag_curr[f]
 
                         # Interpolation weight alpha sampled around ratio of magnitudes
-                        mag_nn_p = mag_class[nn_idx, p]
+                        mag_nn_p = np.abs(F_nn)[target_freq]
                         base_alpha = mag_nn_p / (mag_curr_p + mag_nn_p + 1e-8)
                         # Restrict alpha to [0.2, 0.8] to avoid extreme interpolation weights
                         # which can cause unrealistic synthetic samples or artifacts.
@@ -148,8 +149,11 @@ class FrequencyBinSMOTE(BaseCollectionTransformer):
                         for idx_bin in range(target_freq - self.bandwidth, target_freq + self.bandwidth + 1):
                             if 0 <= idx_bin < F_curr.shape[0]:
                                 decay = 1.0 / (1.0 + abs(idx_bin - target_freq))
-                                F_synthetic[idx_bin] = F_curr[idx_bin] + decay * alpha * (F_nn[idx_bin] - F_curr[idx_bin])
+                                incremental_idx.append(idx_bin)
+                                incremental_value.append(decay * alpha * (F_nn[idx_bin] - F_curr[idx_bin]))
 
+                for idx, value in zip(incremental_idx, incremental_value):
+                        F_synthetic[idx] = F_synthetic[idx] + value
                 # Apply optional smoothing window in frequency domain to reduce artifacts
                 if self.apply_window:
                     F_synthetic *= np.hanning(F_synthetic.shape[0])
