@@ -37,7 +37,7 @@ class HybridWrapper(BaseCollectionTransformer):
         self.n_jobs = n_jobs
 
         esmote = ESMOTE(
-            n_neighbors=self.n_neighbors,
+            n_neighbors=5,
             distance=self.distance,
             distance_params=self.distance_params,
             weights=self.weights,
@@ -88,21 +88,20 @@ class HybridWrapper(BaseCollectionTransformer):
         # Optional: apply selection mechanism to filter synthetic samples
         if self.enable_selection:
             from warnings import warn
-            try:
-                selector = SyntheticSampleSelector(random_state=self.random_state)
-                X_real = X_synthetic[:len(X)]
-                y_real = y_synthetic[:len(y)]
-                assert np.array_equal(X_real, X)
-                assert np.array_equal(y_real, y)
-                X_syn = X_synthetic[len(X):]
-                y_syn = y_synthetic[len(y):]
-                X_filtered, y_filtered = selector.select(X_real, y_real, X_syn, y_syn)
-                X_synthetic = np.concatenate([X_real, X_filtered])
-                y_synthetic = np.concatenate([y_real, y_filtered])
-                if X_synthetic.ndim == 2:
-                    X_synthetic = X_synthetic[:, np.newaxis, :]
-            except Exception as e:
-                warn(f"Synthetic selection failed: {e}")
+            selector = SyntheticSampleSelector(random_state=self.random_state)
+            X_real = X_synthetic[:len(X)]
+            y_real = y_synthetic[:len(y)]
+            assert np.array_equal(X_real, X)
+            assert np.array_equal(y_real, y)
+            X_syn = X_synthetic[len(X):]
+            y_syn = y_synthetic[len(y):]
+            X_filtered, y_filtered = selector.select(X_real, y_real, X_syn, y_syn)
+            X_synthetic = np.concatenate([X_real, X_filtered])
+            y_synthetic = np.concatenate([y_real, y_filtered])
+            print("X_synthetic shape:", X_synthetic.shape)
+            if X_synthetic.ndim == 2:
+                X_synthetic = X_synthetic[:, np.newaxis, :]
+
 
         return X_synthetic, y_synthetic
 
@@ -125,7 +124,20 @@ if __name__ == "__main__":
         print("Warning: Duplicate samples detected in X!")
     else:
         print("No duplicate samples in X.")
-    wrapper = HybridWrapper()
+    wrapper = HybridWrapper(
+            n_neighbors=3,
+            top_k=6,
+            freq_match_delta=2,
+            bandwidth=1,
+            apply_window=True,
+            random_state=1,
+            enable_selection=True,
+            normalize_energy=True,
+            distance="msm",
+            distance_params=None,
+            weights="uniform",
+            n_jobs=1,
+        )
     wrapper.fit(X, y)
     X_resampled, y_resampled = wrapper.transform(X, y)
     if has_duplicate_samples(X_resampled):
@@ -134,9 +146,8 @@ if __name__ == "__main__":
         print("No duplicate samples in X_resampled.")
     print("Original shape:", X.shape)
     print("Resampled shape:", X_resampled.shape)
+    print(np.unique(y, return_counts=True))
     print(np.unique(y_resampled, return_counts=True))
-    print("Original distribution:", dict(zip(*np.unique(y, return_counts=True))))
-    print("Resampled distribution:", dict(zip(*np.unique(y_resampled, return_counts=True))))
 
     # Checks
     assert X_resampled.shape[0] > X.shape[0]

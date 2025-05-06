@@ -47,13 +47,16 @@ class SyntheticSampleSelector:
         -------
         X_selected, y_selected : filtered synthetic samples
         """
+        reshape = False
         if X_real.ndim == 3 and X_real.shape[1] == 1:
             X_real = X_real[:, 0, :]
+            reshape = True
         elif X_real.ndim != 2:
             raise ValueError("Input X_real must be 2D or 3D (n, 1, l)")
 
         if X_syn.ndim == 3 and X_syn.shape[1] == 1:
             X_syn = X_syn[:, 0, :]
+
         elif X_syn.ndim != 2:
             raise ValueError("Input X_syn must be 2D or 3D (n, 1, l)")
 
@@ -76,6 +79,9 @@ class SyntheticSampleSelector:
             self.n_select = max(1, gap)
 
         topk = np.argsort(-scores)[:self.n_select]
+        if reshape:
+            X_syn = X_syn[:, np.newaxis, :]
+
         if self.voting_threshold is not None and scores[topk[-1]] <= self.voting_threshold:
             keep_mask = scores >= self.voting_threshold
             return X_syn[keep_mask], y_syn[keep_mask]
