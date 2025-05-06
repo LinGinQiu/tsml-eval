@@ -46,7 +46,6 @@ class FrequencyBinSMOTE(BaseCollectionTransformer):
         self.normalize_energy = normalize_energy
         self.enable_selection = enable_selection
         self._random_state = None
-        assert n_neighbors <= top_k
         super().__init__()
 
     def _fit(self, X, y=None):
