@@ -20,6 +20,7 @@ unbalanced_transformers = [
     "fasmote",
     "fbsmote",
     ['hw', 'hybrid-wrapper'],
+    "stl",
 ]
 unequal_transformers = [
     ["padder", "zero-padder"],
@@ -269,3 +270,15 @@ def _set_unbalanced_transformer(t, random_state, n_jobs):
             weights="uniform",
             n_jobs=n_jobs,
         )
+
+    elif t == "stl":
+        from tsml_eval._wip.rt.transformations.collection.imbalance._stlor import (
+            STLOversampler
+        )
+
+        return STLOversampler(noise_scale=0.05,
+                              block_bootstrap=True,
+                              use_boxcox=True,
+                              random_state=random_state,
+                              period_estimation_method="acf")
+

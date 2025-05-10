@@ -3,6 +3,7 @@ from aeon.transformations.collection import BaseCollectionTransformer
 from typing import Optional, Union
 from tsml_eval._wip.rt.transformations.collection.imbalance._esmote import ESMOTE
 from tsml_eval._wip.rt.transformations.collection.imbalance._fbsmote import FrequencyBinSMOTE
+from tsml_eval._wip.rt.transformations.collection.imbalance._stlor import STLOversampler
 from tsml_eval._wip.rt.transformations.collection.imbalance._utils import SyntheticSampleSelector
 
 from collections import OrderedDict
@@ -54,7 +55,13 @@ class HybridWrapper(BaseCollectionTransformer):
             normalize_energy=self.normalize_energy,
             enable_selection=False
         )
-        self.transformers = [esmote, fbsmote]
+        stl = STLOversampler(noise_scale=0.05,
+                       block_bootstrap=True,
+                       use_boxcox=True,
+                       random_state=random_state,
+                       period_estimation_method="acf")
+
+        self.transformers = [esmote, fbsmote, stl]
         super().__init__()
 
 

@@ -5,7 +5,7 @@ from aeon.transformations.collection import BaseCollectionTransformer
 from collections import OrderedDict
 
 # --- SyntheticSampleSelector Voting-based Filtering ---
-from sklearn.neighbors import NearestNeighbors
+from tsml_eval._wip.rt.classification.distance_based import KNeighborsTimeSeriesClassifier
 from sklearn.cluster import KMeans
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import f1_score
@@ -91,8 +91,8 @@ class SyntheticSampleSelector:
     def _knn_consistency(self, X_real, y_real, X_syn, y_syn, test_size):
         X_all = np.concatenate([X_real, X_syn])
         y_all = np.concatenate([y_real, y_syn])
-        knn = NearestNeighbors(n_neighbors=6)
-        knn.fit(X_all)
+        knn = KNeighborsTimeSeriesClassifier(n_neighbors=6)
+        knn.fit(X_all, y_all)
         neighbors = knn.kneighbors(X_syn, return_distance=False)
         labels = y_all[neighbors]
         consistent = (labels == y_syn[:, None]).sum(axis=1) > 3
