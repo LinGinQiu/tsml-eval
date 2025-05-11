@@ -77,7 +77,7 @@ class STLOversampler(BaseCollectionTransformer):
                 X_cls = X_c[y == cls]
                 synthetic = self._generate_synthetic_samples(X_cls, n_gen, seq_len)
                 X_c_new.append(synthetic)
-                y_c_new.append(np.full(n_gen, cls, dtype=y.dtype))
+                y_c_new.append(np.full(len(synthetic), cls, dtype=y.dtype))
 
             X_c_stacked = np.vstack(X_c_new)
             y_c_stacked = np.hstack(y_c_new)
@@ -86,6 +86,13 @@ class STLOversampler(BaseCollectionTransformer):
                 y_new_final = y_c_stacked
 
         X_final = np.stack(X_new_channels, axis=1)
+
+        # 👇 插入检查代码
+        if np.any(np.isnan(X_final)) or np.any(np.isinf(X_final)):
+            raise ValueError("Sanity check failed: X_final contains NaN or Inf.")
+        if np.any(np.isnan(y_new_final)) or np.any(np.isinf(y_new_final)):
+            raise ValueError("Sanity check failed: y_final contains NaN or Inf.")
+
         return X_final, y_new_final
 
     def _stl(self, ts, period, robust=True):
@@ -100,8 +107,13 @@ class STLOversampler(BaseCollectionTransformer):
 
     def _boxcox(self, x):
         from scipy.stats import boxcox
+        if np.std(x) < 1e-8:
+            return x.copy(), None, 0  # skip transform
         x_shift = x - np.min(x) + 1e-6  # ensure strictly positive
-        x_bc, lambda_ = boxcox(x_shift)
+        try:
+            x_bc, lambda_ = boxcox(x_shift)
+        except ValueError:
+            return x.copy(), None, 0
         shift = np.min(x) - 1e-6
         return x_bc, lambda_, shift
 
@@ -134,7 +146,11 @@ class STLOversampler(BaseCollectionTransformer):
 
         for i, ts in enumerate(X_cls):
             n_i = base + (1 if i < remainder else 0)
-            for _ in range(n_i):
+            generated = 0
+            attempts = 0
+            max_attempts = n_i * 10  # fail-safe to avoid infinite loop
+            while generated < n_i and attempts < max_attempts:
+                attempts += 1
                 if self.use_boxcox:
                     ts_bc, lambda_, shift = self._boxcox(ts)
                 else:
@@ -164,9 +180,18 @@ class STLOversampler(BaseCollectionTransformer):
                 synthetic_ts = trend + seasonal + resid_boot + noise
 
                 if self.use_boxcox:
+                    synthetic_ts = np.clip(synthetic_ts, shift + 1e-6, None)
+                    if np.any(np.isnan(synthetic_ts)) or np.any(np.isinf(synthetic_ts)):
+                        continue
                     synthetic_ts = self._inv_boxcox(synthetic_ts, lambda_, shift)
+                    if np.any(np.isnan(synthetic_ts)) or np.any(np.isinf(synthetic_ts)):
+                        continue
+                else:
+                    if np.any(np.isnan(synthetic_ts)) or np.any(np.isinf(synthetic_ts)):
+                        continue
 
                 synthetic.append(synthetic_ts)
+                generated += 1
 
         return np.array(synthetic)
 
@@ -182,7 +207,8 @@ if __name__ == "__main__":
     smote.fit(X, y)
     X_resampled, y_resampled = smote.transform(X, y)
     from tsml_eval._wip.rt.classification.distance_based import KNeighborsTimeSeriesClassifier
-    knn = KNeighborsTimeSeriesClassifier()
-    knn.fit(X_resampled, y_resampled)
+
     print(f"Resampled dataset shape: {X_resampled.shape}, {y_resampled.shape}")
     print(f"Class distribution after oversampling: {np.unique(y_resampled, return_counts=True)}")
+    knn = KNeighborsTimeSeriesClassifier()
+    knn.fit(X_resampled, y_resampled)
