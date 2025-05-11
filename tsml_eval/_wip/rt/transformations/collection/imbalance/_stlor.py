@@ -39,7 +39,6 @@ class STLOversampler(BaseCollectionTransformer):
     }
 
     def __init__(self, noise_scale=0.05, block_bootstrap=True, use_boxcox=True,
-                 n_jobs=1,  # Not used in this class, but kept for consistency
                  random_state=None, period_estimation_method="fixed"):
         self.noise_scale = noise_scale
         self.block_bootstrap = block_bootstrap

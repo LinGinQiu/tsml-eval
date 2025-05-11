@@ -70,7 +70,6 @@ def get_data_transform_by_name(
 
         for transformer_name in transformer_names:
             t = transformer_name.casefold()
-            print(t)
             if str_in_nested_list(scaling_transformers, t):
                 t_list.append(_set_scaling_transformer(t, random_state, n_jobs))
             elif str_in_nested_list(unbalanced_transformers, t):
@@ -200,7 +199,6 @@ def _set_unbalanced_transformer(t, random_state, n_jobs):
                               block_bootstrap=True,
                               use_boxcox=True,
                               random_state=random_state,
-                              n_jobs=n_jobs,
                               period_estimation_method="acf")
 
     elif t == "fbsmote":
