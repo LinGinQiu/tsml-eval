@@ -90,8 +90,6 @@ class STLOversampler(BaseCollectionTransformer):
         # 👇 插入检查代码
         if np.any(np.isnan(X_final)) or np.any(np.isinf(X_final)):
             raise ValueError("Sanity check failed: X_final contains NaN or Inf.")
-        if np.any(np.isnan(y_new_final)) or np.any(np.isinf(y_new_final)):
-            raise ValueError("Sanity check failed: y_final contains NaN or Inf.")
 
         return X_final, y_new_final
 

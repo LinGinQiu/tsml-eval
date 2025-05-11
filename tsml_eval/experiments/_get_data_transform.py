@@ -19,7 +19,7 @@ unbalanced_transformers = [
     "fesmote",
     "fasmote",
     "fbsmote",
-    ['hw', 'hybrid-wrapper'],
+    "hw",
     "stl",
 ]
 unequal_transformers = [
