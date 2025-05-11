@@ -17,7 +17,7 @@ unbalanced_transformers = [
     "esmote",
     "fbsmote",
     "hw",
-    ["stl-oversampler", "stl", "stlor"],
+    "state",
 ]
 unequal_transformers = [
     ["padder", "zero-padder"],
@@ -191,7 +191,7 @@ def _set_unbalanced_transformer(t, random_state, n_jobs):
             n_jobs=n_jobs,
             random_state=random_state,
         )
-    elif t == "stl" or t == "stlor" or t == "stl-oversampler":
+    elif t == "state":
         from tsml_eval._wip.rt.transformations.collection.imbalance._stlor import (
             STLOversampler
         )
