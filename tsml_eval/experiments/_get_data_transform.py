@@ -191,6 +191,18 @@ def _set_unbalanced_transformer(t, random_state, n_jobs):
             n_jobs=n_jobs,
             random_state=random_state,
         )
+    elif t == "stl" or t == "stlor" or t == "stl-oversampler":
+        from tsml_eval._wip.rt.transformations.collection.imbalance._stlor import (
+            STLOversampler
+        )
+
+        return STLOversampler(noise_scale=0.05,
+                              block_bootstrap=True,
+                              use_boxcox=True,
+                              random_state=random_state,
+                              n_jobs=n_jobs,
+                              period_estimation_method="acf")
+
     elif t == "fbsmote":
         from tsml_eval._wip.rt.transformations.collection.imbalance._fbsmote import (
             FrequencyBinSMOTE
@@ -225,15 +237,4 @@ def _set_unbalanced_transformer(t, random_state, n_jobs):
             weights="uniform",
             n_jobs=n_jobs,
         )
-    elif t == "stl" or t == "stlor" or t == "stl-oversampler":
-        from tsml_eval._wip.rt.transformations.collection.imbalance._stlor import (
-            STLOversampler
-        )
-
-        return STLOversampler(noise_scale=0.05,
-                              block_bootstrap=True,
-                              use_boxcox=True,
-                              random_state=random_state,
-                              n_jobs=n_jobs,
-                              period_estimation_method="acf")
 
