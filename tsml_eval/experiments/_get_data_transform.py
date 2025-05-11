@@ -20,7 +20,7 @@ unbalanced_transformers = [
     "fasmote",
     "fbsmote",
     "hw",
-    "stl",
+    "stlor",
 ]
 unequal_transformers = [
     ["padder", "zero-padder"],
@@ -73,7 +73,7 @@ def get_data_transform_by_name(
 
         for transformer_name in transformer_names:
             t = transformer_name.casefold()
-
+            print(t)
             if str_in_nested_list(scaling_transformers, t):
                 t_list.append(_set_scaling_transformer(t, random_state, n_jobs))
             elif str_in_nested_list(unbalanced_transformers, t):
@@ -271,7 +271,7 @@ def _set_unbalanced_transformer(t, random_state, n_jobs):
             n_jobs=n_jobs,
         )
 
-    elif t == "stl":
+    elif t == "stlor":
         from tsml_eval._wip.rt.transformations.collection.imbalance._stlor import (
             STLOversampler
         )
