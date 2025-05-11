@@ -15,9 +15,6 @@ unbalanced_transformers = [
     "tsmote",
     "ohit",
     "esmote",
-    "fsmote",
-    "fesmote",
-    "fasmote",
     "fbsmote",
     "hw",
     ["stl-oversampler", "stl", "stlor"],
@@ -194,48 +191,6 @@ def _set_unbalanced_transformer(t, random_state, n_jobs):
             n_jobs=n_jobs,
             random_state=random_state,
         )
-
-    elif t == "fsmote":
-        from tsml_eval._wip.rt.transformations.collection.imbalance._fsmote import (
-            FrequencySMOTE,
-        )
-
-        return FrequencySMOTE(
-            top_k=None,
-            n_neighbors=5,
-            distance="euclidean",
-            distance_params=None,
-            weights="uniform",
-            n_jobs=n_jobs,
-            random_state=random_state,
-        )
-    elif t =="fesmote":
-        from tsml_eval._wip.rt.transformations.collection.imbalance._fesmote import (
-            FrequencyESMOTE,
-        )
-
-        return FrequencyESMOTE(
-            top_k=None,
-            n_neighbors=5,
-            distance="msm",
-            distance_params=None,
-            weights="uniform",
-            n_jobs=n_jobs,
-            random_state=random_state,
-        )
-
-    elif t == "fasmote":
-        from tsml_eval._wip.rt.transformations.collection.imbalance._fasmote import (
-            FrequencyAwareSMOTE
-        )
-
-        return FrequencyAwareSMOTE(
-            n_neighbors=5,
-            top_k=3,
-            freq_match_delta=2,
-            random_state=random_state,
-        )
-
     elif t == "fbsmote":
         from tsml_eval._wip.rt.transformations.collection.imbalance._fbsmote import (
             FrequencyBinSMOTE
@@ -279,5 +234,6 @@ def _set_unbalanced_transformer(t, random_state, n_jobs):
                               block_bootstrap=True,
                               use_boxcox=True,
                               random_state=random_state,
+                              n_jobs=n_jobs,
                               period_estimation_method="acf")
 
