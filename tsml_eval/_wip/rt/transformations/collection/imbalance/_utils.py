@@ -64,7 +64,7 @@ class SyntheticSampleSelector:
 
         # Apply each selector and accumulate votes
         selectors = [
-            self._knn_consistency,
+            self._nan_consistency,
             self._cluster_proximity,
             self._genetic_filter,
             self._de_filter
@@ -88,15 +88,36 @@ class SyntheticSampleSelector:
         else:
             return X_syn[topk], y_syn[topk]
 
-    def _knn_consistency(self, X_real, y_real, X_syn, y_syn, test_size):
+    def _nan_consistency(self, X_real, y_real, X_syn, y_syn, test_size):
+        from sklearn.neighbors import NearestNeighbors
+
         X_all = np.concatenate([X_real, X_syn])
         y_all = np.concatenate([y_real, y_syn])
-        knn = KNeighborsTimeSeriesClassifier(n_neighbors=6)
-        knn.fit(X_all, y_all)
-        neighbors = knn.kneighbors(X_syn, return_distance=False)
-        labels = y_all[neighbors]
-        consistent = (labels == y_syn[:, None]).sum(axis=1) > 3
-        return consistent
+        n_total = X_all.shape[0]
+        X_flat = X_all.reshape(n_total, -1)
+
+        max_r = 20
+        for r in range(1, max_r + 1):
+            nn = NearestNeighbors(n_neighbors=r + 1).fit(X_flat)
+            knn = nn.kneighbors(X_flat, return_distance=False)[:, 1:]
+
+            natural_neighbors = [set() for _ in range(n_total)]
+            for i in range(n_total):
+                for j in knn[i]:
+                    if i in knn[j]:
+                        natural_neighbors[i].add(j)
+
+            if all(len(nns) > 0 for nns in natural_neighbors):
+                break
+
+        consistent_mask = np.ones(len(X_syn), dtype=bool)
+        for i in range(len(X_real), n_total):
+            xi_label = y_all[i]
+            for j in natural_neighbors[i]:
+                if y_all[j] != xi_label:
+                    consistent_mask[i - len(X_real)] = False
+                    break
+        return consistent_mask
 
     def _cluster_proximity(self, X_real, y_real, X_syn, y_syn, test_size):
         kmeans = KMeans(n_clusters=1, random_state=self.random_state)

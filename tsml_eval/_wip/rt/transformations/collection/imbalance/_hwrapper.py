@@ -16,59 +16,62 @@ class HybridWrapper(BaseCollectionTransformer):
         "requires_y": True,
     }
 
-    def __init__(self, n_neighbors=5, top_k=3, freq_match_delta=2, bandwidth=1, apply_window=False, random_state=None,
-                 normalize_energy=True,
-                 enable_selection=False,
-                 distance: Union[str, callable] = "msm",
-                 distance_params: Optional[dict] = None,
-                 weights: Union[str, callable] = "uniform",
+    def __init__(self, random_state=None,
                  n_jobs: int = 1,
+                 enable_selection: bool = True,
                  ):
-        self.n_neighbors = n_neighbors
-        self.top_k = top_k
-        self.freq_match_delta = freq_match_delta
-        self.bandwidth = bandwidth
-        self.apply_window = apply_window
         self.random_state = random_state
-        self.enable_selection = enable_selection
-        self.normalize_energy = normalize_energy
-        self.distance = distance
-        self.distance_params = distance_params or {}
-        self.weights = weights
         self.n_jobs = n_jobs
-
-        esmote = ESMOTE(
-            n_neighbors=5,
-            distance=self.distance,
-            distance_params=self.distance_params,
-            weights=self.weights,
-            n_jobs=self.n_jobs,
-            random_state=self.random_state,
-        )
-        fbsmote = FrequencyBinSMOTE(
-            n_neighbors=self.n_neighbors,
-            top_k=self.top_k,
-            freq_match_delta=self.freq_match_delta,
-            bandwidth=self.bandwidth,
-            apply_window=self.apply_window,
-            random_state=self.random_state,
-            normalize_energy=self.normalize_energy,
-            enable_selection=False
-        )
-        stl = STLOversampler(noise_scale=0.05,
-                       block_bootstrap=True,
-                       use_boxcox=True,
-                       random_state=random_state,
-                       period_estimation_method="acf")
-
-        self.transformers = [esmote, fbsmote, stl]
+        self.enable_selection = enable_selection
+        self._set_transformers()
         super().__init__()
+
+    def _set_transformers(self):
+        transformers = [
+                "esmote",
+                "fbsmote",
+                "stl"
+            ]
+        self._transformers = []
+        for transformer in transformers:
+            if transformer == "esmote":
+                esmote = ESMOTE(
+                    n_neighbors=5,
+                    distance="msm",
+                    distance_params=None,
+                    weights="uniform",
+                    n_jobs=self.n_jobs,
+                    random_state=self.random_state,
+                )
+                self._transformers.append(esmote)
+            elif transformer == "fbsmote":
+                fbsmote = FrequencyBinSMOTE(
+                    n_neighbors=3,
+                    top_k=6,
+                    freq_match_delta=2,
+                    bandwidth=1,
+                    apply_window=True,
+                    random_state=self.random_state,
+                    normalize_energy=True,
+                    enable_selection=False,
+                )
+                self._transformers.append(fbsmote)
+            elif transformer == "stl":
+                stl = STLOversampler(
+                    noise_scale=0.05,
+                    block_bootstrap=True,
+                    use_boxcox=True,
+                    random_state=self.random_state,
+                    period_estimation_method="acf"
+                )
+                self._transformers.append(stl)
+
 
 
     def _fit(self, X, y=None):
 
         self.fitted_transformers = []
-        for i, transformer in enumerate(self.transformers):
+        for i, transformer in enumerate(self._transformers):
             transformer.fit(X, y)
             self.fitted_transformers.append(transformer)
         return self
@@ -102,6 +105,8 @@ class HybridWrapper(BaseCollectionTransformer):
             assert np.array_equal(y_real, y)
             X_syn = X_synthetic[len(X):]
             y_syn = y_synthetic[len(y):]
+            X_syn = np.array(list(X_syn))
+            y_syn = np.array(list(y_syn))
             X_filtered, y_filtered = selector.select(X_real, y_real, X_syn, y_syn)
             X_synthetic = np.concatenate([X_real, X_filtered])
             y_synthetic = np.concatenate([y_real, y_filtered])
@@ -132,17 +137,8 @@ if __name__ == "__main__":
     else:
         print("No duplicate samples in X.")
     wrapper = HybridWrapper(
-            n_neighbors=3,
-            top_k=6,
-            freq_match_delta=2,
-            bandwidth=1,
-            apply_window=True,
             random_state=1,
             enable_selection=True,
-            normalize_energy=True,
-            distance="msm",
-            distance_params=None,
-            weights="uniform",
             n_jobs=1,
         )
     wrapper.fit(X, y)
