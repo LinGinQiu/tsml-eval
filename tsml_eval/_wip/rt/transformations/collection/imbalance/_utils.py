@@ -5,9 +5,9 @@ from aeon.transformations.collection import BaseCollectionTransformer
 from collections import OrderedDict
 
 # --- SyntheticSampleSelector Voting-based Filtering ---
-from tsml_eval._wip.rt.classification.distance_based import KNeighborsTimeSeriesClassifier
 from sklearn.cluster import KMeans
 from sklearn.ensemble import RandomForestClassifier
+from aeon.classification.convolution_based import MultiRocketHydraClassifier
 from sklearn.metrics import f1_score
 from scipy.spatial.distance import cdist
 from scipy.special import expit  # sigmoid function

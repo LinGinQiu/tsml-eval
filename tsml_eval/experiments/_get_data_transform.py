@@ -222,17 +222,8 @@ def _set_unbalanced_transformer(t, random_state, n_jobs):
         )
 
         return HybridWrapper(
-            n_neighbors=3,
-            top_k=6,
-            freq_match_delta=2,
-            bandwidth=1,
-            apply_window=True,
             random_state=random_state,
             enable_selection=True,
-            normalize_energy=True,
-            distance="msm",
-            distance_params=None,
-            weights="uniform",
             n_jobs=n_jobs,
         )
 
