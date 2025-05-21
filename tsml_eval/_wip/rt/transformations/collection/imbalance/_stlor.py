@@ -188,7 +188,9 @@ class STLOversampler(BaseCollectionTransformer):
                 else:
                     if np.any(np.isnan(synthetic_ts)) or np.any(np.isinf(synthetic_ts)):
                         continue
-
+                synthetic_ts = np.clip(synthetic_ts, -1e6, 1e6)
+                if np.max(synthetic_ts) - np.min(synthetic_ts) < 1e-6:
+                    continue  # skip nearly constant series
                 synthetic.append(synthetic_ts)
                 generated += 1
 
@@ -209,5 +211,6 @@ if __name__ == "__main__":
 
     print(f"Resampled dataset shape: {X_resampled.shape}, {y_resampled.shape}")
     print(f"Class distribution after oversampling: {np.unique(y_resampled, return_counts=True)}")
+    print(f' Max values: {np.max(np.abs(X_resampled))}')
     knn = KNeighborsTimeSeriesClassifier()
     knn.fit(X_resampled, y_resampled)
