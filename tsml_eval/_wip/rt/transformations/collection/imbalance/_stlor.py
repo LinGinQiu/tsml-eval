@@ -77,8 +77,9 @@ class STLOversampler(BaseCollectionTransformer):
                     continue
                 X_cls = X_c[y == cls]
                 synthetic = self._generate_synthetic_samples(X_cls, n_gen, seq_len)
-                X_c_new.append(synthetic)
-                y_c_new.append(np.full(len(synthetic), cls, dtype=y.dtype))
+                if len(synthetic) > 0:
+                    X_c_new.append(synthetic)
+                    y_c_new.append(np.full(len(synthetic), cls, dtype=y.dtype))
 
             X_c_stacked = np.vstack(X_c_new)
             y_c_stacked = np.hstack(y_c_new)
@@ -194,7 +195,14 @@ class STLOversampler(BaseCollectionTransformer):
                 synthetic.append(synthetic_ts)
                 generated += 1
 
-        return np.array(synthetic)
+        synthetic = np.array(synthetic)
+
+        if len(synthetic) < n_gen:
+            n_missing = n_gen - len(synthetic)
+            fill_samples = self.random_state.choice(X_cls, size=n_missing, replace=True)
+            synthetic = np.vstack([synthetic, fill_samples])
+
+        return synthetic
 
 
 if __name__ == "__main__":
