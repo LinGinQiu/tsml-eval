@@ -550,7 +550,7 @@ def _set_classifier_hybrid(c, random_state, n_jobs, fit_contract, checkpoint, kw
         # from aeon.classification.hybrid import HIVECOTEV2
         from tsml_eval._wip.hc2_part.hc2_part_analysis import  HIVECOTEV2_Custom as HIVECOTEV2
         # disable_list = ['STC', 'DrCIF', 'Arsenal', 'TDE']
-        disable_list = ['STC']
+        disable_list = ['DrCIF']
         return HIVECOTEV2(
             random_state=random_state,
             n_jobs=n_jobs,
