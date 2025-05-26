@@ -70,6 +70,10 @@ feature_based_classifiers = [
 hybrid_classifiers = [
     ["hivecotev1", "hc1"],
     ["hivecotev2", "hc2"],
+    ["hivecotev2_stc", "hc2_stc"],
+    ["hivecotev2_drcif", "hc2_drcif"],
+    ["hivecotev2_arsenal", "hc2_arsenal"],
+    ["hivecotev2_tde", "hc2_tde"],
     ["ristclassifier", "rist", "rist-extrat"],
 ]
 interval_based_classifiers = [
@@ -547,17 +551,52 @@ def _set_classifier_hybrid(c, random_state, n_jobs, fit_contract, checkpoint, kw
 
         return HIVECOTEV1(random_state=random_state, n_jobs=n_jobs, **kwargs)
     elif c == "hivecotev2" or c == "hc2":
-        # from aeon.classification.hybrid import HIVECOTEV2
-        from tsml_eval._wip.hc2_part.hc2_part_analysis import  HIVECOTEV2_Custom as HIVECOTEV2
-        # disable_list = ['STC', 'DrCIF', 'Arsenal', 'TDE']
-        disable_list = ['DrCIF']
+        from aeon.classification.hybrid import HIVECOTEV2
         return HIVECOTEV2(
             random_state=random_state,
             n_jobs=n_jobs,
             time_limit_in_minutes=fit_contract,
-            disable_modules=disable_list,
             **kwargs,
         )
+    elif c == "hivecotev2_stc" or c == "hc2_stc":
+        from tsml_eval._wip.hc2_part.hc2_part_analysis import HIVECOTEV2_Custom
+        return HIVECOTEV2_Custom(
+            disable_modules=["STC"],
+            random_state=random_state,
+            n_jobs=n_jobs,
+            time_limit_in_minutes=fit_contract,
+            **kwargs,
+        )
+    elif c == "hivecotev2_drcif" or c == "hc2_drcif":
+        from tsml_eval._wip.hc2_part.hc2_part_analysis import HIVECOTEV2_Custom
+        return HIVECOTEV2_Custom(
+            disable_modules=["DrCIF"],
+            random_state=random_state,
+            n_jobs=n_jobs,
+            time_limit_in_minutes=fit_contract,
+            **kwargs,
+        )
+
+    elif c == "hivecotev2_arsenal" or c == "hc2_arsenal":
+        from tsml_eval._wip.hc2_part.hc2_part_analysis import HIVECOTEV2_Custom
+        return HIVECOTEV2_Custom(
+            disable_modules=["Arsenal"],
+            random_state=random_state,
+            n_jobs=n_jobs,
+            time_limit_in_minutes=fit_contract,
+            **kwargs,
+        )
+
+    elif c == "hivecotev2_tde" or c == "hc2_tde":
+        from tsml_eval._wip.hc2_part.hc2_part_analysis import HIVECOTEV2_Custom
+        return HIVECOTEV2_Custom(
+            disable_modules=["TDE"],
+            random_state=random_state,
+            n_jobs=n_jobs,
+            time_limit_in_minutes=fit_contract,
+            **kwargs,
+        )
+
     elif c == "ristclassifier" or c == "rist" or c == "rist-extrat":
         from aeon.classification.hybrid import RISTClassifier
         from sklearn.ensemble import ExtraTreesClassifier

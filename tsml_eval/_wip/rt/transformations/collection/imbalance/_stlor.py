@@ -199,7 +199,8 @@ class STLOversampler(BaseCollectionTransformer):
 
         if len(synthetic) < n_gen:
             n_missing = n_gen - len(synthetic)
-            fill_samples = self.random_state.choice(X_cls, size=n_missing, replace=True)
+            indices = self.random_state.choice(len(X_cls), size=n_missing, replace=True)
+            fill_samples = X_cls[indices]
             synthetic = np.vstack([synthetic, fill_samples])
 
         return synthetic

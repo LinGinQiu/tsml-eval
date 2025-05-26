@@ -13,8 +13,25 @@ from aeon.classification.shapelet_based import ShapeletTransformClassifier
 
 
 class HIVECOTEV2_Custom(HIVECOTEV2):
+    _tags = {
+        "capability:multivariate": True,
+        "capability:contractable": True,
+        "capability:multithreading": True,
+        "algorithm_type": "hybrid",
+    }
 
-    def __init__(self, *args, disable_modules=None, **kwargs):
+    def __init__(self,
+        stc_params=None,
+        drcif_params=None,
+        arsenal_params=None,
+        tde_params=None,
+        time_limit_in_minutes=0,
+        save_component_probas=False,
+        verbose=0,
+        random_state=None,
+        n_jobs=1,
+        parallel_backend=None,
+        disable_modules=None,):
         """
         Custom HIVECOTEV2 to disable specified modules.
 
@@ -23,7 +40,19 @@ class HIVECOTEV2_Custom(HIVECOTEV2):
         disable_modules : list of str or None
             List of module names to disable. Possible values: "STC", "DrCIF", "Arsenal", "TDE".
         """
-        super().__init__(*args, **kwargs)
+
+        super().__init__(
+            stc_params=stc_params,
+            drcif_params=drcif_params,
+            arsenal_params=arsenal_params,
+            tde_params=tde_params,
+            time_limit_in_minutes=time_limit_in_minutes,
+            save_component_probas=save_component_probas,
+            verbose=verbose,
+            random_state=random_state,
+            n_jobs=n_jobs,
+            parallel_backend=parallel_backend,
+        )
         self.disable_modules = disable_modules or []
 
     def _fit(self, X, y):
@@ -111,3 +140,69 @@ class HIVECOTEV2_Custom(HIVECOTEV2):
                 print("TDE disabled")
 
         return self
+
+    def _predict_proba(self, X, return_component_probas=False) -> np.ndarray:
+        """Predicts label probabilities for sequences in X.
+
+        Parameters
+        ----------
+        X : 3D np.ndarray of shape = [n_cases, n_channels, n_timepoints]
+            The data to make predict probabilities for.
+
+        Returns
+        -------
+        y : array-like, shape = [n_cases, n_classes_]
+            Predicted probabilities using the ordering in classes_.
+        """
+        dists = np.zeros((X.shape[0], self.n_classes_))
+
+        # Only add probas if the classifier has been fitted (i.e., not disabled)
+        if self._stc is not None:
+            stc_probas = self._stc.predict_proba(X)
+            dists += stc_probas * (np.ones(self.n_classes_) * self.stc_weight_)
+        else:
+            stc_probas = None
+
+        if self._drcif is not None:
+            drcif_probas = self._drcif.predict_proba(X)
+            dists += drcif_probas * (np.ones(self.n_classes_) * self.drcif_weight_)
+        else:
+            drcif_probas = None
+
+        if self._arsenal is not None:
+            arsenal_probas = self._arsenal.predict_proba(X)
+            dists += arsenal_probas * (np.ones(self.n_classes_) * self.arsenal_weight_)
+        else:
+            arsenal_probas = None
+
+        if self._tde is not None:
+            tde_probas = self._tde.predict_proba(X)
+            dists += tde_probas * (np.ones(self.n_classes_) * self.tde_weight_)
+        else:
+            tde_probas = None
+
+        # Save component probas if requested
+        if self.save_component_probas:
+            self.component_probas = {
+                "STC": stc_probas,
+                "DrCIF": drcif_probas,
+                "Arsenal": arsenal_probas,
+                "TDE": tde_probas,
+            }
+
+        # If all components are disabled (unlikely), avoid division by zero
+        sum_dists = dists.sum(axis=1, keepdims=True)
+        sum_dists[sum_dists == 0] = 1e-8
+
+        return dists / sum_dists
+
+if __name__ == "__main__":
+    X = np.random.randn(100, 1, 100)
+    y = np.random.choice([0, 0, 1], size=100)
+    print(np.unique(y, return_counts=True))
+
+    hc2 = HIVECOTEV2_Custom(
+        disable_modules=["STC"],)
+    # Fit and transform
+    hc2.fit(X, y)
+    hc2.predict(X)
