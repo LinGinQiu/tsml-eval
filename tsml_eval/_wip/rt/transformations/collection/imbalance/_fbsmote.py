@@ -190,7 +190,6 @@ class FrequencyBinSMOTE(BaseCollectionTransformer):
                 X_syn = X_resampled[len(X):]
                 y_syn = y_resampled[len(y):]
                 X_filtered, y_filtered = selector.select(X_real, y_real, X_syn, y_syn)
-                print('selected')
                 X_resampled = np.concatenate([X_real, X_filtered])
                 y_resampled = np.concatenate([y_real, y_filtered])
             except Exception as e:

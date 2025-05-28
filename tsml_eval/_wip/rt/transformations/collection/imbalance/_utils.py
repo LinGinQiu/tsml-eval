@@ -140,7 +140,6 @@ class SyntheticSampleSelector:
 
         chosen_indices = []
         available_indices = list(range(n_syn))
-        print(self.n_select)
         # 1. Select the first sample based purely on highest score
         if n_syn > 0:
             first_idx = np.argmax(normalized_scores)

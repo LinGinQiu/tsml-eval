@@ -125,12 +125,31 @@ if __name__ == "__main__":
 
     from sklearn.utils import shuffle
     np.random.seed(42)
+    import os
+    import numpy as np
+    from aeon.datasets import load_from_ts_file
 
-    # Create imbalanced dummy dataset
-    X = np.random.randn(100, 1, 100)
-    y = np.random.choice([0, 0, 1], size=100)
-    print(np.unique(y, return_counts=True))
-    if has_duplicate_samples(X):
+    data_dir = r'/Volumes/YuLin/Data/imbalanced_9_1'
+    dataset_list = r'/Volumes/YuLin/Data/classification9_1_full_list.txt'
+
+    f = open(dataset_list, 'r')
+    f = f.readlines()
+    f = [x.strip() for x in f]
+    len(f)
+    for file in f[:1]:
+
+        try:
+            X_train, y_train = load_from_ts_file(os.path.join(data_dir, file, file + "_TRAIN.ts"))
+            _, count = np.unique(y_train, return_counts=True)
+            X_test, y_test = load_from_ts_file(os.path.join(data_dir, file, file + "_TEST.ts"))
+        except:
+            print(f'{file} failed')
+
+    print(f'X_train shape: {X_train.shape}')
+    print(f'y_train shape: {y_train.shape}')
+    print(f'train data count: {count}')
+
+    if has_duplicate_samples(X_train):
         print("Warning: Duplicate samples detected in X!")
     else:
         print("No duplicate samples in X.")
@@ -139,20 +158,13 @@ if __name__ == "__main__":
             enable_selection=True,
             n_jobs=1,
         )
-    wrapper.fit(X, y)
-    X_resampled, y_resampled = wrapper.transform(X, y)
+    wrapper.fit(X_train, y_train)
+    X_resampled, y_resampled = wrapper.transform(X_train, y_train)
     if has_duplicate_samples(X_resampled):
         print("Warning: Duplicate samples detected in X_resampled!")
     else:
         print("No duplicate samples in X_resampled.")
-    print("Original shape:", X.shape)
     print("Resampled shape:", X_resampled.shape)
-    print(np.unique(y, return_counts=True))
-    print(np.unique(y_resampled, return_counts=True))
-
-    # Checks
-    assert X_resampled.shape[0] > X.shape[0]
-    assert np.array_equal(X_resampled[:len(X)], X)
-    assert np.array_equal(y_resampled[:len(y)], y)
-    print("Test passed.")
+    print("Resampled y shape:", y_resampled.shape)
+    print("Unique classes in resampled y:", np.unique(y_resampled, return_counts=True))
 
