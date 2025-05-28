@@ -30,7 +30,6 @@ class HybridWrapper(BaseCollectionTransformer):
         transformers = [
                 "esmote",
                 "fbsmote",
-                "stl"
             ]
         self._transformers = []
         for transformer in transformers:
@@ -50,7 +49,6 @@ class HybridWrapper(BaseCollectionTransformer):
                     top_k=6,
                     freq_match_delta=2,
                     bandwidth=1,
-                    apply_window=True,
                     random_state=self.random_state,
                     normalize_energy=True,
                     enable_selection=False,

@@ -3,6 +3,7 @@ import warnings
 from sklearn.utils import check_random_state
 from aeon.transformations.collection import BaseCollectionTransformer
 from collections import OrderedDict
+
 from tsml_eval._wip.rt.transformations.collection.imbalance._utils import SyntheticSampleSelector
 
 class FrequencyBinSMOTE(BaseCollectionTransformer):
@@ -36,13 +37,13 @@ class FrequencyBinSMOTE(BaseCollectionTransformer):
         "requires_y": True,
     }
 
-    def __init__(self, n_neighbors=3, top_k=3, freq_match_delta=2, bandwidth=1, apply_window=False, random_state=None, normalize_energy=False, enable_selection=False):
+    def __init__(self, n_neighbors=3, top_k=3, freq_match_delta=2, bandwidth=1
+                 , random_state=None, normalize_energy=False, enable_selection=False):
         self.random_state = random_state
         self.n_neighbors = n_neighbors
         self.top_k = top_k
         self.freq_match_delta = freq_match_delta
         self.bandwidth = bandwidth
-        self.apply_window = apply_window
         self.normalize_energy = normalize_energy
         self.enable_selection = enable_selection
         self._random_state = None
@@ -77,9 +78,9 @@ class FrequencyBinSMOTE(BaseCollectionTransformer):
         """
         if X.ndim == 3:
             X = X[:, 0, :]  # flatten if (n, 1, l)
-
-        freq_features, freq_magnitudes = self._compute_topk_frequencies(X)
-
+        freq_features = self._compute_topk_frequencies(X)
+        avg_spectrum = self.compute_avg_spectrum_bin(X)
+        avg_freq_top_k =  np.argpartition(avg_spectrum, -self.top_k)[-self.top_k:]
         X_resampled = [X.copy()]
         y_resampled = [y.copy()]
 
@@ -94,7 +95,6 @@ class FrequencyBinSMOTE(BaseCollectionTransformer):
             X_class = X[target_class_indices]
             y_class = y[target_class_indices]
             freq_class = freq_features[target_class_indices]
-            mag_class = freq_magnitudes[target_class_indices]
 
             X_gen = np.zeros((n_samples_gen, seq_len), dtype=X.dtype)
             y_gen = np.full(n_samples_gen, fill_value=class_sample, dtype=y.dtype)
@@ -107,11 +107,14 @@ class FrequencyBinSMOTE(BaseCollectionTransformer):
                 attempts += 1
                 idx = self._random_state.randint(0, len(X_class))
                 x_curr = X_class[idx]
-                freq_curr = freq_class[idx]
-                mag_curr = mag_class[idx]
-                random_choice_list = self._random_state.choice(len(freq_curr), size=(self.top_k//2), replace=False)
+                freq_curr_one = freq_class[idx]
+                # get the combine of the top-k freq and the top-k avg freq
+                freq_curr = np.unique(np.concatenate((freq_curr_one, avg_freq_top_k)))
+
+                siez_list = 3 if 3 < len(freq_curr) else len(freq_curr)//2
+                random_choice_list = self._random_state.choice(len(freq_curr), size=siez_list, replace=False)
                 freq_curr = freq_curr[random_choice_list]
-                mag_curr = mag_curr[random_choice_list]
+                mag_curr = np.abs(np.fft.rfft(x_curr))[freq_curr]
                 # Compute FFT of the current sample
                 F_curr = np.fft.rfft(x_curr)
                 incremental_idx = []
@@ -121,15 +124,17 @@ class FrequencyBinSMOTE(BaseCollectionTransformer):
 
                 fallback_count = 0
                 scores = np.zeros(len(X_class), dtype=int)
-                for p in range(len(freq_curr)):
-                    target_freq = freq_curr[p]
+                for p in range(len(freq_curr_one)):
+                    target_freq = freq_curr_one[p]
                     # relaxed frequency matching within delta
                     score = np.any(np.abs(freq_class - target_freq) <= self.freq_match_delta, axis=1).astype(int)
                     scores += score
-                topk = np.argsort(-scores)[:self.n_neighbors]
-                for p in range(self.n_neighbors):
+                topk = np.argsort(-scores)[:self.n_neighbors+1]  # +1 to include the current sample itself
+                topk = topk[topk != idx]  # exclude the current sample index
+                ps = self._random_state.choice(topk, size=1, replace=False)
+                for p in ps:
                     # Compute FFT of the neighbor sample
-                    nn_idx = topk[p]
+                    nn_idx = p
                     x_nn = X_class[nn_idx]
                     F_nn = np.fft.rfft(x_nn)
                     for f in range(len(freq_curr)):
@@ -153,9 +158,6 @@ class FrequencyBinSMOTE(BaseCollectionTransformer):
 
                 for idx, value in zip(incremental_idx, incremental_value):
                         F_synthetic[idx] = F_synthetic[idx] + value
-                # Apply optional smoothing window in frequency domain to reduce artifacts
-                if self.apply_window:
-                    F_synthetic *= np.hanning(F_synthetic.shape[0])
 
                 # Normalize energy of synthetic sample to match original sample energy
                 if self.normalize_energy:
@@ -188,12 +190,25 @@ class FrequencyBinSMOTE(BaseCollectionTransformer):
                 X_syn = X_resampled[len(X):]
                 y_syn = y_resampled[len(y):]
                 X_filtered, y_filtered = selector.select(X_real, y_real, X_syn, y_syn)
+                print('selected')
                 X_resampled = np.concatenate([X_real, X_filtered])
                 y_resampled = np.concatenate([y_real, y_filtered])
             except Exception as e:
                 warn(f"Synthetic selection failed: {e}")
 
         return X_resampled[:, np.newaxis, :], y_resampled
+
+    def compute_avg_spectrum_bin(self, data):
+            spectra = []
+            for signal in data:
+                signal = signal.flatten()  # 变成一维
+                fft_vals = np.fft.rfft(signal)
+                amp_spectrum = np.abs(fft_vals)
+                spectra.append(amp_spectrum)
+            if len(spectra) == 0:
+                return np.array([])  # 防止空输入
+            avg_spectrum = np.mean(spectra, axis=0)
+            return avg_spectrum
 
     def _compute_topk_frequencies(self, X):
         """Compute top-k frequency indices and magnitudes per sample."""
@@ -206,11 +221,9 @@ class FrequencyBinSMOTE(BaseCollectionTransformer):
             mag = np.abs(fft_vals)
             mag[0] = 0  # ignore DC
             topk_idx = np.argpartition(mag, -self.top_k)[-self.top_k:]
-            topk_mag = mag[topk_idx]
             freq_features.append(topk_idx)
-            freq_magnitudes.append(topk_mag)
 
-        return np.array(freq_features), np.array(freq_magnitudes)
+        return np.array(freq_features)
 
 
 if __name__ == "__main__":
@@ -220,7 +233,7 @@ if __name__ == "__main__":
 
     # Initialize FrequencyBinSMOTE
     smote = FrequencyBinSMOTE(n_neighbors=3, top_k=10, freq_match_delta=2,
-                              random_state=42,apply_window=True,normalize_energy=True,
+                              random_state=42,normalize_energy=True,
                               enable_selection=True)
 
     # Fit and transform

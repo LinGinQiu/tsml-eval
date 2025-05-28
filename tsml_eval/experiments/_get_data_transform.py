@@ -211,7 +211,6 @@ def _set_unbalanced_transformer(t, random_state, n_jobs):
             top_k=6,
             freq_match_delta=2,
             bandwidth=1,
-            apply_window=True,
             random_state=random_state,
             normalize_energy=True,
             enable_selection=True,
