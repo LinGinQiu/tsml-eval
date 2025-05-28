@@ -125,29 +125,11 @@ if __name__ == "__main__":
 
     from sklearn.utils import shuffle
     np.random.seed(42)
-    import os
-    import numpy as np
-    from aeon.datasets import load_from_ts_file
-
-    data_dir = r'/Volumes/YuLin/Data/imbalanced_9_1'
-    dataset_list = r'/Volumes/YuLin/Data/classification9_1_full_list.txt'
-
-    f = open(dataset_list, 'r')
-    f = f.readlines()
-    f = [x.strip() for x in f]
-    len(f)
-    for file in f[:1]:
-
-        try:
-            X_train, y_train = load_from_ts_file(os.path.join(data_dir, file, file + "_TRAIN.ts"))
-            _, count = np.unique(y_train, return_counts=True)
-            X_test, y_test = load_from_ts_file(os.path.join(data_dir, file, file + "_TEST.ts"))
-        except:
-            print(f'{file} failed')
+    from local.load_ts_data import X_train, y_train, X_test, y_test
 
     print(f'X_train shape: {X_train.shape}')
     print(f'y_train shape: {y_train.shape}')
-    print(f'train data count: {count}')
+    print(f'train data count: {np.unique(y_train, return_counts=True)}')
 
     if has_duplicate_samples(X_train):
         print("Warning: Duplicate samples detected in X!")

@@ -1,8 +1,3 @@
-import numpy as np
-import warnings
-from sklearn.utils import check_random_state
-from collections import OrderedDict
-
 # --- SyntheticSampleSelector Voting-based Filtering ---
 from sklearn.cluster import KMeans
 from sklearn.ensemble import RandomForestClassifier
@@ -12,6 +7,13 @@ from scipy.special import expit  # sigmoid function
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler  # For scaling distances if needed
 
+import numpy as np
+import warnings
+from sklearn.neighbors import NearestNeighbors
+from sklearn.utils import check_random_state
+from sklearn.decomposition import PCA # For PCA
+# import umap # For UMAP (uncomment if using and installed)
+
 
 class SyntheticSampleSelector:
     """
@@ -20,26 +22,30 @@ class SyntheticSampleSelector:
 
     Parameters
     ----------
-    voting_threshold : int or None, default=None
-        Number of votes a synthetic sample needs to be selected. If None, n_select is used.
-    random_state : int or None, default=None
-        Seed for random number generator.
-    n_select : int or None, default=None
-        Number of top scoring synthetic samples to select. If None, it's determined based on
-        the class imbalance in X_real, aiming to balance the classes.
+    # (Keep existing parameters)
     diversity_strength : float, default=0.5
         Controls the balance between score and diversity.
-        0.0 means only score, 1.0 means only diversity.
-        A value between 0 and 1.
     diversity_metric : str, default='euclidean'
-        Distance metric to use for diversity calculation. e.g., 'euclidean', 'cosine'.
+        Distance metric to use for diversity calculation.
     minority_class_label : int or str, default=1
         The label of the minority class in y_real and y_syn.
-        This is crucial for calculating the class imbalance for n_select.
-    """
 
+    # New parameters for automatic dimension reduction in _nan_consistency
+    auto_dr_threshold_knn : int or None, default=500
+        If the number of features in X_all_2d exceeds this threshold,
+        dimension reduction will be automatically enabled for KNN consistency.
+        Set to None to disable automatic triggering and rely on enable_dr_knn.
+    dr_method_knn : str, default='pca'
+        Dimension reduction method for KNN consistency ('pca' or 'umap').
+        'umap' requires the 'umap-learn' package.
+    n_components_dr_knn : int or float, default=0.95
+        Number of components for dimension reduction when auto_dr_threshold_knn is met.
+        If dr_method_knn is 'pca': if int, target number of components; if float (0-1), variance ratio.
+        If dr_method_knn is 'umap': target number of components (int).
+    """
     def __init__(self, voting_threshold: int | None = None, random_state=None, n_select: int | None = None,
-                 diversity_strength: float = 0.5, diversity_metric: str = 'euclidean', minority_class_label=None):
+                 diversity_strength: float = 0.5, diversity_metric: str = 'euclidean', minority_class_label=None,
+                 auto_dr_threshold_knn: int | None = 500, dr_method_knn: str = 'pca', n_components_dr_knn=0.95):
         self.voting_threshold = voting_threshold
         self.random_state = check_random_state(random_state)
         self.n_select = n_select
@@ -48,6 +54,26 @@ class SyntheticSampleSelector:
         self.diversity_strength = diversity_strength
         self.diversity_metric = diversity_metric
         self.minority_class_label = minority_class_label
+
+        # Dimension Reduction parameters for KNN
+        self.auto_dr_threshold_knn = auto_dr_threshold_knn
+        self.dr_method_knn = dr_method_knn
+        self.n_components_dr_knn = n_components_dr_knn
+
+        if self.dr_method_knn == 'umap':
+            try:
+                import umap
+                # Make sure UMAP is actually imported and available globally or class-wise
+                self._umap_reducer_class = umap.UMAP
+            except ImportError:
+                raise ImportError(
+                    "The 'umap-learn' package is required for UMAP dimension reduction. "
+                    "Please install it with: pip install umap-learn"
+                )
+        elif self.dr_method_knn not in ['pca']:
+            raise ValueError(f"Unsupported DR method for KNN consistency: {self.dr_method_knn}. Choose 'pca' or 'umap'.")
+
+
 
     def select(self, X_real: np.ndarray, y_real, X_syn: np.ndarray, y_syn, test_size=0.2):
         """
@@ -219,62 +245,119 @@ class SyntheticSampleSelector:
     def _nan_consistency(self, X_real_2d, y_real, X_syn_2d, y_syn, test_size):
         from sklearn.neighbors import NearestNeighbors
 
-        # Concatenate 2D versions for KNN
         X_all_2d = np.concatenate([X_real_2d, X_syn_2d])
         y_all = np.concatenate([y_real, y_syn])
         n_total = X_all_2d.shape[0]
+        n_features = X_all_2d.shape[1]  # Get the number of features
 
-        if n_total < 2:  # Cannot find neighbors if less than 2 samples
+        if n_total < 2:
             return np.zeros(len(X_syn_2d), dtype=bool)
 
-        max_r = 20  # Max neighbors to check for reciprocal
-        nn_found = False
-        for r in range(1, max_r + 1):
-            n_neighbors_val = min(r + 1, n_total)  # Ensure n_neighbors doesn't exceed available samples
-            nn = NearestNeighbors(n_neighbors=n_neighbors_val).fit(X_all_2d)
-            knn_indices = nn.kneighbors(X_all_2d, return_distance=False)
+        # --- Dimension Reduction Step ---
+        X_all_dr = X_all_2d  # Default to original data
 
-            # Take up to r neighbors, excluding self (index 0)
+        # Determine if DR should be enabled automatically
+        perform_dr = False
+        if self.auto_dr_threshold_knn is not None:
+            if n_features > self.auto_dr_threshold_knn:
+                perform_dr = True
+                warnings.warn(f"Features ({n_features}) exceed auto_dr_threshold_knn ({self.auto_dr_threshold_knn}). "
+                              f"Automatically enabling dimension reduction with {self.dr_method_knn}.")
+
+        if perform_dr:
+            if n_total <= 1:
+                warnings.warn("Too few samples to perform dimension reduction. Skipping DR for KNN consistency.")
+                X_all_dr = X_all_2d
+            elif n_features <= 1:
+                warnings.warn("Only one feature. Dimension reduction not needed or possible. Skipping DR.")
+                X_all_dr = X_all_2d
+            elif self.dr_method_knn == 'pca':
+                # Ensure n_components is not greater than min(n_samples, n_features) - 1 for PCA
+                n_components = self.n_components_dr_knn
+                if isinstance(n_components, int) and n_components >= min(n_total, n_features):
+                    n_components = min(n_total - 1, n_features - 1)  # Ensure valid components for PCA
+                    if n_components <= 0:
+                        warnings.warn("Invalid n_components_dr_knn for PCA (<=0 or too large). Skipping DR.")
+                        X_all_dr = X_all_2d
+                        n_components = None  # Disable PCA
+                elif isinstance(n_components, float) and (n_components <= 0 or n_components >= 1):
+                    warnings.warn(
+                        "Invalid n_components_dr_knn for PCA (must be between 0 and 1 for variance ratio). Skipping DR.")
+                    X_all_dr = X_all_2d
+                    n_components = None
+
+                if n_components is not None:
+                    pca = PCA(n_components=n_components, random_state=self.random_state)
+                    X_all_dr = pca.fit_transform(X_all_2d)
+
+                    if X_all_dr.shape[1] == 0:
+                        warnings.warn("PCA resulted in zero components. Skipping DR for KNN consistency.")
+                        X_all_dr = X_all_2d
+                    elif X_all_dr.shape[1] < n_features:
+                        warnings.warn(
+                            f"PCA reduced dimensions from {n_features} to {X_all_dr.shape[1]} for KNN consistency.")
+                    else:  # PCA might not reduce if n_components is original_features or data is too simple
+                        warnings.warn(
+                            f"PCA did not reduce dimensions. Original: {n_features}, After PCA: {X_all_dr.shape[1]}.")
+
+            elif self.dr_method_knn == 'umap':
+                # UMAP n_components must be int and less than n_features
+                if not isinstance(self.n_components_dr_knn,
+                                  int) or self.n_components_dr_knn >= n_features or self.n_components_dr_knn <= 0:
+                    warnings.warn(
+                        f"n_components_dr_knn for UMAP must be an integer between 1 and original features ({n_features}-1). Setting to min(5, {n_features}-1).")
+                    n_components_umap = min(5, n_features - 1)
+                    if n_components_umap <= 0:
+                        warnings.warn("UMAP n_components is invalid. Skipping DR.")
+                        X_all_dr = X_all_2d
+                        n_components_umap = None
+                else:
+                    n_components_umap = self.n_components_dr_knn
+
+                if n_components_umap is not None:
+                    try:
+                        # Use the imported UMAP class stored in _umap_reducer_class
+                        reducer = self._umap_reducer_class(n_components=n_components_umap,
+                                                           random_state=self.random_state)
+                        X_all_dr = reducer.fit_transform(X_all_2d)
+                        warnings.warn(
+                            f"UMAP reduced dimensions from {n_features} to {X_all_dr.shape[1]} for KNN consistency.")
+                    except Exception as e:
+                        warnings.warn(f"UMAP dimension reduction failed: {e}. Skipping DR for KNN consistency.")
+                        X_all_dr = X_all_2d  # Fallback to original data
+            # No 'else' needed here, as unsupported method is caught in __init__
+
+        # --- KNN consistency calculation using the (potentially) reduced data ---
+        max_r = 20
+        natural_neighbors = [set() for _ in range(n_total)]
+
+        for r in range(1, max_r + 1):
+            n_neighbors_val = min(r + 1, n_total)
+            nn = NearestNeighbors(n_neighbors=n_neighbors_val).fit(X_all_dr)
+            knn_indices = nn.kneighbors(X_all_dr, return_distance=False)
+
             knn = knn_indices[:, 1:n_neighbors_val]
 
-            natural_neighbors = [set() for _ in range(n_total)]
-            all_have_natural_neighbors = True
-
             for i in range(n_total):
-                found_reciprocal = False
                 for j in knn[i]:
-                    if i in knn_indices[j, 1:n_neighbors_val]:  # Check if i is one of j's non-self neighbors
+                    if i in knn_indices[j, 1:n_neighbors_val]:
                         natural_neighbors[i].add(j)
-                        found_reciprocal = True
-                if not found_reciprocal:
-                    all_have_natural_neighbors = False
-                    break  # Break if any sample doesn't have a reciprocal neighbor at this 'r'
-
-            if all_have_natural_neighbors:
-                nn_found = True
-                break
-
-        if not nn_found:
-            warnings.warn(f"Could not find reciprocal nearest neighbors for all samples within r={max_r}. "
-                          "KNN consistency filter might be less effective or disabled.")
-            return np.zeros(len(X_syn_2d), dtype=bool)  # If no natural neighbors found, consider all inconsistent.
 
         consistent_mask = np.ones(len(X_syn_2d), dtype=bool)
-        # Iterate only over synthetic samples (indices from len(X_real_2d) to n_total-1)
         for i in range(len(X_real_2d), n_total):
+            syn_idx = i - len(X_real_2d)
             xi_label = y_all[i]
             is_consistent = True
 
-            # If a synthetic sample has no natural neighbors (e.g., in very sparse data)
-            # consider it inconsistent.
             if not natural_neighbors[i]:
                 is_consistent = False
             else:
                 for j in natural_neighbors[i]:
                     if y_all[j] != xi_label:
                         is_consistent = False
-                        break  # Found an inconsistent neighbor, no need to check further
-            consistent_mask[i - len(X_real_2d)] = is_consistent
+                        break
+            consistent_mask[syn_idx] = is_consistent
+
         return consistent_mask
 
     def _cluster_proximity(self, X_real_2d, y_real, X_syn_2d, y_syn, test_size):
