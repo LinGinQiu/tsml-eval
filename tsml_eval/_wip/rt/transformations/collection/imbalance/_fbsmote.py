@@ -131,7 +131,7 @@ class FrequencyBinSMOTE(BaseCollectionTransformer):
                     scores += score
                 topk = np.argsort(-scores)[:self.n_neighbors+1]  # +1 to include the current sample itself
                 topk = topk[topk != idx]  # exclude the current sample index
-                ps = self._random_state.choice(topk, size=3, replace=False)
+                ps = self._random_state.choice(topk, size=1, replace=False)
                 for p in ps:
                     # Compute FFT of the neighbor sample
                     nn_idx = p

@@ -403,12 +403,26 @@ def load_classifier_results(file_path, calculate_stats=True, verify_values=True)
         if len(line3) > 6:
             error_estimate_method = line3[6]
             error_estimate_time = float(line3[7])
-            build_plus_estimate_time = float(line3[8])
+            try:
+                build_plus_estimate_time = float(line3[8].strip())
+            except ValueError:
+                print(f"Error: Could not convert build_plus_estimate_time '{line3[8].strip()}' to float even after checking for 'None'.")
+                build_plus_estimate_time = -1.0  # Or handle error appropriately
         else:
             error_estimate_method = "N/A"
             error_estimate_time = -1.0
             build_plus_estimate_time = -1.0
 
+    try:
+        benchmark_time = float(line3[3])
+    except ValueError:
+        print(f"Error: Could not convert benchmark_time'{line3[3]}' to float even after checking for 'None'.")
+        benchmark_time = -1.0
+    try:
+        memory_usage = float(line3[4])
+    except ValueError:
+        print(f"Error: Could not convert memory_usage'{line3[3]}' to float even after checking for 'None'.")
+        memory_usage = -1.0  # Or handle error appropriately
     cr = ClassifierResults(
         dataset_name=line1[0],
         classifier_name=line1[1],
@@ -419,8 +433,8 @@ def load_classifier_results(file_path, calculate_stats=True, verify_values=True)
         parameters=lines[1].strip(),
         fit_time=float(line3[1]),
         predict_time=float(line3[2]),
-        benchmark_time=float(line3[3]),
-        memory_usage=float(line3[4]),
+        benchmark_time=benchmark_time,
+        memory_usage=memory_usage,
         n_classes=n_classes,
         error_estimate_method=error_estimate_method,
         error_estimate_time=error_estimate_time,
