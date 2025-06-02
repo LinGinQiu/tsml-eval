@@ -78,9 +78,7 @@ class FrequencyBinSMOTE(BaseCollectionTransformer):
         """
         if X.ndim == 3:
             X = X[:, 0, :]  # flatten if (n, 1, l)
-        freq_features = self._compute_topk_frequencies(X)
-        avg_spectrum = self.compute_avg_spectrum_bin(X)
-        avg_freq_top_k =  np.argpartition(avg_spectrum, -self.top_k)[-self.top_k:]
+
         X_resampled = [X.copy()]
         y_resampled = [y.copy()]
 
@@ -94,7 +92,9 @@ class FrequencyBinSMOTE(BaseCollectionTransformer):
             target_class_indices = np.flatnonzero(y == class_sample)
             X_class = X[target_class_indices]
             y_class = y[target_class_indices]
-            freq_class = freq_features[target_class_indices]
+            avg_spectrum = self.compute_avg_spectrum_bin(X_class)
+            avg_freq_top_k = np.argpartition(avg_spectrum, -self.top_k)[-self.top_k:]
+            freq_class = self._compute_topk_frequencies(X_class)
 
             X_gen = np.zeros((n_samples_gen, seq_len), dtype=X.dtype)
             y_gen = np.full(n_samples_gen, fill_value=class_sample, dtype=y.dtype)
@@ -111,9 +111,9 @@ class FrequencyBinSMOTE(BaseCollectionTransformer):
                 # get the combine of the top-k freq and the top-k avg freq
                 freq_curr = np.unique(np.concatenate((freq_curr_one, avg_freq_top_k)))
 
-                siez_list = 3 if 3 < len(freq_curr) else len(freq_curr)//2
-                random_choice_list = self._random_state.choice(len(freq_curr), size=siez_list, replace=False)
-                freq_curr = freq_curr[random_choice_list]
+                # siez_list = 3 if 3 < len(freq_curr) else len(freq_curr)//2
+                # random_choice_list = self._random_state.choice(len(freq_curr), size=siez_list, replace=False)
+                # freq_curr = freq_curr[random_choice_list]
                 mag_curr = np.abs(np.fft.rfft(x_curr))[freq_curr]
                 # Compute FFT of the current sample
                 F_curr = np.fft.rfft(x_curr)
@@ -146,7 +146,7 @@ class FrequencyBinSMOTE(BaseCollectionTransformer):
                         base_alpha = mag_nn_p / (mag_curr_p + mag_nn_p + 1e-8)
                         # Restrict alpha to [0.2, 0.8] to avoid extreme interpolation weights
                         # which can cause unrealistic synthetic samples or artifacts.
-                        alpha = np.clip(self._random_state.normal(loc=base_alpha, scale=0.1), 0.2, 0.8)
+                        alpha = np.clip(self._random_state.normal(loc=base_alpha, scale=0.1), 0.1, 0.9)
 
                         # Interpolate in frequency domain over a bandwidth window around the target frequency
                         # Apply decay factor based on distance from target frequency bin

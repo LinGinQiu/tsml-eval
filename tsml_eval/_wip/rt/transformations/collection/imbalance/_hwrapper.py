@@ -108,7 +108,6 @@ class HybridWrapper(BaseCollectionTransformer):
             X_filtered, y_filtered = selector.select(X_real, y_real, X_syn, y_syn)
             X_synthetic = np.concatenate([X_real, X_filtered])
             y_synthetic = np.concatenate([y_real, y_filtered])
-            print("X_synthetic shape:", X_synthetic.shape)
             if X_synthetic.ndim == 2:
                 X_synthetic = X_synthetic[:, np.newaxis, :]
 
