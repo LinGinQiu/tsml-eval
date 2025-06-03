@@ -90,6 +90,12 @@ class FrequencyBinSMOTE(BaseCollectionTransformer):
             if self.enable_selection:
                 n_samples_gen = n_samples_gen * 2
             target_class_indices = np.flatnonzero(y == class_sample)
+            # In _transform method, after X is 2D and seq_len is known
+            seq_len = X.shape[-1]
+            num_freq_bins = seq_len // 2 + 1 # Number of bins in rFFT output
+            if self.bandwidth:
+                # Ensure bandwidth is at least 0 or 1 depending on desired minimum effect
+                self.bandwidth = max(1, int(round(self.bandwidth * num_freq_bins*0.02)))
             X_class = X[target_class_indices]
             y_class = y[target_class_indices]
             avg_spectrum = self.compute_avg_spectrum_bin(X_class)
@@ -111,9 +117,9 @@ class FrequencyBinSMOTE(BaseCollectionTransformer):
                 # get the combine of the top-k freq and the top-k avg freq
                 freq_curr = np.unique(np.concatenate((freq_curr_one, avg_freq_top_k)))
 
-                # siez_list = 3 if 3 < len(freq_curr) else len(freq_curr)//2
-                # random_choice_list = self._random_state.choice(len(freq_curr), size=siez_list, replace=False)
-                # freq_curr = freq_curr[random_choice_list]
+                siez_list = 3 if 3 < len(freq_curr) else len(freq_curr)//2
+                random_choice_list = self._random_state.choice(len(freq_curr), size=siez_list, replace=False)
+                freq_curr = freq_curr[random_choice_list]
                 mag_curr = np.abs(np.fft.rfft(x_curr))[freq_curr]
                 # Compute FFT of the current sample
                 F_curr = np.fft.rfft(x_curr)
@@ -131,7 +137,7 @@ class FrequencyBinSMOTE(BaseCollectionTransformer):
                     scores += score
                 topk = np.argsort(-scores)[:self.n_neighbors+1]  # +1 to include the current sample itself
                 topk = topk[topk != idx]  # exclude the current sample index
-                ps = self._random_state.choice(topk, size=1, replace=False)
+                ps = self._random_state.choice(topk, size=3, replace=False)
                 for p in ps:
                     # Compute FFT of the neighbor sample
                     nn_idx = p
