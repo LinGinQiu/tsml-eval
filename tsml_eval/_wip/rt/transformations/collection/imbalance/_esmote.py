@@ -226,7 +226,7 @@ def _generate_samples(
             # Compute difference for all channels at this time step
             empty_of_array[:, k] = curr_ts[:, k] - nn_ts[:, key]
 
-        X_new[count]  = new_ts + steps[count] * empty_of_array  #/ num_of_alignments
+        X_new[count]  = new_ts - steps[count] * empty_of_array  #/ num_of_alignments
 
     return X_new
 
