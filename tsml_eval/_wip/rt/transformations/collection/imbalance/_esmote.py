@@ -140,7 +140,7 @@ class ESMOTE(BaseCollectionTransformer):
             low=0, high=nn_num.size, size=n_samples
         )
 
-        steps = step_size * self._random_state.uniform(size=n_samples)[:, np.newaxis]
+        steps = step_size * self._random_state.choice([-1, 1], size=n_samples)[:, np.newaxis]
         rows = np.floor_divide(samples_indices, nn_num.shape[1])
         cols = np.mod(samples_indices, nn_num.shape[1])
 
