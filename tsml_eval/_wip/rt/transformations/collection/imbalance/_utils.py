@@ -100,6 +100,7 @@ class SyntheticSampleSelector:
         elif X_real.ndim == 3 and X_real.shape[1] == 1:
             X_real_2d = X_real[:, 0, :]
         else:
+            print(X_real.shape)
             raise ValueError("X_real must be 3D with shape (n_real, 1, n_timestamps) or 2D with shape (n_real, n_timestamps)")
 
         if X_syn.ndim == 2:
@@ -107,6 +108,7 @@ class SyntheticSampleSelector:
         elif X_syn.ndim == 3 and X_syn.shape[1] == 1:
             X_syn_2d = X_syn[:, 0, :]
         else:
+            print(X_syn.shape)
             raise ValueError("X_syn must be 3D with shape (n_syn, 1, n_timestamps) or 2D with shape (n_syn, n_timestamps)")
 
         if self.minority_class_label is None:

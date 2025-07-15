@@ -110,6 +110,7 @@ class ESMOTE(BaseCollectionTransformer):
         for class_sample, n_samples in self.sampling_strategy_.items():
             if n_samples == 0:
                 continue
+            n_samples = 4* n_samples  # increase the number of samples to process selection
             target_class_indices = np.flatnonzero(y == class_sample)
             X_class = X[target_class_indices]
             y_class = y[target_class_indices]
@@ -128,9 +129,26 @@ class ESMOTE(BaseCollectionTransformer):
             )
             X_resampled.append(X_new)
             y_resampled.append(y_new)
-        X_resampled = np.vstack(X_resampled)
-        y_resampled = np.hstack(y_resampled)
-        return X_resampled, y_resampled
+        X_synthetic = np.vstack(X_resampled)
+        y_synthetic = np.hstack(y_resampled)
+        if True:
+            from warnings import warn
+            from tsml_eval._wip.rt.transformations.collection.imbalance._utils import SyntheticSampleSelector
+            selector = SyntheticSampleSelector(random_state=self.random_state)
+            X_real = X_synthetic[:len(X)]
+            y_real = y_synthetic[:len(y)]
+            assert np.array_equal(X_real, X)
+            assert np.array_equal(y_real, y)
+            X_syn = X_synthetic[len(X):]
+            y_syn = y_synthetic[len(y):]
+            X_syn = np.array(list(X_syn))
+            y_syn = np.array(list(y_syn))
+            X_filtered, y_filtered = selector.select(X_real, y_real, X_syn, y_syn)
+            X_synthetic = np.concatenate([X_real, X_filtered])
+            y_synthetic = np.concatenate([y_real, y_filtered])
+            if X_synthetic.ndim == 2:
+                X_synthetic = X_synthetic[:, np.newaxis, :]
+        return X_synthetic, y_synthetic
 
     @threaded
     def _make_samples(
@@ -143,6 +161,7 @@ class ESMOTE(BaseCollectionTransformer):
         steps = step_size * self._random_state.choice([-1, 1], size=n_samples)[:, np.newaxis]
         rows = np.floor_divide(samples_indices, nn_num.shape[1])
         cols = np.mod(samples_indices, nn_num.shape[1])
+        distance = self._random_state.choice(['msm', 'dtw', 'adtw', 'ddtw'])
 
         X_new = _generate_samples(
             X,
@@ -152,7 +171,7 @@ class ESMOTE(BaseCollectionTransformer):
             cols,
             steps,
             random_state=self._random_state,
-            distance=self.distance,
+            distance=distance,
             **self._distance_params,
         )
         y_new = np.full(n_samples, fill_value=y_type, dtype=y_dtype)
@@ -234,26 +253,11 @@ def _generate_samples(
 
 if __name__ == "__main__":
     # Example usage
-    X = np.random.randn(100, 3, 100)
-    y = np.random.choice([0, 0, 1], size=100)
-    print(np.unique(y, return_counts=True))
+    from local.load_ts_data import X_train, y_train, X_test, y_test
+    print(np.unique(y_train, return_counts=True))
     smote = ESMOTE(n_neighbors=5, random_state=1, distance="msm")
 
-    X_resampled, y_resampled = smote.fit_transform(X, y)
+    X_resampled, y_resampled = smote.fit_transform(X_train, y_train)
     print(X_resampled.shape)
     print(np.unique(y_resampled,return_counts=True))
     stop = ""
-    # === Multivariate SMOTE Verification ===
-    print("\n=== Multivariate SMOTE alignment test with near-identical channels ===")
-    base = np.random.randn(30, 50)
-    X = np.stack([base, base + np.random.normal(0, 1e-5, size=base.shape)], axis=1)
-    y = np.array([0] * 20 + [1] * 10)
-
-    smote.fit(X, y)
-    X_resampled, y_resampled = smote.transform(X, y)
-
-    new_samples = X_resampled[len(X):]
-    diffs = new_samples[:, 0, :] - new_samples[:, 1, :]
-    std_dev = np.std(diffs, axis=1)
-
-    print("Mean std deviation across channels (should be < 1e-4 if aligned):", np.mean(std_dev))
