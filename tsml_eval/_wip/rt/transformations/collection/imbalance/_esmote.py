@@ -161,7 +161,7 @@ class ESMOTE(BaseCollectionTransformer):
         steps = step_size * self._random_state.choice([-1, 1], size=n_samples)[:, np.newaxis]
         rows = np.floor_divide(samples_indices, nn_num.shape[1])
         cols = np.mod(samples_indices, nn_num.shape[1])
-        distance = self._random_state.choice(['msm', 'dtw', 'adtw', 'ddtw'])
+        distance = self._random_state.choice(['msm', 'dtw', 'adtw'])
 
         X_new = _generate_samples(
             X,
@@ -240,16 +240,156 @@ def _generate_samples(
 
         for k, l in enumerate(path_list):
             if len(l) == 0:
-                raise ValueError("No alignment found")
+                print("No alignment found for time step")
+                return new_ts
+
             key = random_state.choice(l)
             # Compute difference for all channels at this time step
             empty_of_array[:, k] = curr_ts[:, k] - nn_ts[:, key]
+
+        #  apply_local_smoothing to empty_of_array
+        windowsize = int(np.ceil(curr_ts.shape[-1] * 0.1))  # 10% of the length
+        empty_of_array = apply_local_smoothing(empty_of_array, window_size=windowsize, mode='nearest')
+        # apply_smooth_decay to empty_of_array
+        empty_of_array = apply_smooth_decay(empty_of_array)
 
         X_new[count]  = new_ts - steps[count] * empty_of_array  #/ num_of_alignments
 
     return X_new
 
 
+def apply_smooth_decay(arr, decay_width_ratio=0.1, decay_steepness=4):
+    """
+    对输入数组的每个通道应用序列边缘的平滑衰减。
+
+    该函数使用 Sigmoid 函数来创建在序列两端（开始和结束）
+    值较低、在中间接近 1 的权重，然后将这些权重应用于数组。
+
+    Args:
+        arr (np.ndarray): 输入的 NumPy 数组。
+                          形状可以是 (n_channels, n_timepoints) 或 (n_timepoints,)。
+                          如果是 (n_timepoints,)，函数会按其定义进行处理。
+        decay_width_ratio (float, optional): 控制衰减区域的宽度。
+                                             表示衰减区域占序列总长度的比例。
+                                             例如，0.1 表示在序列开始和结束的 10% 区域衰减。
+                                             默认值是 0.1。
+        decay_steepness (float, optional): 控制衰减曲线的陡峭程度。
+                                          值越大，衰减越急剧。默认值是 4。
+
+    Returns:
+        np.ndarray: 应用平滑衰减后的新数组，形状与输入数组相同。
+    """
+    if arr.ndim == 1:
+        # 如果是 1D 数组 (n_timepoints,)
+        n_timepoints = arr.shape[0]
+        is_1d = True
+    elif arr.ndim == 2:
+        # 如果是 2D 数组 (n_channels, n_timepoints)
+        n_channels, n_timepoints = arr.shape
+        is_1d = False
+    else:
+        raise ValueError("Input array must be 1D or 2D (n_channels, n_timepoints).")
+
+    if n_timepoints == 0:
+        return arr # 空数组直接返回
+
+    # 定义衰减的“宽度”
+    decay_width = n_timepoints * decay_width_ratio
+
+    # 创建一个从 0 到 n_timepoints-1 的时间步索引数组
+    indices = np.arange(n_timepoints)
+
+    # Sigmoid 函数参数计算
+    # k_start: 衰减开始的位置（值开始上升）
+    # k_end: 衰减结束的位置（值达到稳定）
+    k_start = decay_width
+    k_end = n_timepoints - decay_width
+
+    # 防止 decay_width 过大导致 k_start >= k_end
+    if k_start >= k_end:
+        # 如果序列太短，无法形成明显的中间区域，则权重全为0或1，这里取中间值
+        # 简单处理：如果衰减区域覆盖了整个序列，就让权重为0
+        # 或者可以考虑返回一个警告，并使用一个更小的固定衰减宽度
+        print(f"Warning: Sequence length ({n_timepoints}) is too short for the given decay_width_ratio ({decay_width_ratio}). No smooth decay applied, returning zeros.")
+        return np.zeros_like(arr)
+
+
+    # 计算两端的 Sigmoid 权重
+    # 除以 (decay_width / decay_steepness) 控制坡度
+    sigmoid_weights_start = 1 / (1 + np.exp(-(indices - k_start) / (decay_width / decay_steepness)))
+    sigmoid_weights_end = 1 / (1 + np.exp((indices - k_end) / (decay_width / decay_steepness)))
+
+    # 结合两端权重，取最小值以确保两端都衰减
+    weights = np.minimum(sigmoid_weights_start, sigmoid_weights_end)
+
+    # 将权重应用到输入数组
+    if is_1d:
+        weighted_arr = arr * weights
+    else:
+        # 使用广播机制，weights 会自动应用于所有通道
+        weighted_arr = arr * weights[np.newaxis, :] # 增加一个维度以匹配 (n_channels, n_timepoints)
+
+    return weighted_arr
+
+
+from scipy.ndimage import uniform_filter1d  # 导入用于平滑的函数
+
+
+def apply_local_smoothing(arr, window_size=3, mode='nearest'):
+    """
+    对输入数组的每个通道应用局部平滑（例如，移动平均）。
+
+    Args:
+        arr (np.ndarray): 输入的 NumPy 数组。
+                          期望形状是 (n_channels, n_timepoints) 或 (n_timepoints,)。
+        window_size (int, optional): 平滑窗口的大小。
+                                     窗口越大，平滑效果越强，但可能丢失更多细节。
+                                     必须是正整数。默认值是 3。
+        mode (str, optional): 控制在数组边界如何处理。
+                              'nearest': 使用最近的数据点填充边界。
+                              'reflect': 通过反射数据填充边界。
+                              'wrap': 通过环绕数据填充边界。
+                              'constant': 用常数0填充边界。
+                              默认值是 'nearest'。
+
+    Returns:
+        np.ndarray: 应用局部平滑后的新数组，形状与输入数组相同。
+    """
+    if not isinstance(window_size, int) or window_size <= 0:
+        raise ValueError("window_size must be a positive integer.")
+
+    if arr.ndim == 1:
+        # 如果是 1D 数组 (n_timepoints,)
+        n_timepoints = arr.shape[0]
+        is_1d = True
+        smoothed_arr = np.zeros_like(arr, dtype=arr.dtype)
+    elif arr.ndim == 2:
+        # 如果是 2D 数组 (n_channels, n_timepoints)
+        n_channels, n_timepoints = arr.shape
+        is_1d = False
+        smoothed_arr = np.zeros_like(arr, dtype=arr.dtype)
+    else:
+        raise ValueError("Input array must be 1D or 2D (n_channels, n_timepoints).")
+
+    if n_timepoints <= 1:
+        # 对于单点或空序列，无需平滑
+        return arr
+
+    if window_size >= n_timepoints:
+        # 如果窗口大小大于或等于序列长度，则整个序列会变成平均值，
+        # 简单地将其设置为整个序列的均值或者不进行平滑 (取决于你希望的行为)
+        # 这里选择应用一个非常大的窗口，效果类似全序列平均
+        print(f"Warning: window_size ({window_size}) is >= sequence_length ({n_timepoints}). "
+              f"The entire sequence will be heavily smoothed.")
+
+    if is_1d:
+        smoothed_arr = uniform_filter1d(arr, size=window_size, mode=mode)
+    else:
+        # 对每个通道独立进行平滑
+        for c in range(n_channels):
+            smoothed_arr[c, :] = uniform_filter1d(arr[c, :], size=window_size, mode=mode)
+
+    return smoothed_arr
 
 if __name__ == "__main__":
     # Example usage
