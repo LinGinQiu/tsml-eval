@@ -110,7 +110,7 @@ class ESMOTE(BaseCollectionTransformer):
         for class_sample, n_samples in self.sampling_strategy_.items():
             if n_samples == 0:
                 continue
-            n_samples = 4* n_samples  # increase the number of samples to process selection
+            n_samples = n_samples  # increase the number of samples to process selection
             target_class_indices = np.flatnonzero(y == class_sample)
             X_class = X[target_class_indices]
             y_class = y[target_class_indices]
@@ -131,7 +131,7 @@ class ESMOTE(BaseCollectionTransformer):
             y_resampled.append(y_new)
         X_synthetic = np.vstack(X_resampled)
         y_synthetic = np.hstack(y_resampled)
-        if True:
+        if False:
             from warnings import warn
             from tsml_eval._wip.rt.transformations.collection.imbalance._utils import SyntheticSampleSelector
             selector = SyntheticSampleSelector(random_state=self.random_state)
@@ -236,7 +236,7 @@ def _generate_samples(
             path_list[k].append(l)
 
         # num_of_alignments = np.zeros_like(curr_ts, dtype=np.int32)
-        empty_of_array = np.zeros_like(curr_ts, dtype=type(curr_ts[0])) # shape: (c, l)
+        empty_of_array = np.zeros_like(curr_ts, dtype=float) # shape: (c, l)
 
         for k, l in enumerate(path_list):
             if len(l) == 0:
