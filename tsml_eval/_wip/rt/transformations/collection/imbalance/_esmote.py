@@ -132,7 +132,6 @@ class ESMOTE(BaseCollectionTransformer):
                 n_samples,
                 1.0,
                 n_jobs=self.n_jobs,
-                global_nn=global_nn,
             )
             X_resampled.append(X_new)
             y_resampled.append(y_new)
@@ -159,7 +158,7 @@ class ESMOTE(BaseCollectionTransformer):
 
     @threaded
     def _make_samples(
-        self, X, y_dtype, y_type, nn_data, nn_num, n_samples, step_size=1.0, n_job=1,global_nn=None
+        self, X, y_dtype, y_type, nn_data, nn_num, n_samples, step_size=1.0, n_jobs=1
     ):
         samples_indices = self._random_state.randint(
             low=0, high=nn_num.size, size=n_samples
