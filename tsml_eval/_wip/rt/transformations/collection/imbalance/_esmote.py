@@ -110,13 +110,19 @@ class ESMOTE(BaseCollectionTransformer):
         for class_sample, n_samples in self.sampling_strategy_.items():
             if n_samples == 0:
                 continue
-            n_samples = 2*n_samples  # increase the number of samples to process selection
+
+            # n_samples = 2*n_samples  # increase the number of samples to process selection
             target_class_indices = np.flatnonzero(y == class_sample)
             X_class = X[target_class_indices]
             y_class = y[target_class_indices]
-
+            self.nn_.fit(X, y)
+            global_nn = self.nn_.kneighbors(X_class, return_distance=False)[:, 1:]
             self.nn_.fit(X_class, y_class)
             nns = self.nn_.kneighbors(X_class, return_distance=False)[:, 1:]
+            for i in range(len(X_class)):
+                # for each minority class sample, if its global nearest neighbors are not include the minority class, skip it
+                if np.isin(target_class_indices, global_nn[i]).any():
+                    nns[i,:] = i
             X_new, y_new = self._make_samples(
                 X_class,
                 y.dtype,
@@ -126,33 +132,34 @@ class ESMOTE(BaseCollectionTransformer):
                 n_samples,
                 1.0,
                 n_jobs=self.n_jobs,
+                global_nn=global_nn,
             )
             X_resampled.append(X_new)
             y_resampled.append(y_new)
         X_synthetic = np.vstack(X_resampled)
         y_synthetic = np.hstack(y_resampled)
-        if True:
-            from warnings import warn
-            from tsml_eval._wip.rt.transformations.collection.imbalance._utils import SyntheticSampleSelector
-            selector = SyntheticSampleSelector(random_state=self.random_state)
-            X_real = X_synthetic[:len(X)]
-            y_real = y_synthetic[:len(y)]
-            assert np.array_equal(X_real, X)
-            assert np.array_equal(y_real, y)
-            X_syn = X_synthetic[len(X):]
-            y_syn = y_synthetic[len(y):]
-            X_syn = np.array(list(X_syn))
-            y_syn = np.array(list(y_syn))
-            X_filtered, y_filtered = selector.select(X_real, y_real, X_syn, y_syn)
-            X_synthetic = np.concatenate([X_real, X_filtered])
-            y_synthetic = np.concatenate([y_real, y_filtered])
-            if X_synthetic.ndim == 2:
-                X_synthetic = X_synthetic[:, np.newaxis, :]
+        # if True:
+        #     from warnings import warn
+        #     from tsml_eval._wip.rt.transformations.collection.imbalance._utils import SyntheticSampleSelector
+        #     selector = SyntheticSampleSelector(random_state=self.random_state)
+        #     X_real = X_synthetic[:len(X)]
+        #     y_real = y_synthetic[:len(y)]
+        #     assert np.array_equal(X_real, X)
+        #     assert np.array_equal(y_real, y)
+        #     X_syn = X_synthetic[len(X):]
+        #     y_syn = y_synthetic[len(y):]
+        #     X_syn = np.array(list(X_syn))
+        #     y_syn = np.array(list(y_syn))
+        #     X_filtered, y_filtered = selector.select(X_real, y_real, X_syn, y_syn)
+        #     X_synthetic = np.concatenate([X_real, X_filtered])
+        #     y_synthetic = np.concatenate([y_real, y_filtered])
+        #     if X_synthetic.ndim == 2:
+        #         X_synthetic = X_synthetic[:, np.newaxis, :]
         return X_synthetic, y_synthetic
 
     @threaded
     def _make_samples(
-        self, X, y_dtype, y_type, nn_data, nn_num, n_samples, step_size=1.0, n_jobs=1
+        self, X, y_dtype, y_type, nn_data, nn_num, n_samples, step_size=1.0, n_job=1,global_nn=None
     ):
         samples_indices = self._random_state.randint(
             low=0, high=nn_num.size, size=n_samples
@@ -212,7 +219,7 @@ def _generate_samples(
         nn_ts = nn_data[nn_num[i, j]] # shape: (c, l)
         new_ts = curr_ts.copy()
 
-        c = random_state.uniform(0.5, 2.0)  # Randomize MSM penalty parameter
+        # c = random_state.uniform(0.5, 2.0)  # Randomize MSM penalty parameter
         alignment, _ = _get_alignment_path(
             nn_ts,
             curr_ts,
@@ -248,10 +255,10 @@ def _generate_samples(
             empty_of_array[:, k] = curr_ts[:, k] - nn_ts[:, key]
 
         #  apply_local_smoothing to empty_of_array
-        windowsize = int(np.ceil(curr_ts.shape[-1] * 0.1))  # 10% of the length
-        empty_of_array = apply_local_smoothing(empty_of_array, window_size=windowsize, mode='nearest')
+        # windowsize = int(np.ceil(curr_ts.shape[-1] * 0.1))  # 10% of the length
+        # empty_of_array = apply_local_smoothing(empty_of_array, window_size=windowsize, mode='nearest')
         # apply_smooth_decay to empty_of_array
-        empty_of_array = apply_smooth_decay(empty_of_array)
+        # empty_of_array = apply_smooth_decay(empty_of_array)
 
         X_new[count]  = new_ts + steps[count] * empty_of_array  #/ num_of_alignments
 
@@ -393,11 +400,24 @@ def apply_local_smoothing(arr, window_size=3, mode='nearest'):
 
 if __name__ == "__main__":
     # Example usage
-    from local.load_ts_data import X_train, y_train, X_test, y_test
-    print(np.unique(y_train, return_counts=True))
+    # from local.load_ts_data import X_train, y_train, X_test, y_test
+    # print(np.unique(y_train, return_counts=True))
+    # smote = ESMOTE(n_neighbors=5, random_state=1, distance="msm")
+    #
+    # X_resampled, y_resampled = smote.fit_transform(X_train, y_train)
+    # print(X_resampled.shape)
+    # print(np.unique(y_resampled,return_counts=True))
+    # stop = ""
+    n_samples = 100  # Total number of labels
+    majority_num = 90  # number of majority class
+    minority_num = n_samples - majority_num  # number of minority class
+    np.random.seed(42)
+
+    X = np.random.rand(n_samples, 1, 10)
+    y = np.array([0] * majority_num + [1] * minority_num)
+    print(np.unique(y, return_counts=True))
     smote = ESMOTE(n_neighbors=5, random_state=1, distance="msm")
 
-    X_resampled, y_resampled = smote.fit_transform(X_train, y_train)
+    X_resampled, y_resampled = smote.fit_transform(X, y)
     print(X_resampled.shape)
     print(np.unique(y_resampled,return_counts=True))
-    stop = ""
