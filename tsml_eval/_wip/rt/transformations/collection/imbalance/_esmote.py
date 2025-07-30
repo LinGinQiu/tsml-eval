@@ -216,7 +216,7 @@ def _generate_samples(
         curr_ts = X[i]  # shape: (c, l)
         nn_ts = nn_data[nn_num[i, j]] # shape: (c, l)
         new_ts = curr_ts.copy()
-
+        distance = random_state.choice(['msm', 'dtw', 'adtw'])
         # c = random_state.uniform(0.5, 2.0)  # Randomize MSM penalty parameter
         alignment, _ = _get_alignment_path(
             nn_ts,
