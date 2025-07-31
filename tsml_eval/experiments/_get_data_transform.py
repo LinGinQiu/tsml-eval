@@ -18,6 +18,10 @@ unbalanced_transformers = [
     "fbsmote",
     "hw",
     "state",
+    'dtw',
+    'msm',
+    'adtw',
+    'twe',
 ]
 unequal_transformers = [
     ["padder", "zero-padder"],
