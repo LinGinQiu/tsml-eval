@@ -72,17 +72,13 @@ class ESMOTE(BaseCollectionTransformer):
         super().__init__()
 
     def _fit(self, X, y=None):
+
         self._random_state = check_random_state(self.random_state)
-        self.nn_ = KNeighborsTimeSeriesClassifier(
-            n_neighbors=self.n_neighbors + 1,
-            distance=self.distance,
-            distance_params=self._distance_params,
-            weights=self.weights,
-            n_jobs=self.n_jobs,
-        )
 
         # generate sampling target by targeting all classes except the majority
         unique, counts = np.unique(y, return_counts=True)
+        num_minority = min(counts)
+        suggested_n_neighbors = int(min(2+ 0.1*num_minority, self.n_neighbors))
         target_stats = dict(zip(unique, counts))
         n_sample_majority = max(target_stats.values())
         class_majority = max(target_stats, key=target_stats.get)
@@ -92,17 +88,17 @@ class ESMOTE(BaseCollectionTransformer):
             if key != class_majority
         }
         self.sampling_strategy_ = OrderedDict(sorted(sampling_strategy.items()))
+        self.nn_ = KNeighborsTimeSeriesClassifier(
+            n_neighbors=suggested_n_neighbors+1,
+            distance=self.distance,
+            distance_params=self._distance_params,
+            weights=self.weights,
+            n_jobs=self.n_jobs,
+        )
+
         return self
 
     def _transform(self, X, y=None):
-        # if input is 3D (n, c, l) or 2D (n, l), proceed; otherwise fall back to original
-        if X.ndim == 3:
-            n_samples, n_channels, seq_len = X.shape
-        elif X.ndim == 2:
-            X = X[:, np.newaxis, :]
-            n_samples, n_channels, seq_len = X.shape
-        else:
-            raise ValueError("Input X must be 3D or 2D: (n_samples, (n_channels), seq_len)")
         X_resampled = [X.copy()]
         y_resampled = [y.copy()]
 
@@ -115,14 +111,14 @@ class ESMOTE(BaseCollectionTransformer):
             target_class_indices = np.flatnonzero(y == class_sample)
             X_class = X[target_class_indices]
             y_class = y[target_class_indices]
-            self.nn_.fit(X, y)
-            global_nn = self.nn_.kneighbors(X_class, return_distance=False)[:, 1:]
+            # self.nn_.fit(X, y)
+            # global_nn = self.nn_.kneighbors(X_class, return_distance=False)[:, 1:]
             self.nn_.fit(X_class, y_class)
             nns = self.nn_.kneighbors(X_class, return_distance=False)[:, 1:]
-            for i in range(len(X_class)):
-                # for each minority class sample, if its global nearest neighbors are not include the minority class, skip it
-                if np.isin(target_class_indices, global_nn[i]).any():
-                    nns[i,:] = i
+            # for i in range(len(X_class)):
+            #     # for each minority class sample, if its global nearest neighbors are not include the minority class, skip it
+            #     if np.isin(target_class_indices, global_nn[i]).any():
+            #         nns[i,:] = i
             X_new, y_new = self._make_samples(
                 X_class,
                 y.dtype,
@@ -216,7 +212,7 @@ def _generate_samples(
         curr_ts = X[i]  # shape: (c, l)
         nn_ts = nn_data[nn_num[i, j]] # shape: (c, l)
         new_ts = curr_ts.copy()
-        distance = random_state.choice(['msm', 'dtw', 'adtw'])
+        # distance = random_state.choice(['msm', 'dtw', 'adtw'])
         # c = random_state.uniform(0.5, 2.0)  # Randomize MSM penalty parameter
         alignment, _ = _get_alignment_path(
             nn_ts,
