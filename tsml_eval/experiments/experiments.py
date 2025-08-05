@@ -185,7 +185,7 @@ def run_classification_experiment(
         # print(f"[Saved] {filepath}")
         return filepath
 
-    folder = f'/scrathc/cq2u24/Results/'
+    folder = '/scratch/cq2u24/Results/'
 
     from tsml_eval.experiments import (
         get_data_transform_by_name,)
