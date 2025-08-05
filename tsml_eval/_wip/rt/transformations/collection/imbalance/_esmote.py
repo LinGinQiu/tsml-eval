@@ -111,14 +111,23 @@ class ESMOTE(BaseCollectionTransformer):
             target_class_indices = np.flatnonzero(y == class_sample)
             X_class = X[target_class_indices]
             y_class = y[target_class_indices]
-            # self.nn_.fit(X, y)
-            # global_nn = self.nn_.kneighbors(X_class, return_distance=False)[:, 1:]
+            self.nn_.fit(X, y)
+            global_nn = self.nn_.kneighbors(X_class, return_distance=False)[:, 1:]
             self.nn_.fit(X_class, y_class)
             nns = self.nn_.kneighbors(X_class, return_distance=False)[:, 1:]
-            # for i in range(len(X_class)):
-            #     # for each minority class sample, if its global nearest neighbors are not include the minority class, skip it
-            #     if np.isin(target_class_indices, global_nn[i]).any():
-            #         nns[i,:] = i
+            X_class_replaced = []
+            X_class_dangerous = []
+            for i in range(len(X_class)):
+                # for each minority class sample, if its global nearest neighbors are not include the minority class, skip it
+                if not np.isin(target_class_indices, global_nn[i]).any():
+                    X_class_replaced.append(X_class[i])
+                else:
+                    X_class_dangerous.append(X_class[i])
+
+            X_class = np.array(X_class_replaced)
+            self.nn_.fit(X_class, y_class[:len(X_class)])
+            nns = self.nn_.kneighbors(X_class, return_distance=False)[:, 1:]
+
             X_new, y_new = self._make_samples(
                 X_class,
                 y.dtype,
