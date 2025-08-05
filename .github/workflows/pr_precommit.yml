@@ -31,7 +31,7 @@ jobs:
 
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.10"
+          python-version: "3.11"
 
       - uses: tj-actions/changed-files@v46.0.5
         id: changed-files
@@ -54,7 +54,7 @@ jobs:
       # push fixes if pre-commit fails and PR is eligible
       - if: ${{ failure() && github.event_name == 'pull_request_target' && !github.event.pull_request.draft && !contains(github.event.pull_request.labels.*.name, 'stop pre-commit fixes')}}
         name: Push pre-commit fixes
-        uses: stefanzweifel/git-auto-commit-action@v5
+        uses: stefanzweifel/git-auto-commit-action@v6
         with:
           commit_message: Automatic `pre-commit` fixes
           commit_user_name: tsml-actions-bot[bot]

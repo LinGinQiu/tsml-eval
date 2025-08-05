@@ -26,7 +26,7 @@ jobs:
 
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.10"
+          python-version: "3.11"
 
       - name: Install PyGithub
         run: pip install -Uq PyGithub
@@ -46,7 +46,7 @@ jobs:
           token: ${{ steps.app-token.outputs.token }}
 
       - if: ${{ steps.label_out.outputs.empty_commit == 'true' }}
-        uses: stefanzweifel/git-auto-commit-action@v5
+        uses: stefanzweifel/git-auto-commit-action@v6
         with:
           commit_message: Empty commit for CI
           commit_user_name: aeon-actions-bot[bot]
