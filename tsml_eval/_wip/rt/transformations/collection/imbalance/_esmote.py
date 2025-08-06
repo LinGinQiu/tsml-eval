@@ -88,19 +88,20 @@ class ESMOTE(BaseCollectionTransformer):
             if key != class_majority
         }
         self.sampling_strategy_ = OrderedDict(sorted(sampling_strategy.items()))
-        self.nn_ = KNeighborsTimeSeriesClassifier(
-            n_neighbors=suggested_n_neighbors+1,
-            distance=self.distance,
-            distance_params=self._distance_params,
-            weights=self.weights,
-            n_jobs=self.n_jobs,
-        )
+        self.suggested_n_neighbors_ = suggested_n_neighbors
 
         return self
 
     def _transform(self, X, y=None):
         X_resampled = [X.copy()]
         y_resampled = [y.copy()]
+        self.nn_ = KNeighborsTimeSeriesClassifier(
+            n_neighbors=self.suggested_n_neighbors_ + 1,
+            distance=self.distance,
+            distance_params=self._distance_params,
+            weights=self.weights,
+            n_jobs=self.n_jobs,
+        )
 
         # got the minority class label and the number needs to be generated
         for class_sample, n_samples in self.sampling_strategy_.items():
@@ -125,8 +126,21 @@ class ESMOTE(BaseCollectionTransformer):
                     X_class_dangerous.append(X_class[i])
 
             X_class = np.array(X_class_replaced)
-            self.nn_.fit(X_class, y_class[:len(X_class)])
-            nns = self.nn_.kneighbors(X_class, return_distance=False)[:, 1:]
+            if len(X_class) <= 1:
+                # if no samples left, skip this class
+                continue
+            elif len(X_class) < self.suggested_n_neighbors_:
+                self.suggested_n_neighbors_ = len(X_class) - 1
+            self.nn_new_ = KNeighborsTimeSeriesClassifier(
+                n_neighbors=self.suggested_n_neighbors_ + 1,
+                distance=self.distance,
+                distance_params=self._distance_params,
+                weights=self.weights,
+                n_jobs=self.n_jobs,
+            )
+
+            self.nn_new_.fit(X_class, y_class[:len(X_class)])
+            nns = self.nn_new_.kneighbors(X_class, return_distance=False)[:, 1:]
 
             X_new, y_new = self._make_samples(
                 X_class,
