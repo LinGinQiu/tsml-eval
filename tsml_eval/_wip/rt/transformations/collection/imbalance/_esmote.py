@@ -114,8 +114,6 @@ class ESMOTE(BaseCollectionTransformer):
             y_class = y[target_class_indices]
             self.nn_.fit(X, y)
             global_nn = self.nn_.kneighbors(X_class, return_distance=False)[:, 1:]
-            self.nn_.fit(X_class, y_class)
-            nns = self.nn_.kneighbors(X_class, return_distance=False)[:, 1:]
             X_class_replaced = []
             X_class_dangerous = []
             for i in range(len(X_class)):
