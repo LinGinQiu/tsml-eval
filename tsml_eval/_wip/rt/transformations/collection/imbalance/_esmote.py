@@ -275,7 +275,7 @@ def _generate_samples(
         # apply_smooth_decay to empty_of_array
         # empty_of_array = apply_smooth_decay(empty_of_array)
 
-        X_new[count]  = new_ts - steps[count] * empty_of_array  #/ num_of_alignments
+        X_new[count] = new_ts + steps[count] * empty_of_array  # / num_of_alignments
 
     return X_new
 
