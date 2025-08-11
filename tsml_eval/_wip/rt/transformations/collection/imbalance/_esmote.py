@@ -454,24 +454,25 @@ def apply_local_smoothing(arr, window_size=3, mode='nearest'):
 
 if __name__ == "__main__":
     # Example usage
-    # from local.load_ts_data import X_train, y_train, X_test, y_test
-    # print(np.unique(y_train, return_counts=True))
-    # smote = ESMOTE(n_neighbors=5, random_state=1, distance="msm")
-    #
-    # X_resampled, y_resampled = smote.fit_transform(X_train, y_train)
-    # print(X_resampled.shape)
-    # print(np.unique(y_resampled,return_counts=True))
-    # stop = ""
-    n_samples = 100  # Total number of labels
-    majority_num = 90  # number of majority class
-    minority_num = n_samples - majority_num  # number of minority class
-    np.random.seed(42)
+    from local.load_ts_data import X_train, y_train, X_test, y_test
 
-    X = np.random.rand(n_samples, 1, 10)
-    y = np.array([0] * majority_num + [1] * minority_num)
-    print(np.unique(y, return_counts=True))
+    print(np.unique(y_train, return_counts=True))
     smote = ESMOTE(n_neighbors=5, random_state=1, distance="msm")
 
-    X_resampled, y_resampled = smote.fit_transform(X, y)
+    X_resampled, y_resampled = smote.fit_transform(X_train, y_train)
     print(X_resampled.shape)
     print(np.unique(y_resampled,return_counts=True))
+    stop = ""
+    # n_samples = 100  # Total number of labels
+    # majority_num = 90  # number of majority class
+    # minority_num = n_samples - majority_num  # number of minority class
+    # np.random.seed(42)
+    #
+    # X = np.random.rand(n_samples, 1, 10)
+    # y = np.array([0] * majority_num + [1] * minority_num)
+    # print(np.unique(y, return_counts=True))
+    # smote = ESMOTE(n_neighbors=5, random_state=1, distance="msm")
+    #
+    # X_resampled, y_resampled = smote.fit_transform(X, y)
+    # print(X_resampled.shape)
+    # print(np.unique(y_resampled,return_counts=True))
