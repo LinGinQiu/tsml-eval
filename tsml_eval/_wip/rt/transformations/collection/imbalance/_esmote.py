@@ -153,18 +153,18 @@ class ESMOTE(BaseCollectionTransformer):
                 1.0,
                 n_jobs=self.n_jobs,
             )
-            # if len(X_class_dangerous) > 0:
-            #     n_samples_dangerous = n_samples - n_samples_new
-            #     X_new_dangerous, y_new_dangerous = self._make_samples_for_dangerous(
-            #         X_class_dangerous,
-            #         y.dtype,
-            #         class_sample
-            #         X,
-            #         X_dangerous_nns,
-            #         n_samples_dangerous,
-            #         n_jobs=self.n_jobs)
-            #     X_resampled.append(X_new_dangerous)
-            #     y_resampled.append(y_new_dangerous)
+            if len(X_class_dangerous) > 0:
+                n_samples_dangerous = n_samples - n_samples_new
+                X_new_dangerous, y_new_dangerous = self._make_samples_for_dangerous(
+                    X_class_dangerous,
+                    y.dtype,
+                    class_sample,
+                    X,
+                    X_dangerous_nns,
+                    n_samples_dangerous,
+                    n_jobs=self.n_jobs)
+                X_resampled.append(X_new_dangerous)
+                y_resampled.append(y_new_dangerous)
             X_resampled.append(X_new)
             y_resampled.append(y_new)
         X_synthetic = np.vstack(X_resampled)
@@ -192,7 +192,6 @@ class ESMOTE(BaseCollectionTransformer):
     def _make_samples(
         self, X, y_dtype, y_type, nn_data, nn_num, n_samples, step_size=1.0, n_jobs=1
     ):
-        print(nn_num.size)
         samples_indices = self._random_state.randint(
             low=0, high=nn_num.size, size=n_samples
         )
@@ -211,39 +210,47 @@ class ESMOTE(BaseCollectionTransformer):
         y_new = np.full(n_samples, fill_value=y_type, dtype=y_dtype)
         return X_new, y_new
 
-    # @threaded
-    # def _make_samples_for_dangerous(self, X_class_dangerous, y_dtype, y_type, X, X_dangerous_nns, n_samples, n_jobs=1):
-    #     """
-    #     Generate samples for dangerous class samples that are not in the neighborhood of the majority class.
-    #     Parameters
-    #     ----------
-    #     X_class_dangerous
-    #     y_dtype
-    #     X
-    #     X_dangerous_nns : np.ndarray
-    #         The nearest neighbors of the dangerous class samples.
-    #     n_samples
-    #     n_jobs
-    #
-    #     Returns
-    #     X_new : np.ndarray
-    #         The generated samples for the dangerous class.
-    #     y_new : np.ndarray
-    #         The labels for the generated samples, all set to the class type of the
-    #     -------
-    #
-    #     """
-    #     samples_indices = self._random_state.randint(
-    #         low=0, high=len(X_class_dangerous), size=n_samples
-    #     )
-    #     steps = 1.0 * self._random_state.uniform(low=0, high=1, size=n_samples)[:, np.newaxis]
-    #     X_new = np.zeros((n_samples, *X.shape[1:]), dtype=X.dtype)
-    #     for sample_index in samples_indices:
-    #         Bias = self._generate_sample_use_soft_distance(X[i], nn_ts, distance=self.distance,
-    #                                                                step=steps[count], return_bias=True,)
-    #
-    #     y_new = np.full(n_samples, fill_value=y_type, dtype=y_dtype)
-    #     return X_new, y_new
+    @threaded
+    def _make_samples_for_dangerous(self, X_class_dangerous, y_dtype, y_type, X, X_dangerous_nns, n_samples, n_jobs=1):
+        """
+        Generate samples for dangerous class samples that are not in the neighborhood of the majority class.
+        Parameters
+        ----------
+        X_class_dangerous
+        y_dtype
+        X
+        X_dangerous_nns : np.ndarray
+            The nearest neighbors of the dangerous class samples.
+        n_samples
+        n_jobs
+
+        Returns
+        X_new : np.ndarray
+            The generated samples for the dangerous class.
+        y_new : np.ndarray
+            The labels for the generated samples, all set to the class type of the
+        -------
+
+        """
+        samples_indices = self._random_state.randint(
+            low=0, high=len(X_class_dangerous), size=n_samples
+        )
+        steps = 1.0 * self._random_state.uniform(low=0, high=1, size=n_samples)[:, np.newaxis]
+        X_new = np.zeros((n_samples, *X.shape[1:]), dtype=X.dtype)
+        for sample_index in samples_indices:
+            Bias_sum = np.zeros_like(X[sample_index], dtype=float)  # shape: (c, l)
+            for nn_ts_index in X_dangerous_nns[sample_index]:
+                # for each dangerous sample, generate a bias using its nearest neighbor
+                nn_ts = X[nn_ts_index]
+                Bias = self._generate_sample_use_soft_distance(X_class_dangerous[sample_index], nn_ts,
+                                                               distance=self.distance,
+                                                               step=steps[sample_index], return_bias=True, )
+                Bias_sum += Bias
+
+            X_new[sample_index] = X[sample_index] + Bias_sum / len(X_dangerous_nns[sample_index])
+
+        y_new = np.full(n_samples, fill_value=y_type, dtype=y_dtype)
+        return X_new, y_new
 
     def _generate_sample_use_soft_distance(self, curr_ts, nn_ts, distance, step,
                                            window: Union[float, None] = None,
@@ -298,7 +305,11 @@ class ESMOTE(BaseCollectionTransformer):
 
         for k, l in enumerate(path_list):
             if len(l) == 0:
-                print("No alignment found for time step")
+                import logging
+                logging.getLogger("aeon").setLevel(logging.WARNING)
+                logging.warning(
+                    f"Alignment path for channel {k} is empty. "
+                    "Returning the original time series.")
                 return new_ts
 
             key = self._random_state.choice(l)
@@ -462,16 +473,16 @@ if __name__ == "__main__":
 
     print(np.unique(y_resampled,return_counts=True))
     stop = ""
-    # n_samples = 100  # Total number of labels
-    # majority_num = 90  # number of majority class
-    # minority_num = n_samples - majority_num  # number of minority class
-    # np.random.seed(42)
-    #
-    # X = np.random.rand(n_samples, 1, 10)
-    # y = np.array([0] * majority_num + [1] * minority_num)
-    # print(np.unique(y, return_counts=True))
-    # smote = ESMOTE(n_neighbors=5, random_state=1, distance="msm")
-    #
-    # X_resampled, y_resampled = smote.fit_transform(X, y)
-    # print(X_resampled.shape)
-    # print(np.unique(y_resampled,return_counts=True))
+    n_samples = 100  # Total number of labels
+    majority_num = 90  # number of majority class
+    minority_num = n_samples - majority_num  # number of minority class
+    np.random.seed(42)
+
+    X = np.random.rand(n_samples, 1, 10)
+    y = np.array([0] * majority_num + [1] * minority_num)
+    print(np.unique(y, return_counts=True))
+    smote = ESMOTE(n_neighbors=5, random_state=1, distance="msm")
+
+    X_resampled, y_resampled = smote.fit_transform(X, y)
+    print(X_resampled.shape)
+    print(np.unique(y_resampled, return_counts=True))
