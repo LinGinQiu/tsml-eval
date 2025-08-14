@@ -127,46 +127,47 @@ class ESMOTE(BaseCollectionTransformer):
                     X_dangerous_nns.append(global_nn[i])
 
             X_class_new = np.array(X_class_replaced)
-            if len(X_class_new) <= 1:
-                # if no samples left, skip this class
-                continue
-            elif len(X_class_new) < self.suggested_n_neighbors_:
-                self.suggested_n_neighbors_ = len(X_class_new) - 1
-            self.nn_new_ = KNeighborsTimeSeriesClassifier(
-                n_neighbors=self.suggested_n_neighbors_ + 1,
-                distance=self.distance,
-                distance_params=self._distance_params,
-                weights=self.weights,
-                n_jobs=self.n_jobs,
-            )
-            n_samples_new = int(n_samples * (len(X_class_new) / len(X_class)))
-            self.nn_new_.fit(X_class_new, y_class[:len(X_class_new)])
-            nns = self.nn_new_.kneighbors(X_class_new, return_distance=False)[:, 1:]
 
-            X_new, y_new = self._make_samples(
-                X_class_new,
-                y.dtype,
-                class_sample,
-                X_class_new,
-                nns,
-                n_samples_new,
-                1.0,
-                n_jobs=self.n_jobs,
-            )
-            if len(X_class_dangerous) > 0:
-                n_samples_dangerous = n_samples - n_samples_new
-                X_new_dangerous, y_new_dangerous = self._make_samples_for_dangerous(
-                    X_class_dangerous,
+            if len(X_class_new) > 1:
+                if len(X_class_new) <= self.suggested_n_neighbors_:
+                    self.suggested_n_neighbors_ = len(X_class_new) - 1
+                self.nn_new_ = KNeighborsTimeSeriesClassifier(
+                    n_neighbors=self.suggested_n_neighbors_ + 1,
+                    distance=self.distance,
+                    distance_params=self._distance_params,
+                    weights=self.weights,
+                    n_jobs=self.n_jobs,
+                )
+                n_samples_new = int(n_samples * (len(X_class_new) / len(X_class)))
+                self.nn_new_.fit(X_class_new, y_class[:len(X_class_new)])
+                nns = self.nn_new_.kneighbors(X=X_class_new, return_distance=False)[:, 1:]
+
+                X_new, y_new = self._make_samples(
+                    X_class_new,
                     y.dtype,
                     class_sample,
-                    X,
-                    X_dangerous_nns,
-                    n_samples_dangerous,
-                    n_jobs=self.n_jobs)
-                X_resampled.append(X_new_dangerous)
-                y_resampled.append(y_new_dangerous)
-            X_resampled.append(X_new)
-            y_resampled.append(y_new)
+                    X_class_new,
+                    nns,
+                    n_samples_new,
+                    1.0,
+                    n_jobs=self.n_jobs,
+                )
+                X_resampled.append(X_new)
+                y_resampled.append(y_new)
+
+            # if len(X_class_dangerous) > 0:
+            #     n_samples_dangerous = n_samples - n_samples_new
+            #     X_new_dangerous, y_new_dangerous = self._make_samples_for_dangerous(
+            #         X_class_dangerous,
+            #         y.dtype,
+            #         class_sample,
+            #         X,
+            #         X_dangerous_nns,
+            #         n_samples_dangerous,
+            #         n_jobs=self.n_jobs)
+            #     X_resampled.append(X_new_dangerous)
+            #     y_resampled.append(y_new_dangerous)
+
         X_synthetic = np.vstack(X_resampled)
         y_synthetic = np.hstack(y_resampled)
         # if True:
