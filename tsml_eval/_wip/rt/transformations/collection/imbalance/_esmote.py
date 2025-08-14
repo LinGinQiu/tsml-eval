@@ -267,7 +267,8 @@ class ESMOTE(BaseCollectionTransformer):
                                            transformation_precomputed: bool = False,
                                            transformed_x: Optional[np.ndarray] = None,
                                            transformed_y: Optional[np.ndarray] = None,
-                                           return_bias=True
+                                           return_bias=False,
+                                           use_barycentre_averaging=False
                                            ):
 
         """
@@ -297,6 +298,10 @@ class ESMOTE(BaseCollectionTransformer):
             transformed_x,
             transformed_y,
         )
+        if use_barycentre_averaging:
+            # If using barycentre averaging, we need to compute the average of the alignment paths
+            # This is not implemented in this function, but can be done in a separate function
+            raise NotImplementedError("Barycentre averaging is not implemented in this function.")
         path_list = [[] for _ in range(curr_ts.shape[1])]
         for k, l in alignment:
             path_list[k].append(l)
