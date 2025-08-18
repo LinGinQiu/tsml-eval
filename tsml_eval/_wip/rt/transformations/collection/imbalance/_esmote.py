@@ -189,7 +189,7 @@ class ESMOTE(BaseCollectionTransformer):
         #         X_synthetic = X_synthetic[:, np.newaxis, :]
         return X_synthetic, y_synthetic
 
-    @threaded
+    # @threaded
     def _make_samples(
         self, X, y_dtype, y_type, nn_data, nn_num, n_samples, step_size=1.0, n_jobs=1
     ):
@@ -206,7 +206,8 @@ class ESMOTE(BaseCollectionTransformer):
             j = cols[count]
             nn_ts = nn_data[nn_num[i, j]]
             X_new[count] = self._generate_sample_use_soft_distance(X[i], nn_ts, distance=self.distance,
-                                                                   step=steps[count], )
+                                                                   step=steps[count],
+                                                                   use_barycentre_averaging=True, )
 
         y_new = np.full(n_samples, fill_value=y_type, dtype=y_dtype)
         return X_new, y_new
@@ -278,8 +279,64 @@ class ESMOTE(BaseCollectionTransformer):
         # shape: (c, l)
         # shape: (c, l)
         new_ts = curr_ts.copy()
-        # distance = random_state.choice(['msm', 'dtw', 'adtw'])
-        # c = random_state.uniform(0.5, 2.0)  # Randomize MSM penalty parameter
+        if use_barycentre_averaging:
+            if new_ts.ndim == 2:
+                new_ts = new_ts.squeeze()
+                curr_ts = curr_ts.squeeze()
+                nn_ts = nn_ts.squeeze()
+                reshape_ts = True
+            distance = 'msm'  # Barycentre averaging is only applicable with MSM distance
+            # If using barycentre averaging, we need to compute the average of the alignment paths
+            # between the current time series and its nearest neighbors.
+            max_iter = 5  # Only one iteration for barycentre averaging
+            centre = new_ts  # Initial centre is the current time series
+            n_time_points = new_ts.shape[0]
+            alignment = np.zeros(n_time_points)  # Stores the sum of values warped to each point
+            num_warps_to = np.zeros(n_time_points)  # Tracks how many times each point is warped to
+            for i in range(max_iter):
+                for Xi in [curr_ts, nn_ts]:
+                    # Assume msm_alignment_path computes the alignment path.
+                    # It's important that this function provides the full path, not just the distance.
+                    curr_alignment, _ = _get_alignment_path(
+                        centre,
+                        Xi,
+                        distance,
+                        window,
+                        g,
+                        epsilon,
+                        nu,
+                        lmbda,
+                        independent,
+                        c,
+                        descriptor,
+                        reach,
+                        warp_penalty,
+                        transformation_precomputed,
+                        transformed_x,
+                        transformed_y,
+                    )
+
+                    for j, k in curr_alignment:
+                        alignment[k] += Xi[j]
+                        num_warps_to[k] += 1
+
+                # Avoid division by zero for points that were never warped to
+                # If a point was never warped to, we can set it to 1 to avoid
+                num_warps_to[num_warps_to == 0] = 1
+
+                new_centre = alignment / num_warps_to
+
+                # Check for convergence. If the new centre is not significantly different, stop.
+                # This is a simplified check. A more robust check would involve the sum of squared distances.
+                if np.array_equal(new_centre, centre):
+                    break
+
+                centre = new_centre
+            new_ts = centre
+            if reshape_ts:
+                new_ts = new_ts.reshape(1, -1)
+            return new_ts
+
         alignment, _ = _get_alignment_path(
             nn_ts,
             curr_ts,
@@ -298,10 +355,7 @@ class ESMOTE(BaseCollectionTransformer):
             transformed_x,
             transformed_y,
         )
-        if use_barycentre_averaging:
-            # If using barycentre averaging, we need to compute the average of the alignment paths
-            # This is not implemented in this function, but can be done in a separate function
-            raise NotImplementedError("Barycentre averaging is not implemented in this function.")
+
         path_list = [[] for _ in range(curr_ts.shape[1])]
         for k, l in alignment:
             path_list[k].append(l)
