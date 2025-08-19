@@ -55,6 +55,9 @@ class ESMOTE(BaseCollectionTransformer):
         distance: Union[str, callable] = "euclidean",
         distance_params: Optional[dict] = None,
         weights: Union[str, callable] = "uniform",
+            set_dangerous: bool = False,
+            set_barycentre_averaging: bool = False,
+            set_inner: bool = False,
         n_jobs: int = 1,
         random_state=None,
     ):
@@ -64,6 +67,10 @@ class ESMOTE(BaseCollectionTransformer):
         self.distance_params = distance_params
         self.weights = weights
         self.n_jobs = n_jobs
+        self.set_dangerous = set_dangerous
+        self.set_barycentre_averaging = set_barycentre_averaging
+        self.set_inner = set_inner
+
 
         self._random_state = None
         self._distance_params = distance_params or {}
@@ -127,7 +134,7 @@ class ESMOTE(BaseCollectionTransformer):
                     X_dangerous_nns.append(global_nn[i])
 
             X_class_new = np.array(X_class_replaced)
-
+            n_samples_new = int(n_samples * (len(X_class_new) / len(X_class)))
             if len(X_class_new) > 1:
                 if len(X_class_new) <= self.suggested_n_neighbors_:
                     self.suggested_n_neighbors_ = len(X_class_new) - 1
@@ -138,7 +145,6 @@ class ESMOTE(BaseCollectionTransformer):
                     weights=self.weights,
                     n_jobs=self.n_jobs,
                 )
-                n_samples_new = int(n_samples * (len(X_class_new) / len(X_class)))
                 self.nn_new_.fit(X_class_new, y_class[:len(X_class_new)])
                 nns = self.nn_new_.kneighbors(X=X_class_new, return_distance=False)[:, 1:]
 
@@ -155,18 +161,18 @@ class ESMOTE(BaseCollectionTransformer):
                 X_resampled.append(X_new)
                 y_resampled.append(y_new)
 
-            # if len(X_class_dangerous) > 0:
-            #     n_samples_dangerous = n_samples - n_samples_new
-            #     X_new_dangerous, y_new_dangerous = self._make_samples_for_dangerous(
-            #         X_class_dangerous,
-            #         y.dtype,
-            #         class_sample,
-            #         X,
-            #         X_dangerous_nns,
-            #         n_samples_dangerous,
-            #         n_jobs=self.n_jobs)
-            #     X_resampled.append(X_new_dangerous)
-            #     y_resampled.append(y_new_dangerous)
+            if len(X_class_dangerous) > 0 and self.set_dangerous:
+                n_samples_dangerous = n_samples - n_samples_new
+                X_new_dangerous, y_new_dangerous = self._make_samples_for_dangerous(
+                    X_class_dangerous,
+                    y.dtype,
+                    class_sample,
+                    X,
+                    X_dangerous_nns,
+                    n_samples_dangerous,
+                    n_jobs=self.n_jobs)
+                X_resampled.append(X_new_dangerous)
+                y_resampled.append(y_new_dangerous)
 
         X_synthetic = np.vstack(X_resampled)
         y_synthetic = np.hstack(y_resampled)
@@ -189,7 +195,6 @@ class ESMOTE(BaseCollectionTransformer):
         #         X_synthetic = X_synthetic[:, np.newaxis, :]
         return X_synthetic, y_synthetic
 
-    # @threaded
     def _make_samples(
         self, X, y_dtype, y_type, nn_data, nn_num, n_samples, step_size=1.0, n_jobs=1
     ):
@@ -201,18 +206,17 @@ class ESMOTE(BaseCollectionTransformer):
         rows = np.floor_divide(samples_indices, nn_num.shape[1])
         cols = np.mod(samples_indices, nn_num.shape[1])
         X_new = np.zeros((len(rows), *X.shape[1:]), dtype=X.dtype)
-        for count in prange(len(rows)):
+        for count in range(len(rows)):
             i = rows[count]
             j = cols[count]
             nn_ts = nn_data[nn_num[i, j]]
             X_new[count] = self._generate_sample_use_soft_distance(X[i], nn_ts, distance=self.distance,
                                                                    step=steps[count],
-                                                                   use_barycentre_averaging=True, )
+                                                                   use_barycentre_averaging=self.set_barycentre_averaging, )
 
         y_new = np.full(n_samples, fill_value=y_type, dtype=y_dtype)
         return X_new, y_new
 
-    @threaded
     def _make_samples_for_dangerous(self, X_class_dangerous, y_dtype, y_type, X, X_dangerous_nns, n_samples, n_jobs=1):
         """
         Generate samples for dangerous class samples that are not in the neighborhood of the majority class.
@@ -239,17 +243,15 @@ class ESMOTE(BaseCollectionTransformer):
         )
         steps = 1.0 * self._random_state.uniform(low=0, high=1, size=n_samples)[:, np.newaxis]
         X_new = np.zeros((n_samples, *X.shape[1:]), dtype=X.dtype)
-        for sample_index in samples_indices:
-            Bias_sum = np.zeros_like(X[sample_index], dtype=float)  # shape: (c, l)
-            for nn_ts_index in X_dangerous_nns[sample_index]:
-                # for each dangerous sample, generate a bias using its nearest neighbor
-                nn_ts = X[nn_ts_index]
-                Bias = self._generate_sample_use_soft_distance(X_class_dangerous[sample_index], nn_ts,
-                                                               distance=self.distance,
-                                                               step=steps[sample_index], return_bias=True, )
-                Bias_sum += Bias
+        for new_index, sample_index in enumerate(samples_indices):
+            nn_ts_index = self._random_state.choice(X_dangerous_nns[sample_index])
+            # for each dangerous sample, generate a bias using its nearest neighbor
+            nn_ts = X[nn_ts_index]
+            bias = self._generate_sample_use_soft_distance(X_class_dangerous[sample_index], nn_ts,
+                                                           distance=self.distance,
+                                                           step=steps[sample_index], return_bias=True, )
 
-            X_new[sample_index] = X[sample_index] + Bias_sum / len(X_dangerous_nns[sample_index])
+            X_new[new_index] = X_class_dangerous[sample_index] + bias
 
         y_new = np.full(n_samples, fill_value=y_type, dtype=y_dtype)
         return X_new, y_new
@@ -381,11 +383,14 @@ class ESMOTE(BaseCollectionTransformer):
         # empty_of_array = apply_local_smoothing(empty_of_array, window_size=windowsize, mode='nearest')
         # apply_smooth_decay to empty_of_array
         # empty_of_array = apply_smooth_decay(empty_of_array)
-        Bias = step * empty_of_array
+        bias = step * empty_of_array
         if return_bias:
-            return Bias
+            return bias
 
-        new_ts = new_ts - Bias  # / num_of_alignments
+        if self.set_inner:
+            new_ts = new_ts + bias  # / num_of_alignments
+        else:
+            new_ts = new_ts - bias  # / num_of_alignments
         return new_ts
 
 if __name__ == "__main__":
@@ -533,16 +538,16 @@ if __name__ == "__main__":
 
     print(np.unique(y_resampled,return_counts=True))
     stop = ""
-    n_samples = 100  # Total number of labels
-    majority_num = 90  # number of majority class
-    minority_num = n_samples - majority_num  # number of minority class
-    np.random.seed(42)
-
-    X = np.random.rand(n_samples, 1, 10)
-    y = np.array([0] * majority_num + [1] * minority_num)
-    print(np.unique(y, return_counts=True))
-    smote = ESMOTE(n_neighbors=5, random_state=1, distance="msm")
-
-    X_resampled, y_resampled = smote.fit_transform(X, y)
-    print(X_resampled.shape)
-    print(np.unique(y_resampled, return_counts=True))
+    # n_samples = 100  # Total number of labels
+    # majority_num = 90  # number of majority class
+    # minority_num = n_samples - majority_num  # number of minority class
+    # np.random.seed(42)
+    #
+    # X = np.random.rand(n_samples, 1, 10)
+    # y = np.array([0] * majority_num + [1] * minority_num)
+    # print(np.unique(y, return_counts=True))
+    # smote = ESMOTE(n_neighbors=5, random_state=1, distance="msm")
+    #
+    # X_resampled, y_resampled = smote.fit_transform(X, y)
+    # print(X_resampled.shape)
+    # print(np.unique(y_resampled, return_counts=True))
