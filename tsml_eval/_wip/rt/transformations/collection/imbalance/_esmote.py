@@ -57,6 +57,7 @@ class ESMOTE(BaseCollectionTransformer):
         weights: Union[str, callable] = "uniform",
             set_dangerous: bool = False,
             set_barycentre_averaging: bool = False,
+            set_inner_add: bool = False,
         n_jobs: int = 1,
         random_state=None,
     ):
@@ -68,6 +69,7 @@ class ESMOTE(BaseCollectionTransformer):
         self.n_jobs = n_jobs
         self.set_dangerous = set_dangerous
         self.set_barycentre_averaging = set_barycentre_averaging
+        self.set_inner_add = set_inner_add
 
         self._random_state = None
         self._distance_params = distance_params or {}
@@ -383,8 +385,11 @@ class ESMOTE(BaseCollectionTransformer):
         bias = step * empty_of_array
         if return_bias:
             return bias
-
-        new_ts = new_ts + bias  # / num_of_alignments
+        if self.set_inner_add:
+            # If set_inner_add is True, we add the bias to the current time series
+            new_ts = new_ts + bias
+        else:
+            new_ts = new_ts + bias  # / num_of_alignments
         return new_ts
 
 if __name__ == "__main__":
