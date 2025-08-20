@@ -287,9 +287,7 @@ class ESMOTE(BaseCollectionTransformer):
                 nn_ts = nn_ts.squeeze()
                 reshape_ts = True
             distance = 'msm'  # Barycentre averaging is only applicable with MSM distance
-            # If using barycentre averaging, we need to compute the average of the alignment paths
-            # between the current time series and its nearest neighbors.
-            max_iter = 5  # Only one iteration for barycentre averaging
+            max_iter = 5
             centre = new_ts  # Initial centre is the current time series
             n_time_points = new_ts.shape[0]
             alignment = np.zeros(n_time_points)  # Stores the sum of values warped to each point
@@ -324,7 +322,6 @@ class ESMOTE(BaseCollectionTransformer):
                 # Avoid division by zero for points that were never warped to
                 # If a point was never warped to, we can set it to 1 to avoid
                 num_warps_to[num_warps_to == 0] = 1
-
                 new_centre = alignment / num_warps_to
 
                 # Check for convergence. If the new centre is not significantly different, stop.
@@ -389,7 +386,7 @@ class ESMOTE(BaseCollectionTransformer):
             # If set_inner_add is True, we add the bias to the current time series
             new_ts = new_ts + bias
         else:
-            new_ts = new_ts + bias  # / num_of_alignments
+            new_ts = new_ts - bias  # / num_of_alignments
         return new_ts
 
 if __name__ == "__main__":
