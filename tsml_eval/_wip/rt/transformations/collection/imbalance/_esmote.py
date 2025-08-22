@@ -55,8 +55,8 @@ class ESMOTE(BaseCollectionTransformer):
         distance: Union[str, callable] = "euclidean",
         distance_params: Optional[dict] = None,
         weights: Union[str, callable] = "uniform",
-            set_dangerous: bool = True,
-            set_barycentre_averaging: bool = False,
+            set_dangerous: bool = False,
+            set_barycentre_averaging: bool = True,
             set_inner_add: bool = False,
         n_jobs: int = 1,
         random_state=None,
@@ -118,11 +118,32 @@ class ESMOTE(BaseCollectionTransformer):
             target_class_indices = np.flatnonzero(y == class_sample)
             X_class = X[target_class_indices]
             y_class = y[target_class_indices]
+
+            if self.set_barycentre_averaging:
+                X_new = np.zeros((n_samples, *X.shape[1:]), dtype=X.dtype)
+                for n in range(n_samples):
+                    # randomly select 2 samples to generate a new sample
+                    index_two_series = self._random_state.choice(len(X_class), size=2, replace=False)
+                    X_class = X_class[index_two_series]
+                    y_class = y_class[index_two_series]
+                    step = self._random_state.uniform(low=0, high=1)
+                    X_new[n] = self._generate_sample_use_elastic_distance(X_class[0], X_class[1],
+                                                                          distance=self.distance,
+                                                                          step=step,
+                                                                          use_barycentre_averaging=True, )
+                y_new = np.full(n_samples, fill_value=class_sample, dtype=y.dtype)
+                X_resampled.append(X_new)
+                y_resampled.append(y_new)
+                X_synthetic = np.vstack(X_resampled)
+                y_synthetic = np.hstack(y_resampled)
+                return X_synthetic, y_synthetic
+
             self.nn_.fit(X, y)
             global_nn = self.nn_.kneighbors(X_class, return_distance=False)[:, 1:]
             X_class_replaced = []
             X_class_dangerous = []
             X_dangerous_nns = []
+
             for i in range(len(X_class)):
                 # for each minority class sample, if its global nearest neighbors are not include the minority class, skip it
                 triger = np.isin(target_class_indices, global_nn[i]).any()
@@ -209,7 +230,7 @@ class ESMOTE(BaseCollectionTransformer):
             i = rows[count]
             j = cols[count]
             nn_ts = nn_data[nn_num[i, j]]
-            X_new[count] = self._generate_sample_use_soft_distance(X[i], nn_ts, distance=self.distance,
+            X_new[count] = self._generate_sample_use_elastic_distance(X[i], nn_ts, distance=self.distance,
                                                                    step=steps[count],
                                                                    use_barycentre_averaging=self.set_barycentre_averaging, )
 
@@ -246,7 +267,7 @@ class ESMOTE(BaseCollectionTransformer):
             nn_ts_index = self._random_state.choice(X_dangerous_nns[sample_index])
             # for each dangerous sample, generate a bias using its nearest neighbor
             nn_ts = X[nn_ts_index]
-            bias = self._generate_sample_use_soft_distance(X_class_dangerous[sample_index], nn_ts,
+            bias = self._generate_sample_use_elastic_distance(X_class_dangerous[sample_index], nn_ts,
                                                            distance=self.distance,
                                                            step=steps[sample_index], return_bias=True, )
 
@@ -255,7 +276,7 @@ class ESMOTE(BaseCollectionTransformer):
         y_new = np.full(n_samples, fill_value=y_type, dtype=y_dtype)
         return X_new, y_new
 
-    def _generate_sample_use_soft_distance(self, curr_ts, nn_ts, distance, step,
+    def _generate_sample_use_elastic_distance(self, curr_ts, nn_ts, distance, step,
                                            window: Union[float, None] = None,
                                            g: float = 0.0,
                                            epsilon: Union[float, None] = None,
@@ -391,159 +412,26 @@ class ESMOTE(BaseCollectionTransformer):
 
 if __name__ == "__main__":
     # Example usage
-    from local.load_ts_data import X_train, y_train, X_test, y_test
-
-    print(np.unique(y_train, return_counts=True))
-    smote = ESMOTE(n_neighbors=5, random_state=1, distance="msm")
-
-    X_resampled, y_resampled = smote.fit_transform(X_train, y_train)
-    print(X_resampled.shape)
-
-    # def apply_smooth_decay(arr, decay_width_ratio=0.1, decay_steepness=4):
-    #     """
-    #     对输入数组的每个通道应用序列边缘的平滑衰减。
+    # from local.load_ts_data import X_train, y_train, X_test, y_test
     #
-    #     该函数使用 Sigmoid 函数来创建在序列两端（开始和结束）
-    #     值较低、在中间接近 1 的权重，然后将这些权重应用于数组。
-    #
-    #     Args:
-    #         arr (np.ndarray): 输入的 NumPy 数组。
-    #                           形状可以是 (n_channels, n_timepoints) 或 (n_timepoints,)。
-    #                           如果是 (n_timepoints,)，函数会按其定义进行处理。
-    #         decay_width_ratio (float, optional): 控制衰减区域的宽度。
-    #                                              表示衰减区域占序列总长度的比例。
-    #                                              例如，0.1 表示在序列开始和结束的 10% 区域衰减。
-    #                                              默认值是 0.1。
-    #         decay_steepness (float, optional): 控制衰减曲线的陡峭程度。
-    #                                           值越大，衰减越急剧。默认值是 4。
-    #
-    #     Returns:
-    #         np.ndarray: 应用平滑衰减后的新数组，形状与输入数组相同。
-    #     """
-    #     if arr.ndim == 1:
-    #         # 如果是 1D 数组 (n_timepoints,)
-    #         n_timepoints = arr.shape[0]
-    #         is_1d = True
-    #     elif arr.ndim == 2:
-    #         # 如果是 2D 数组 (n_channels, n_timepoints)
-    #         n_channels, n_timepoints = arr.shape
-    #         is_1d = False
-    #     else:
-    #         raise ValueError("Input array must be 1D or 2D (n_channels, n_timepoints).")
-    #
-    #     if n_timepoints == 0:
-    #         return arr # 空数组直接返回
-    #
-    #     # 定义衰减的“宽度”
-    #     decay_width = n_timepoints * decay_width_ratio
-    #
-    #     # 创建一个从 0 到 n_timepoints-1 的时间步索引数组
-    #     indices = np.arange(n_timepoints)
-    #
-    #     # Sigmoid 函数参数计算
-    #     # k_start: 衰减开始的位置（值开始上升）
-    #     # k_end: 衰减结束的位置（值达到稳定）
-    #     k_start = decay_width
-    #     k_end = n_timepoints - decay_width
-    #
-    #     # 防止 decay_width 过大导致 k_start >= k_end
-    #     if k_start >= k_end:
-    #         # 如果序列太短，无法形成明显的中间区域，则权重全为0或1，这里取中间值
-    #         # 简单处理：如果衰减区域覆盖了整个序列，就让权重为0
-    #         # 或者可以考虑返回一个警告，并使用一个更小的固定衰减宽度
-    #         print(f"Warning: Sequence length ({n_timepoints}) is too short for the given decay_width_ratio ({decay_width_ratio}). No smooth decay applied, returning zeros.")
-    #         return np.zeros_like(arr)
-    #
-    #
-    #     # 计算两端的 Sigmoid 权重
-    #     # 除以 (decay_width / decay_steepness) 控制坡度
-    #     sigmoid_weights_start = 1 / (1 + np.exp(-(indices - k_start) / (decay_width / decay_steepness)))
-    #     sigmoid_weights_end = 1 / (1 + np.exp((indices - k_end) / (decay_width / decay_steepness)))
-    #
-    #     # 结合两端权重，取最小值以确保两端都衰减
-    #     weights = np.minimum(sigmoid_weights_start, sigmoid_weights_end)
-    #
-    #     # 将权重应用到输入数组
-    #     if is_1d:
-    #         weighted_arr = arr * weights
-    #     else:
-    #         # 使用广播机制，weights 会自动应用于所有通道
-    #         weighted_arr = arr * weights[np.newaxis, :] # 增加一个维度以匹配 (n_channels, n_timepoints)
-    #
-    #     return weighted_arr
-    #
-    #
-    # from scipy.ndimage import uniform_filter1d  # 导入用于平滑的函数
-    #
-    #
-    # def apply_local_smoothing(arr, window_size=3, mode='nearest'):
-    #     """
-    #     对输入数组的每个通道应用局部平滑（例如，移动平均）。
-    #
-    #     Args:
-    #         arr (np.ndarray): 输入的 NumPy 数组。
-    #                           期望形状是 (n_channels, n_timepoints) 或 (n_timepoints,)。
-    #         window_size (int, optional): 平滑窗口的大小。
-    #                                      窗口越大，平滑效果越强，但可能丢失更多细节。
-    #                                      必须是正整数。默认值是 3。
-    #         mode (str, optional): 控制在数组边界如何处理。
-    #                               'nearest': 使用最近的数据点填充边界。
-    #                               'reflect': 通过反射数据填充边界。
-    #                               'wrap': 通过环绕数据填充边界。
-    #                               'constant': 用常数0填充边界。
-    #                               默认值是 'nearest'。
-    #
-    #     Returns:
-    #         np.ndarray: 应用局部平滑后的新数组，形状与输入数组相同。
-    #     """
-    #     if not isinstance(window_size, int) or window_size <= 0:
-    #         raise ValueError("window_size must be a positive integer.")
-    #
-    #     if arr.ndim == 1:
-    #         # 如果是 1D 数组 (n_timepoints,)
-    #         n_timepoints = arr.shape[0]
-    #         is_1d = True
-    #         smoothed_arr = np.zeros_like(arr, dtype=arr.dtype)
-    #     elif arr.ndim == 2:
-    #         # 如果是 2D 数组 (n_channels, n_timepoints)
-    #         n_channels, n_timepoints = arr.shape
-    #         is_1d = False
-    #         smoothed_arr = np.zeros_like(arr, dtype=arr.dtype)
-    #     else:
-    #         raise ValueError("Input array must be 1D or 2D (n_channels, n_timepoints).")
-    #
-    #     if n_timepoints <= 1:
-    #         # 对于单点或空序列，无需平滑
-    #         return arr
-    #
-    #     if window_size >= n_timepoints:
-    #         # 如果窗口大小大于或等于序列长度，则整个序列会变成平均值，
-    #         # 简单地将其设置为整个序列的均值或者不进行平滑 (取决于你希望的行为)
-    #         # 这里选择应用一个非常大的窗口，效果类似全序列平均
-    #         print(f"Warning: window_size ({window_size}) is >= sequence_length ({n_timepoints}). "
-    #               f"The entire sequence will be heavily smoothed.")
-    #
-    #     if is_1d:
-    #         smoothed_arr = uniform_filter1d(arr, size=window_size, mode=mode)
-    #     else:
-    #         # 对每个通道独立进行平滑
-    #         for c in range(n_channels):
-    #             smoothed_arr[c, :] = uniform_filter1d(arr[c, :], size=window_size, mode=mode)
-    #
-    #     return smoothed_arr
-
-    print(np.unique(y_resampled,return_counts=True))
-    stop = ""
-    # n_samples = 100  # Total number of labels
-    # majority_num = 90  # number of majority class
-    # minority_num = n_samples - majority_num  # number of minority class
-    # np.random.seed(42)
-    #
-    # X = np.random.rand(n_samples, 1, 10)
-    # y = np.array([0] * majority_num + [1] * minority_num)
-    # print(np.unique(y, return_counts=True))
+    # print(np.unique(y_train, return_counts=True))
     # smote = ESMOTE(n_neighbors=5, random_state=1, distance="msm")
     #
-    # X_resampled, y_resampled = smote.fit_transform(X, y)
+    # X_resampled, y_resampled = smote.fit_transform(X_train, y_train)
     # print(X_resampled.shape)
-    # print(np.unique(y_resampled, return_counts=True))
+    #
+    # print(np.unique(y_resampled,return_counts=True))
+    # stop = ""
+    n_samples = 100  # Total number of labels
+    majority_num = 90  # number of majority class
+    minority_num = n_samples - majority_num  # number of minority class
+    np.random.seed(42)
+
+    X = np.random.rand(n_samples, 1, 10)
+    y = np.array([0] * majority_num + [1] * minority_num)
+    print(np.unique(y, return_counts=True))
+    smote = ESMOTE(n_neighbors=5, random_state=1, distance="msm")
+
+    X_resampled, y_resampled = smote.fit_transform(X, y)
+    print(X_resampled.shape)
+    print(np.unique(y_resampled, return_counts=True))
