@@ -55,8 +55,8 @@ class ESMOTE(BaseCollectionTransformer):
         distance: Union[str, callable] = "euclidean",
         distance_params: Optional[dict] = None,
         weights: Union[str, callable] = "uniform",
-            set_dangerous: bool = False,
-            set_barycentre_averaging: bool = True,
+            set_dangerous: bool = True,
+            set_barycentre_averaging: bool = False,
             set_inner_add: bool = False,
         n_jobs: int = 1,
         random_state=None,
@@ -158,15 +158,15 @@ class ESMOTE(BaseCollectionTransformer):
             if len(X_class_new) > 1:
                 if len(X_class_new) <= self.suggested_n_neighbors_:
                     self.suggested_n_neighbors_ = len(X_class_new) - 1
-                self.nn_new_ = KNeighborsTimeSeriesClassifier(
+                self.nn_temp_ = KNeighborsTimeSeriesClassifier(
                     n_neighbors=self.suggested_n_neighbors_ + 1,
                     distance=self.distance,
                     distance_params=self._distance_params,
                     weights=self.weights,
                     n_jobs=self.n_jobs,
                 )
-                self.nn_new_.fit(X_class_new, y_class[:len(X_class_new)])
-                nns = self.nn_new_.kneighbors(X=X_class_new, return_distance=False)[:, 1:]
+                self.nn_temp_.fit(X_class_new, y_class[:len(X_class_new)])
+                nns = self.nn_temp_.kneighbors(X=X_class_new, return_distance=False)[:, 1:]
 
                 X_new, y_new = self._make_samples(
                     X_class_new,
@@ -182,6 +182,16 @@ class ESMOTE(BaseCollectionTransformer):
                 y_resampled.append(y_new)
 
             if len(X_class_dangerous) > 0 and self.set_dangerous:
+                self.nn_temp_ = KNeighborsTimeSeriesClassifier(
+                    n_neighbors=1,
+                    distance=self.distance,
+                    distance_params=self._distance_params,
+                    weights=self.weights,
+                    n_jobs=self.n_jobs,
+                )
+                self.nn_temp_.fit(X_class_new, y_class[:len(X_class_new)])
+                nns = self.nn_temp_.kneighbors(X=X_class_dangerous, return_distance=False)
+
                 n_samples_dangerous = n_samples - n_samples_new
                 X_new_dangerous, y_new_dangerous = self._make_samples_for_dangerous(
                     X_class_dangerous,
@@ -189,6 +199,8 @@ class ESMOTE(BaseCollectionTransformer):
                     class_sample,
                     X,
                     X_dangerous_nns,
+                    X_class_new,
+                    nns,
                     n_samples_dangerous,
                     n_jobs=self.n_jobs)
                 X_resampled.append(X_new_dangerous)
@@ -237,7 +249,8 @@ class ESMOTE(BaseCollectionTransformer):
         y_new = np.full(n_samples, fill_value=y_type, dtype=y_dtype)
         return X_new, y_new
 
-    def _make_samples_for_dangerous(self, X_class_dangerous, y_dtype, y_type, X, X_dangerous_nns, n_samples, n_jobs=1):
+    def _make_samples_for_dangerous(self, X_class_dangerous, y_dtype, y_type, X, X_dangerous_nns, X_class_new, nns,
+                                    n_samples, n_jobs=1):
         """
         Generate samples for dangerous class samples that are not in the neighborhood of the majority class.
         Parameters
@@ -265,13 +278,18 @@ class ESMOTE(BaseCollectionTransformer):
         X_new = np.zeros((n_samples, *X.shape[1:]), dtype=X.dtype)
         for new_index, sample_index in enumerate(samples_indices):
             nn_ts_index = self._random_state.choice(X_dangerous_nns[sample_index])
+            nn_ts_m_index = self._random_state.choice(nns[sample_index])
             # for each dangerous sample, generate a bias using its nearest neighbor
             nn_ts = X[nn_ts_index]
-            bias = self._generate_sample_use_elastic_distance(X_class_dangerous[sample_index], nn_ts,
+            nn_ts_m = X_class_new[nn_ts_m_index]
+            bias_add = self._generate_sample_use_elastic_distance(X_class_dangerous[sample_index], nn_ts,
                                                            distance=self.distance,
                                                            step=steps[sample_index], return_bias=True, )
-
-            X_new[new_index] = X_class_dangerous[sample_index] + bias
+            bias_minus = self._generate_sample_use_elastic_distance(X_class_dangerous[sample_index],
+                                                                    distance=self.distance, nn_ts=nn_ts_m,
+                                                                    step=(1.0 - steps[sample_index]),
+                                                                    return_bias=True, )
+            X_new[new_index] = X_class_dangerous[sample_index] + bias_add - bias_minus
 
         y_new = np.full(n_samples, fill_value=y_type, dtype=y_dtype)
         return X_new, y_new
