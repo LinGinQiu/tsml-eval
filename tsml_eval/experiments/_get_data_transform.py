@@ -18,10 +18,11 @@ unbalanced_transformers = [
     "fbsmote",
     "hw",
     "state",
-    'dtw',
-    'msm',
-    'adtw',
-    'twe',
+    "dtw",
+    "msm",
+    "adtw",
+    "twe",
+    "cfam",
 ]
 unequal_transformers = [
     ["padder", "zero-padder"],
@@ -211,6 +212,7 @@ def _set_unbalanced_transformer(t, random_state, n_jobs):
         from tsml_eval._wip.rt.transformations.collection.imbalance._esmote import (
             ESMOTE,
         )
+
         return ESMOTE(
             n_neighbors=5,
             distance="msm",
@@ -223,6 +225,7 @@ def _set_unbalanced_transformer(t, random_state, n_jobs):
         from tsml_eval._wip.rt.transformations.collection.imbalance._esmote import (
             ESMOTE,
         )
+
         return ESMOTE(
             n_neighbors=5,
             distance="adtw",
@@ -235,6 +238,7 @@ def _set_unbalanced_transformer(t, random_state, n_jobs):
         from tsml_eval._wip.rt.transformations.collection.imbalance._esmote import (
             ESMOTE,
         )
+
         return ESMOTE(
             n_neighbors=5,
             distance="twe",
@@ -245,18 +249,20 @@ def _set_unbalanced_transformer(t, random_state, n_jobs):
         )
     elif t == "state":
         from tsml_eval._wip.rt.transformations.collection.imbalance._stlor import (
-            STLOversampler
+            STLOversampler,
         )
 
-        return STLOversampler(noise_scale=0.05,
-                              block_bootstrap=True,
-                              use_boxcox=True,
-                              random_state=random_state,
-                              period_estimation_method="acf")
+        return STLOversampler(
+            noise_scale=0.05,
+            block_bootstrap=True,
+            use_boxcox=True,
+            random_state=random_state,
+            period_estimation_method="acf",
+        )
 
     elif t == "fbsmote":
         from tsml_eval._wip.rt.transformations.collection.imbalance._fbsmote import (
-            FrequencyBinSMOTE
+            FrequencyBinSMOTE,
         )
 
         return FrequencyBinSMOTE(
@@ -270,7 +276,7 @@ def _set_unbalanced_transformer(t, random_state, n_jobs):
         )
     elif t == "hw" or t == "hybrid-wrapper":
         from tsml_eval._wip.rt.transformations.collection.imbalance._hwrapper import (
-            HybridWrapper
+            HybridWrapper,
         )
 
         return HybridWrapper(
@@ -278,4 +284,9 @@ def _set_unbalanced_transformer(t, random_state, n_jobs):
             enable_selection=True,
             n_jobs=n_jobs,
         )
+    elif t == "cfam":
+        from tsml_eval._wip.rt.transformations.collection.imbalance._cfam import CFAM
 
+        return CFAM(
+            random_state=random_state,
+        )
