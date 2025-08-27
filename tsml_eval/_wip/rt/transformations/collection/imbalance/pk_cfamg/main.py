@@ -46,6 +46,7 @@ def parse_args():
     args = parser.parse_args()
     args.save_path = os.path.join(os.getcwd(), args.output_dir)
     args.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print('Device:', args.device)
     return args
 
 
