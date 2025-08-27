@@ -3,7 +3,6 @@ from collections import OrderedDict
 
 import numpy as np
 from torch import nn
-from tqdm import tqdm
 import torch.nn.functional as F
 from tsml_eval._wip.rt.transformations.collection.imbalance.pk_cfamg.data_preprocess import create_dataLoader2
 from tsml_eval._wip.rt.transformations.collection.imbalance.pk_cfamg.model_utils import resample_from_normal
@@ -224,7 +223,7 @@ class CFAMG:
         best_loss = float('inf')
         patience = 10
         counter = 0
-        for epoch in tqdm(range(self.args.num_epochs)):
+        for epoch in range(self.args.num_epochs):
             self.pos_model.train()
             self.neg_model.train()
 
