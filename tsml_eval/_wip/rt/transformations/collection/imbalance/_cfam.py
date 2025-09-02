@@ -26,6 +26,7 @@ class CFAM(BaseCollectionTransformer):
                  random_state=None,
                  ):
         self.random_state = random_state
+        self.generated_samples = None
         set_seed(self.random_state)
         super().__init__()
 
@@ -58,9 +59,10 @@ class CFAM(BaseCollectionTransformer):
         return self
 
     def _transform(self, X, y=None):
-        X_train, y_train, _ = self.CFAMG_model.generator_sample()
+        X_train, y_train, generated_samples = self.CFAMG_model.generator_sample()
         inv_class_label_project = {v: k for k, v in self.class_label_project.items()}
         y_train = np.array([inv_class_label_project[label] for label in y_train])
+        self.generated_samples = generated_samples
         return X_train, y_train
 
 

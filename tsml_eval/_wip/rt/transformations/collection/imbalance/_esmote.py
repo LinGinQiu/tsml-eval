@@ -181,39 +181,40 @@ class ESMOTE(BaseCollectionTransformer):
                 X_resampled.append(X_new)
                 y_resampled.append(y_new)
             if len(X_class_dangerous) > 0 and self.set_dangerous:
-                n_samples_dangerous = n_samples - n_samples_new
-                X_class_dangerous = np.array(X_class_dangerous)
-                y_class_dangerous = np.array([class_sample] * len(X_class_dangerous))
-                from tsml_eval._wip.rt.transformations.collection.imbalance._fbsmote import simple_frequency_bin_smote
-                resampleX, resampley = simple_frequency_bin_smote(X_class_dangerous, y_class_dangerous, n_neighbors=3,
-                                                                  top_k=3, freq_match_delta=1, bandwidth=1,
-                                                                  random_state=self.random_state, normalize_energy=True,
-                                                                  n_samples_gen=n_samples_dangerous)
-                X_resampled.append(resampleX)
-                y_resampled.append(resampley)
-                # self.nn_temp_ = KNeighborsTimeSeriesClassifier(
-                #     n_neighbors=1,
-                #     distance=self.distance,
-                #     distance_params=self._distance_params,
-                #     weights=self.weights,
-                #     n_jobs=self.n_jobs,
-                # )
-                # self.nn_temp_.fit(X_class_new, y_class[:len(X_class_new)])
-                # nns = self.nn_temp_.kneighbors(X=X_class_dangerous, return_distance=False)
-                #
                 # n_samples_dangerous = n_samples - n_samples_new
-                # X_new_dangerous, y_new_dangerous = self._make_samples_for_dangerous(
-                #     X_class_dangerous,
-                #     y.dtype,
-                #     class_sample,
-                #     X,
-                #     X_dangerous_nns,
-                #     X_class_new,
-                #     nns,
-                #     n_samples_dangerous,
-                #     n_jobs=self.n_jobs)
-                # X_resampled.append(X_new_dangerous)
-                # y_resampled.append(y_new_dangerous)
+                # X_class_dangerous = np.array(X_class_dangerous)
+                # y_class_dangerous = np.array([class_sample] * len(X_class_dangerous))
+                # from tsml_eval._wip.rt.transformations.collection.imbalance._fbsmote import simple_frequency_bin_smote
+                # resampleX, resampley = simple_frequency_bin_smote(X_class_dangerous, y_class_dangerous, n_neighbors=3,
+                #                                                   top_k=3, freq_match_delta=2, bandwidth=1,
+                #                                                   random_state=self.random_state, normalize_energy=False,
+                #                                                   n_samples_gen=n_samples_dangerous)
+                #
+                # X_resampled.append(resampleX)
+                # y_resampled.append(resampley)
+                self.nn_temp_ = KNeighborsTimeSeriesClassifier(
+                    n_neighbors=1,
+                    distance=self.distance,
+                    distance_params=self._distance_params,
+                    weights=self.weights,
+                    n_jobs=self.n_jobs,
+                )
+                self.nn_temp_.fit(X_class_new, y_class[:len(X_class_new)])
+                nns = self.nn_temp_.kneighbors(X=X_class_dangerous, return_distance=False)
+
+                n_samples_dangerous = n_samples - n_samples_new
+                X_new_dangerous, y_new_dangerous = self._make_samples_for_dangerous(
+                    X_class_dangerous,
+                    y.dtype,
+                    class_sample,
+                    X,
+                    X_dangerous_nns,
+                    X_class_new,
+                    nns,
+                    n_samples_dangerous,
+                    n_jobs=self.n_jobs)
+                X_resampled.append(X_new_dangerous)
+                y_resampled.append(y_new_dangerous)
 
 
         X_synthetic = np.vstack(X_resampled)
@@ -267,7 +268,7 @@ class ESMOTE(BaseCollectionTransformer):
         samples_indices = self._random_state.randint(
             low=0, high=len(X_class_dangerous), size=n_samples
         )
-        steps = 1.0 * self._random_state.uniform(low=0, high=1, size=n_samples)[:, np.newaxis]
+        steps = 0.5 * self._random_state.uniform(low=0, high=1, size=n_samples)[:, np.newaxis]
         X_new = np.zeros((n_samples, *X.shape[1:]), dtype=X.dtype)
         for new_index, sample_index in enumerate(samples_indices):
             nn_ts_index = self._random_state.choice(X_dangerous_nns[sample_index])
