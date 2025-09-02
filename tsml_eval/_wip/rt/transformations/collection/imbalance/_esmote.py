@@ -55,9 +55,9 @@ class ESMOTE(BaseCollectionTransformer):
         distance: Union[str, callable] = "euclidean",
         distance_params: Optional[dict] = None,
         weights: Union[str, callable] = "uniform",
-            set_dangerous: bool = False,
-            set_barycentre_averaging: bool = True,
-            set_inner_add: bool = False,
+            set_dangerous: bool = True,
+            set_barycentre_averaging: bool = False,
+            set_inner_add: bool = True,
         n_jobs: int = 1,
         random_state=None,
     ):
@@ -180,51 +180,44 @@ class ESMOTE(BaseCollectionTransformer):
                 )
                 X_resampled.append(X_new)
                 y_resampled.append(y_new)
-
             if len(X_class_dangerous) > 0 and self.set_dangerous:
-                self.nn_temp_ = KNeighborsTimeSeriesClassifier(
-                    n_neighbors=1,
-                    distance=self.distance,
-                    distance_params=self._distance_params,
-                    weights=self.weights,
-                    n_jobs=self.n_jobs,
-                )
-                self.nn_temp_.fit(X_class_new, y_class[:len(X_class_new)])
-                nns = self.nn_temp_.kneighbors(X=X_class_dangerous, return_distance=False)
-
                 n_samples_dangerous = n_samples - n_samples_new
-                X_new_dangerous, y_new_dangerous = self._make_samples_for_dangerous(
-                    X_class_dangerous,
-                    y.dtype,
-                    class_sample,
-                    X,
-                    X_dangerous_nns,
-                    X_class_new,
-                    nns,
-                    n_samples_dangerous,
-                    n_jobs=self.n_jobs)
-                X_resampled.append(X_new_dangerous)
-                y_resampled.append(y_new_dangerous)
+                X_class_dangerous = np.array(X_class_dangerous)
+                y_class_dangerous = np.array([class_sample] * len(X_class_dangerous))
+                from tsml_eval._wip.rt.transformations.collection.imbalance._fbsmote import simple_frequency_bin_smote
+                resampleX, resampley = simple_frequency_bin_smote(X_class_dangerous, y_class_dangerous, n_neighbors=3,
+                                                                  top_k=3, freq_match_delta=1, bandwidth=1,
+                                                                  random_state=self.random_state, normalize_energy=True,
+                                                                  n_samples_gen=n_samples_dangerous)
+                X_resampled.append(resampleX)
+                y_resampled.append(resampley)
+                # self.nn_temp_ = KNeighborsTimeSeriesClassifier(
+                #     n_neighbors=1,
+                #     distance=self.distance,
+                #     distance_params=self._distance_params,
+                #     weights=self.weights,
+                #     n_jobs=self.n_jobs,
+                # )
+                # self.nn_temp_.fit(X_class_new, y_class[:len(X_class_new)])
+                # nns = self.nn_temp_.kneighbors(X=X_class_dangerous, return_distance=False)
+                #
+                # n_samples_dangerous = n_samples - n_samples_new
+                # X_new_dangerous, y_new_dangerous = self._make_samples_for_dangerous(
+                #     X_class_dangerous,
+                #     y.dtype,
+                #     class_sample,
+                #     X,
+                #     X_dangerous_nns,
+                #     X_class_new,
+                #     nns,
+                #     n_samples_dangerous,
+                #     n_jobs=self.n_jobs)
+                # X_resampled.append(X_new_dangerous)
+                # y_resampled.append(y_new_dangerous)
+
 
         X_synthetic = np.vstack(X_resampled)
         y_synthetic = np.hstack(y_resampled)
-        # if True:
-        #     from warnings import warn
-        #     from tsml_eval._wip.rt.transformations.collection.imbalance._utils import SyntheticSampleSelector
-        #     selector = SyntheticSampleSelector(random_state=self.random_state)
-        #     X_real = X_synthetic[:len(X)]
-        #     y_real = y_synthetic[:len(y)]
-        #     assert np.array_equal(X_real, X)
-        #     assert np.array_equal(y_real, y)
-        #     X_syn = X_synthetic[len(X):]
-        #     y_syn = y_synthetic[len(y):]
-        #     X_syn = np.array(list(X_syn))
-        #     y_syn = np.array(list(y_syn))
-        #     X_filtered, y_filtered = selector.select(X_real, y_real, X_syn, y_syn)
-        #     X_synthetic = np.concatenate([X_real, X_filtered])
-        #     y_synthetic = np.concatenate([y_real, y_filtered])
-        #     if X_synthetic.ndim == 2:
-        #         X_synthetic = X_synthetic[:, np.newaxis, :]
         return X_synthetic, y_synthetic
 
     def _make_samples(
@@ -421,7 +414,8 @@ class ESMOTE(BaseCollectionTransformer):
         bias = step * empty_of_array
         if return_bias:
             return bias
-        if self.set_inner_add:
+        if (self.
+                set_inner_add):
             # If set_inner_add is True, we add the bias to the current time series
             new_ts = new_ts + bias
         else:
@@ -429,17 +423,17 @@ class ESMOTE(BaseCollectionTransformer):
         return new_ts
 
 if __name__ == "__main__":
-    # Example usage
-    # from local.load_ts_data import X_train, y_train, X_test, y_test
-    #
-    # print(np.unique(y_train, return_counts=True))
-    # smote = ESMOTE(n_neighbors=5, random_state=1, distance="msm")
-    #
-    # X_resampled, y_resampled = smote.fit_transform(X_train, y_train)
-    # print(X_resampled.shape)
-    #
-    # print(np.unique(y_resampled,return_counts=True))
-    # stop = ""
+    ## Example usage
+    from local.load_ts_data import X_train, y_train, X_test, y_test
+
+    print(np.unique(y_train, return_counts=True))
+    smote = ESMOTE(n_neighbors=5, random_state=1, distance="msm")
+
+    X_resampled, y_resampled = smote.fit_transform(X_train, y_train)
+    print(X_resampled.shape)
+
+    print(np.unique(y_resampled, return_counts=True))
+    stop = ""
     n_samples = 100  # Total number of labels
     majority_num = 90  # number of majority class
     minority_num = n_samples - majority_num  # number of minority class
