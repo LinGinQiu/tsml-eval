@@ -55,7 +55,7 @@ class ESMOTE(BaseCollectionTransformer):
         distance: Union[str, callable] = "euclidean",
         distance_params: Optional[dict] = None,
         weights: Union[str, callable] = "uniform",
-            set_dangerous: bool = True,
+            set_dangerous: bool = False,
             set_barycentre_averaging: bool = False,
             set_inner_add: bool = False,
         n_jobs: int = 1,
