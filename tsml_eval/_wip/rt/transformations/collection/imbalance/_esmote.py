@@ -52,12 +52,13 @@ class ESMOTE(BaseCollectionTransformer):
     def __init__(
         self,
         n_neighbors=5,
-        distance: Union[str, callable] = "euclidean",
+            distance: Union[str, callable] = "twe",
         distance_params: Optional[dict] = None,
         weights: Union[str, callable] = "uniform",
             set_dangerous: bool = False,
             set_barycentre_averaging: bool = False,
             set_inner_add: bool = False,
+            two_part_strategy: bool = False,
         n_jobs: int = 1,
         random_state=None,
     ):
@@ -70,6 +71,7 @@ class ESMOTE(BaseCollectionTransformer):
         self.set_dangerous = set_dangerous
         self.set_barycentre_averaging = set_barycentre_averaging
         self.set_inner_add = set_inner_add
+        self.two_part_strategy = two_part_strategy
 
         self._random_state = None
         self._distance_params = distance_params or {}
@@ -138,26 +140,74 @@ class ESMOTE(BaseCollectionTransformer):
                 y_synthetic = np.hstack(y_resampled)
                 return X_synthetic, y_synthetic
 
-            self.nn_.fit(X, y)
-            global_nn = self.nn_.kneighbors(X_class, return_distance=False)[:, 1:]
-            X_class_replaced = []
-            X_class_dangerous = []
-            X_dangerous_nns = []
+            if self.two_part_strategy:
+                self.nn_.fit(X, y)
+                global_nn = self.nn_.kneighbors(X_class, return_distance=False)[:, 1:]
+                X_class_replaced = []
+                X_class_dangerous = []
+                X_dangerous_nns = []
 
-            for i in range(len(X_class)):
-                # for each minority class sample, if its global nearest neighbors are not include the minority class, skip it
-                triger = np.isin(target_class_indices, global_nn[i]).any()
-                if triger:
-                    X_class_replaced.append(X_class[i])
-                else:
-                    X_class_dangerous.append(X_class[i])
-                    X_dangerous_nns.append(global_nn[i])
+                for i in range(len(X_class)):
+                    # for each minority class sample, if its global nearest neighbors are not include the minority class, skip it
+                    triger = np.isin(target_class_indices, global_nn[i]).any()
+                    if triger:
+                        X_class_replaced.append(X_class[i])
+                    else:
+                        X_class_dangerous.append(X_class[i])
+                        X_dangerous_nns.append(global_nn[i])
 
-            X_class_new = np.array(X_class_replaced)
-            n_samples_new = int(n_samples * (len(X_class_new) / len(X_class)))
-            if len(X_class_new) > 1:
-                if len(X_class_new) <= self.suggested_n_neighbors_:
-                    self.suggested_n_neighbors_ = len(X_class_new) - 1
+                X_class_new = np.array(X_class_replaced)
+                n_samples_new = int(n_samples * (len(X_class_new) / len(X_class)))
+                if len(X_class_new) > 1:
+                    if len(X_class_new) <= self.suggested_n_neighbors_:
+                        self.suggested_n_neighbors_ = len(X_class_new) - 1
+                    self.nn_temp_ = KNeighborsTimeSeriesClassifier(
+                        n_neighbors=self.suggested_n_neighbors_ + 1,
+                        distance=self.distance,
+                        distance_params=self._distance_params,
+                        weights=self.weights,
+                        n_jobs=self.n_jobs,
+                    )
+                    self.nn_temp_.fit(X_class_new, y_class[:len(X_class_new)])
+                    nns = self.nn_temp_.kneighbors(X=X_class_new, return_distance=False)[:, 1:]
+
+                    X_new, y_new = self._make_samples(
+                        X_class_new,
+                        y.dtype,
+                        class_sample,
+                        X_class_new,
+                        nns,
+                        n_samples_new,
+                        1.0,
+                        n_jobs=self.n_jobs,
+                    )
+                    X_resampled.append(X_new)
+                    y_resampled.append(y_new)
+                if len(X_class_dangerous) > 0 and self.set_dangerous:
+                    self.nn_temp_ = KNeighborsTimeSeriesClassifier(
+                        n_neighbors=1,
+                        distance=self.distance,
+                        distance_params=self._distance_params,
+                        weights=self.weights,
+                        n_jobs=self.n_jobs,
+                    )
+                    self.nn_temp_.fit(X_class_new, y_class[:len(X_class_new)])
+                    nns = self.nn_temp_.kneighbors(X=X_class_dangerous, return_distance=False)
+
+                    n_samples_dangerous = n_samples - n_samples_new
+                    X_new_dangerous, y_new_dangerous = self._make_samples_for_dangerous(
+                        X_class_dangerous,
+                        y.dtype,
+                        class_sample,
+                        X,
+                        X_dangerous_nns,
+                        X_class_new,
+                        nns,
+                        n_samples_dangerous,
+                        n_jobs=self.n_jobs)
+                    X_resampled.append(X_new_dangerous)
+                    y_resampled.append(y_new_dangerous)
+            else:
                 self.nn_temp_ = KNeighborsTimeSeriesClassifier(
                     n_neighbors=self.suggested_n_neighbors_ + 1,
                     distance=self.distance,
@@ -165,56 +215,21 @@ class ESMOTE(BaseCollectionTransformer):
                     weights=self.weights,
                     n_jobs=self.n_jobs,
                 )
-                self.nn_temp_.fit(X_class_new, y_class[:len(X_class_new)])
-                nns = self.nn_temp_.kneighbors(X=X_class_new, return_distance=False)[:, 1:]
+                self.nn_temp_.fit(X_class, y_class[:len(X_class)])
+                nns = self.nn_temp_.kneighbors(X=X_class, return_distance=False)[:, 1:]
 
                 X_new, y_new = self._make_samples(
-                    X_class_new,
+                    X_class,
                     y.dtype,
                     class_sample,
-                    X_class_new,
+                    X_class,
                     nns,
-                    n_samples_new,
+                    n_samples,
                     1.0,
                     n_jobs=self.n_jobs,
                 )
                 X_resampled.append(X_new)
                 y_resampled.append(y_new)
-            if len(X_class_dangerous) > 0 and self.set_dangerous:
-                # n_samples_dangerous = n_samples - n_samples_new
-                # X_class_dangerous = np.array(X_class_dangerous)
-                # y_class_dangerous = np.array([class_sample] * len(X_class_dangerous))
-                # from tsml_eval._wip.rt.transformations.collection.imbalance._fbsmote import simple_frequency_bin_smote
-                # resampleX, resampley = simple_frequency_bin_smote(X_class_dangerous, y_class_dangerous, n_neighbors=3,
-                #                                                   top_k=3, freq_match_delta=2, bandwidth=1,
-                #                                                   random_state=self.random_state, normalize_energy=False,
-                #                                                   n_samples_gen=n_samples_dangerous)
-                #
-                # X_resampled.append(resampleX)
-                # y_resampled.append(resampley)
-                self.nn_temp_ = KNeighborsTimeSeriesClassifier(
-                    n_neighbors=1,
-                    distance=self.distance,
-                    distance_params=self._distance_params,
-                    weights=self.weights,
-                    n_jobs=self.n_jobs,
-                )
-                self.nn_temp_.fit(X_class_new, y_class[:len(X_class_new)])
-                nns = self.nn_temp_.kneighbors(X=X_class_dangerous, return_distance=False)
-
-                n_samples_dangerous = n_samples - n_samples_new
-                X_new_dangerous, y_new_dangerous = self._make_samples_for_dangerous(
-                    X_class_dangerous,
-                    y.dtype,
-                    class_sample,
-                    X,
-                    X_dangerous_nns,
-                    X_class_new,
-                    nns,
-                    n_samples_dangerous,
-                    n_jobs=self.n_jobs)
-                X_resampled.append(X_new_dangerous)
-                y_resampled.append(y_new_dangerous)
 
 
         X_synthetic = np.vstack(X_resampled)
