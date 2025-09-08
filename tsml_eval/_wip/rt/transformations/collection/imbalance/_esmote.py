@@ -1,6 +1,6 @@
 from collections import OrderedDict
 from typing import Optional, Union
-
+import tqdm
 import numpy as np
 from numba import prange
 from sklearn.utils import check_random_state
@@ -59,6 +59,7 @@ class ESMOTE(BaseCollectionTransformer):
             set_barycentre_averaging: bool = False,
             set_inner_add: bool = False,
             two_part_strategy: bool = False,
+            iteration_generate: bool = False,
         n_jobs: int = 1,
         random_state=None,
     ):
@@ -72,6 +73,7 @@ class ESMOTE(BaseCollectionTransformer):
         self.set_barycentre_averaging = set_barycentre_averaging
         self.set_inner_add = set_inner_add
         self.two_part_strategy = two_part_strategy
+        self.iteration_generate = iteration_generate
 
         self._random_state = None
         self._distance_params = distance_params or {}
@@ -207,6 +209,56 @@ class ESMOTE(BaseCollectionTransformer):
                         n_jobs=self.n_jobs)
                     X_resampled.append(X_new_dangerous)
                     y_resampled.append(y_new_dangerous)
+            elif self.iteration_generate:
+                from aeon.classification.convolution_based import MultiRocketHydraClassifier as MRHydra
+                discriminator = MRHydra(random_state=self.random_state)
+                n_samples_slice = int(n_samples / 2)
+                discriminator.fit(X, y)
+                n_eval = 0
+                X_new = []
+                y_new = []
+                X_iter = X_class.copy()
+                y_iter = y_class.copy()
+                for _ in tqdm.tqdm(range(5)):
+                    self.nn_temp_ = KNeighborsTimeSeriesClassifier(
+                        n_neighbors=self.suggested_n_neighbors_ + 1,
+                        distance=self.distance,
+                        distance_params=self._distance_params,
+                        weights=self.weights,
+                        n_jobs=self.n_jobs,
+                    )
+
+                    self.nn_temp_.fit(X_iter, y_iter)
+                    nns = self.nn_temp_.kneighbors(X=X_iter, return_distance=False)[:, 1:]
+
+                    X_new_slice, y_new_slice = self._make_samples(
+                        X_iter,
+                        y.dtype,
+                        class_sample,
+                        X_iter,
+                        nns,
+                        n_samples_slice,
+                        1.0,
+                        n_jobs=self.n_jobs,
+                    )
+                    prob = discriminator.predict_proba(X_new_slice)
+                    class_indices = np.where(discriminator.classes_ == class_sample)[0][0]
+                    prob_of_minority = prob[:, class_indices]
+                    indices_gt = np.where(prob_of_minority > 0.5)
+                    if len(indices_gt) == 0:
+                        sorted_indices = np.argsort(-prob_of_minority)[:]
+                        indices_gt = sorted_indices[:1]
+                    X_new.append(X_new_slice[indices_gt])
+                    y_new.append(y_new_slice[indices_gt])
+                    X_iter = np.concatenate((X_iter, X_new_slice[indices_gt]), axis=0)
+                    y_iter = np.concatenate((y_iter, y_new_slice[indices_gt]), axis=0)
+                    if len(X_new) >= n_samples:
+                        break
+
+                X_new = np.vstack(X_new)[:n_samples]
+                y_new = np.hstack(y_new)[:n_samples]
+                X_resampled.append(X_new)
+                y_resampled.append(y_new)
             else:
                 self.nn_temp_ = KNeighborsTimeSeriesClassifier(
                     n_neighbors=self.suggested_n_neighbors_ + 1,
@@ -230,7 +282,6 @@ class ESMOTE(BaseCollectionTransformer):
                 )
                 X_resampled.append(X_new)
                 y_resampled.append(y_new)
-
 
         X_synthetic = np.vstack(X_resampled)
         y_synthetic = np.hstack(y_resampled)
