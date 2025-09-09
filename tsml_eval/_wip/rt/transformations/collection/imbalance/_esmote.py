@@ -225,7 +225,7 @@ class ESMOTE(BaseCollectionTransformer):
                         distance=self.distance,
                         distance_params=self._distance_params,
                         weights=self.weights,
-                        n_jobs=self.n_jobs,
+                        n_jobs=1,
                     )
 
                     self.nn_temp_.fit(X_iter, y_iter)
@@ -239,7 +239,7 @@ class ESMOTE(BaseCollectionTransformer):
                         nns,
                         n_samples_slice,
                         1.0,
-                        n_jobs=self.n_jobs,
+                        n_jobs=1,
                     )
                     prob = discriminator.predict_proba(X_new_slice)
                     class_indices = np.where(discriminator.classes_ == class_sample)[0][0]
