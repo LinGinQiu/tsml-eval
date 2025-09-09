@@ -59,7 +59,7 @@ class ESMOTE(BaseCollectionTransformer):
             set_barycentre_averaging: bool = False,
             set_inner_add: bool = False,
             two_part_strategy: bool = False,
-            iteration_generate: bool = False,
+            iteration_generate: bool = True,
         n_jobs: int = 1,
         random_state=None,
     ):
