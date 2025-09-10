@@ -202,12 +202,20 @@ def run_classification_experiment(
                 )
 
     le = preprocessing.LabelEncoder()
-    y_train = le.fit_transform(y_train)
+    le.fit(np.concatenate((y_train, y_test)))
+    y_train = le.transform(y_train)
     y_test = le.transform(y_test)
 
     encoder_dict = {label: i for i, label in enumerate(le.classes_)}
     n_classes = len(np.unique(y_train))
-
+    recluster = len(np.unique(y_train)) != len(np.unique(y_test))
+    if recluster:
+        recluster_dict = {}
+        for i, label in enumerate(le.classes_):
+            if "_Clt" in label:
+                recluster_dict[i] = encoder_dict[label.split("_Clt")[0]]
+            else:
+                recluster_dict[i] = i
     needs_fit = True
     fit_time = -1
     mem_usage = -1
@@ -298,6 +306,9 @@ def run_classification_experiment(
         )
 
         test_preds = classifier.classes_[np.argmax(test_probs, axis=1)]
+        if recluster:
+            test_preds = np.array([recluster_dict[p] for p in test_preds])
+
         test_acc = accuracy_score(y_test, test_preds)
 
         write_classification_results(
