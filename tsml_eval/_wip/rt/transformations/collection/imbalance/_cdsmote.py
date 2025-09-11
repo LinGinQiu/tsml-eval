@@ -88,7 +88,10 @@ class CDSMOTE(BaseCollectionTransformer):
 
         # Step 2: Oversample minority if needed
         avg_majority_size = len(X_majority) / self.n_clusters
-        if len(X_minority) < avg_majority_size:
+
+        if len(X_minority) < avg_majority_size and len(X_minority) > 1:
+            if len(X_minority) < self.k_neighbors:
+                self.k_neighbors = len(X_minority) - 1
             smote = SMOTE(k_neighbors=self.k_neighbors, random_state=self.random_state)
             X_res, y_res = smote.fit_resample(X_new, y_new)
         else:
