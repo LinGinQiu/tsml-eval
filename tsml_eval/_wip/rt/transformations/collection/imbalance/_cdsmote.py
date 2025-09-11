@@ -88,7 +88,7 @@ class CDSMOTE(BaseCollectionTransformer):
 
         # Step 2: Oversample minority if needed
         avg_majority_size = len(X_majority) / self.n_clusters
-        min_cluster_size = min(Counter(y_new), key=Counter(y_new).get)
+        min_cluster_size = np.unique(y_new, return_counts=True)[1].min()
         if len(X_minority) < avg_majority_size and min_cluster_size > 1:
             if len(X_minority) < self.k_neighbors:
                 self.k_neighbors = len(X_minority) - 1
