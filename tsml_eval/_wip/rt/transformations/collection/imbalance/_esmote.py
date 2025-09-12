@@ -218,7 +218,7 @@ class ESMOTE(BaseCollectionTransformer):
                 y_new = []
                 X_iter = X_class.copy()
                 y_iter = y_class.copy()
-                for _ in tqdm.tqdm(range(3)):
+                for _ in tqdm.tqdm(range(5)):
                     distance_fuc = self._random_state.choice(['dtw', 'adtw', 'twe', 'msm'])
                     self.nn_temp_ = KNeighborsTimeSeriesClassifier(
                         n_neighbors=self.suggested_n_neighbors_ + 1,
