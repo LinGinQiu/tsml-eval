@@ -212,17 +212,17 @@ class ESMOTE(BaseCollectionTransformer):
             elif self.iteration_generate:
                 from aeon.classification.convolution_based import MultiRocketHydraClassifier as MRHydra
                 discriminator = MRHydra(n_jobs=self.n_jobs, random_state=self.random_state)
-                n_samples_slice = int(n_samples / 2)
+                n_samples_slice = n_samples
                 discriminator.fit(X, y)
-                n_eval = 0
                 X_new = []
                 y_new = []
                 X_iter = X_class.copy()
                 y_iter = y_class.copy()
-                for _ in tqdm.tqdm(range(5)):
+                for _ in tqdm.tqdm(range(3)):
+                    distance_fuc = self._random_state.choice(['dtw', 'adtw', 'twe', 'msm'])
                     self.nn_temp_ = KNeighborsTimeSeriesClassifier(
                         n_neighbors=self.suggested_n_neighbors_ + 1,
-                        distance=self.distance,
+                        distance=distance_fuc,
                         distance_params=self._distance_params,
                         weights=self.weights,
                         n_jobs=self.n_jobs,
@@ -244,7 +244,7 @@ class ESMOTE(BaseCollectionTransformer):
                     prob = discriminator.predict_proba(X_new_slice)
                     class_indices = np.where(discriminator.classes_ == class_sample)[0][0]
                     prob_of_minority = prob[:, class_indices]
-                    indices_gt = np.where(prob_of_minority > 0.5)
+                    indices_gt = np.where(prob_of_minority > 0.75)
                     if len(indices_gt) == 0:
                         sorted_indices = np.argsort(-prob_of_minority)[:]
                         indices_gt = sorted_indices[:1]
