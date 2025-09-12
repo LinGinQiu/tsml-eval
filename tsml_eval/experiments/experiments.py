@@ -172,6 +172,10 @@ def run_classification_experiment(
     else:
         raise TypeError("classifier must be a tsml, aeon or sklearn classifier.")
 
+    le = preprocessing.LabelEncoder()
+    le.fit(np.concatenate((y_train, y_test)))
+    y_train = le.transform(y_train)
+    y_test = le.transform(y_test)
     n_cases_test = get_n_cases(X_test)
     if data_transforms is not None:
         if not isinstance(data_transforms, list):
@@ -216,6 +220,13 @@ def run_classification_experiment(
                 recluster_dict[i] = encoder_dict[label.split("_Clt")[0]]
             else:
                 recluster_dict[i] = i
+        encoder_dict = {}
+        for i, label in enumerate(le.classes_):
+            if "_Clt" in label:
+                pass
+            else:
+                encoder_dict[label] = i
+        n_classes = len(encoder_dict.keys())
     needs_fit = True
     fit_time = -1
     mem_usage = -1
@@ -307,6 +318,13 @@ def run_classification_experiment(
 
         test_preds = classifier.classes_[np.argmax(test_probs, axis=1)]
         if recluster:
+            orig_classes = sorted(set(recluster_dict.values()))
+            mapping = np.zeros((len(classifier.classes_), len(orig_classes)))
+            for i, c in enumerate(classifier.classes_):
+                orig_label = recluster_dict[c]  # c 是子类 id
+                j = orig_classes.index(orig_label)
+                mapping[i, j] = 1
+            test_probs = test_probs.dot(mapping)
             test_preds = np.array([recluster_dict[p] for p in test_preds])
 
         test_acc = accuracy_score(y_test, test_preds)
