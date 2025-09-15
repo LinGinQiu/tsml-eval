@@ -1,7 +1,8 @@
 import numpy as np
 import pandas as pd
 from sklearn.cluster import KMeans
-from imblearn.over_sampling import SMOTE
+# from imblearn.over_sampling import SMOTE
+from tsml_eval._wip.rt.transformations.collection.imbalance._esmote import ESMOTE
 from collections import Counter
 from aeon.transformations.collection import BaseCollectionTransformer
 
@@ -94,8 +95,8 @@ class CDSMOTE(BaseCollectionTransformer):
                 self.k_neighbors = len(X_minority) - 1
             if min_cluster_size < self.k_neighbors:
                 self.k_neighbors = min_cluster_size - 1
-            smote = SMOTE(k_neighbors=self.k_neighbors, random_state=self.random_state)
-            X_res, y_res = smote.fit_resample(X_new, y_new)
+            smote = ESMOTE(n_neighbors=self.k_neighbors, random_state=self.random_state, iteration_generate=False)
+            X_res, y_res = smote.fit_transform(X_new, y_new)
         else:
             X_res, y_res = X_new, y_new
 
