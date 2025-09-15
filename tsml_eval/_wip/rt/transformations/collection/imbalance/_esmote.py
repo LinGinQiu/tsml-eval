@@ -212,15 +212,16 @@ class ESMOTE(BaseCollectionTransformer):
             elif self.iteration_generate:
                 from aeon.classification.convolution_based import MultiRocketHydraClassifier as MRHydra
                 discriminator = MRHydra(n_jobs=self.n_jobs, random_state=self.random_state)
-                n_samples_slice = n_samples
+                n_samples_slice = int(0.8 * n_samples)
                 discriminator.fit(X, y)
                 X_new = []
                 y_new = []
                 X_iter = X_class.copy()
                 y_iter = y_class.copy()
-                for _ in tqdm.tqdm(range(5)):
-                    distance_fuc = self._random_state.choice(['dtw', 'adtw', 'twe', 'msm'])
-                    self.nn_temp_ = KNeighborsTimeSeriesClassifier(
+                gen_num = 0
+                for _ in tqdm.tqdm(range(3)):
+                    distance_fuc = self._random_state.choice(['adtw', 'twe'])
+                    nn_temp_ = KNeighborsTimeSeriesClassifier(
                         n_neighbors=self.suggested_n_neighbors_ + 1,
                         distance=distance_fuc,
                         distance_params=self._distance_params,
@@ -228,8 +229,8 @@ class ESMOTE(BaseCollectionTransformer):
                         n_jobs=self.n_jobs,
                     )
 
-                    self.nn_temp_.fit(X_iter, y_iter)
-                    nns = self.nn_temp_.kneighbors(X=X_iter, return_distance=False)[:, 1:]
+                    nn_temp_.fit(X_iter, y_iter)
+                    nns = nn_temp_.kneighbors(X=X_iter, return_distance=False)[:, 1:]
 
                     X_new_slice, y_new_slice = self._make_samples(
                         X_iter,
@@ -248,11 +249,14 @@ class ESMOTE(BaseCollectionTransformer):
                     if len(indices_gt) == 0:
                         sorted_indices = np.argsort(-prob_of_minority)[:]
                         indices_gt = sorted_indices[:1]
-                    X_new.append(X_new_slice[indices_gt])
-                    y_new.append(y_new_slice[indices_gt])
-                    X_iter = np.concatenate((X_iter, X_new_slice[indices_gt]), axis=0)
-                    y_iter = np.concatenate((y_iter, y_new_slice[indices_gt]), axis=0)
-                    if len(X_new) >= n_samples:
+                    X_new_slice = X_new_slice[indices_gt]
+                    y_new_slice = y_new_slice[indices_gt]
+                    X_new.append(X_new_slice.copy())
+                    y_new.append(y_new_slice.copy())
+                    gen_num += len(X_new_slice)
+                    X_iter = X_new_slice
+                    y_iter = y_new_slice
+                    if gen_num >= n_samples:
                         break
 
                 X_new = np.vstack(X_new)[:n_samples]
