@@ -212,36 +212,45 @@ class ESMOTE(BaseCollectionTransformer):
             elif self.iteration_generate:
                 from aeon.classification.convolution_based import MultiRocketHydraClassifier as MRHydra
                 discriminator = MRHydra(n_jobs=self.n_jobs, random_state=self.random_state)
-                n_samples_slice = int(0.8 * n_samples)
                 discriminator.fit(X, y)
                 X_new = []
                 y_new = []
                 X_iter = X_class.copy()
                 y_iter = y_class.copy()
                 gen_num = 0
+                distance_funcs = ['adtw', 'twe']
+                n_samples_slice = int(n_samples / (2 * len(distance_funcs)))
                 for _ in tqdm.tqdm(range(3)):
-                    distance_fuc = self._random_state.choice(['adtw', 'twe'])
-                    nn_temp_ = KNeighborsTimeSeriesClassifier(
-                        n_neighbors=self.suggested_n_neighbors_ + 1,
-                        distance=distance_fuc,
-                        distance_params=self._distance_params,
-                        weights=self.weights,
-                        n_jobs=self.n_jobs,
-                    )
+                    X_new_slice = []
+                    y_new_slice = []
+                    for distance_func in distance_funcs:
+                        self.ditance = distance_func
+                        nn_temp_ = KNeighborsTimeSeriesClassifier(
+                            n_neighbors=self.suggested_n_neighbors_ + 1,
+                            distance=self.distance,
+                            distance_params=self._distance_params,
+                            weights=self.weights,
+                            n_jobs=self.n_jobs,
+                        )
 
-                    nn_temp_.fit(X_iter, y_iter)
-                    nns = nn_temp_.kneighbors(X=X_iter, return_distance=False)[:, 1:]
+                        nn_temp_.fit(X_iter, y_iter)
+                        nns = nn_temp_.kneighbors(X=X_iter, return_distance=False)[:, 1:]
 
-                    X_new_slice, y_new_slice = self._make_samples(
-                        X_iter,
-                        y.dtype,
-                        class_sample,
-                        X_iter,
-                        nns,
-                        n_samples_slice,
-                        1.0,
-                        n_jobs=self.n_jobs,
-                    )
+                        X_new_slice_p, y_new_slice_p = self._make_samples(
+                            X_iter,
+                            y.dtype,
+                            class_sample,
+                            X_iter,
+                            nns,
+                            n_samples_slice,
+                            1.0,
+                            n_jobs=self.n_jobs,
+                        )
+                        X_new_slice.append(X_new_slice_p)
+                        y_new_slice.append(y_new_slice_p)
+                    X_new_slice = np.vstack(X_new_slice)
+                    y_new_slice = np.hstack(y_new_slice)
+                    # select the samples that are classified as the minority class with high probability
                     prob = discriminator.predict_proba(X_new_slice)
                     class_indices = np.where(discriminator.classes_ == class_sample)[0][0]
                     prob_of_minority = prob[:, class_indices]
