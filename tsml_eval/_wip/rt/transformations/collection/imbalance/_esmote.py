@@ -213,65 +213,138 @@ class ESMOTE(BaseCollectionTransformer):
                 from aeon.classification.convolution_based import MultiRocketHydraClassifier as MRHydra
                 discriminator = MRHydra(n_jobs=self.n_jobs, random_state=self.random_state)
                 discriminator.fit(X, y)
-                X_new = []
-                y_new = []
+
+                # --- Iterative generation with adaptive filtering ---
+                # Use multiple elastic distances and track acceptance per distance
+                distance_funcs = ["adtw", "twe", "msm"]
+                accept_count = {d: 0 for d in distance_funcs}
+
+                # Containers for accepted synthetic samples
+                X_new_parts = []
+                y_new_parts = []
+
+                # Working pool that we may augment with accepted synthetics
                 X_iter = X_class.copy()
                 y_iter = y_class.copy()
-                gen_num = 0
-                distance_funcs = ['adtw', 'twe', 'msm']
-                n_samples_slice = int(n_samples / (len(distance_funcs)))
-                for _ in tqdm.tqdm(range(5)):
-                    distance_fuc = self._random_state.choice(distance_funcs)
-                    self.distance = distance_fuc
-                    # X_new_slice = []
-                    # y_new_slice = []
-                    nn_temp_ = KNeighborsTimeSeriesClassifier(
-                            n_neighbors=self.suggested_n_neighbors_ + 1,
-                            distance=self.distance,
-                            distance_params=self._distance_params,
-                            weights=self.weights,
-                            n_jobs=self.n_jobs,
-                    )
 
+                # Guard: if pool has a single sample, duplicate it to allow k-NN (k>=2 with self-exclusion)
+                if len(X_iter) == 1:
+                    X_iter = np.concatenate([X_iter, X_iter], axis=0)
+                    y_iter = np.concatenate([y_iter, y_iter], axis=0)
+
+                # Scheduling controls
+                num_iters = 5
+                remaining = n_samples  # how many we still need overall
+                max_pool_ratio = 1.5  # cap size of (real+synthetic) pool vs. original minority size
+                thr_start, thr_end = 0.65, 0.85  # dynamic probability threshold schedule
+
+                for it in range(num_iters):
+                    print(it)
+                    if remaining <= 0:
+                        break
+
+                    # Choose distance: uniform in early iters, then weighted by past acceptance
+                    if it < 2:
+                        distance_func = self._random_state.choice(distance_funcs)
+                    else:
+                        weights = np.array([accept_count[d] + 1 for d in distance_funcs], dtype=float)
+                        weights = weights / weights.sum()
+                        distance_func = self._random_state.choice(distance_funcs, p=weights)
+                    self.distance = distance_func
+
+                    # Size to try this round; ceil so we don't starve the tail
+                    trial = int(np.ceil(remaining / max(1, (num_iters - it))))
+                    trial = max(1, trial)
+
+                    # Safe k for k-NN (we query k including self, then drop self via [:,1:])
+                    k = min(self.suggested_n_neighbors_ + 1, len(X_iter))
+                    k = max(2, k)
+                    nn_temp_ = KNeighborsTimeSeriesClassifier(
+                        n_neighbors=k,
+                        distance=self.distance,
+                        distance_params=self._distance_params,
+                        weights=self.weights,
+                        n_jobs=self.n_jobs,
+                    )
                     nn_temp_.fit(X_iter, y_iter)
                     nns = nn_temp_.kneighbors(X=X_iter, return_distance=False)[:, 1:]
 
-                    X_new_slice_p, y_new_slice_p = self._make_samples(
+                    # Propose synthetic samples
+                    X_try, y_try = self._make_samples(
                         X_iter,
                         y.dtype,
                         class_sample,
                         X_iter,
                         nns,
-                        n_samples_slice,
+                        trial,
                         1.0,
                         n_jobs=self.n_jobs,
                     )
-                    # X_new_slice.append(X_new_slice_p)
-                    # y_new_slice.append(y_new_slice_p)
-                    X_new_slice = X_new_slice_p
-                    y_new_slice = y_new_slice_p
-                    # select the samples that are classified as the minority class with high probability
-                    prob = discriminator.predict_proba(X_new_slice)
-                    class_indices = np.where(discriminator.classes_ == class_sample)[0][0]
-                    prob_of_minority = prob[:, class_indices]
-                    indices_gt = np.where(prob_of_minority > 0.75)
-                    if len(indices_gt) == 0:
-                        sorted_indices = np.argsort(-prob_of_minority)[:]
-                        indices_gt = sorted_indices[:1]
-                    X_new_slice = X_new_slice[indices_gt]
-                    y_new_slice = y_new_slice[indices_gt]
-                    X_new.append(X_new_slice.copy())
-                    y_new.append(y_new_slice.copy())
-                    gen_num += len(X_new_slice)
-                    X_iter = np.concatenate((X_iter, X_new_slice))
-                    y_iter = np.concatenate((y_iter, y_new_slice))
-                    if gen_num >= n_samples:
-                        break
 
-                X_new = np.vstack(X_new)[:n_samples]
-                y_new = np.hstack(y_new)[:n_samples]
-                X_resampled.append(X_new)
-                y_resampled.append(y_new)
+                    # Score by discriminator; keep high-probability minority
+                    prob = discriminator.predict_proba(X_try)
+                    cls_idx_arr = np.where(discriminator.classes_ == class_sample)[0]
+                    if cls_idx_arr.size == 0:
+                        # Edge case: discriminator has not seen this class label
+                        idx_keep = np.arange(len(X_try))
+                    else:
+                        cls_idx = cls_idx_arr[0]
+                        p_min = prob[:, cls_idx]
+                        thr = thr_start + (thr_end - thr_start) * (it / max(1, num_iters - 1))
+                        idx_keep = np.where(p_min >= thr)[0]
+                        if idx_keep.size == 0:
+                            # Fallback: take the top few if none pass the threshold
+                            topk = max(1, min(len(p_min), trial // 4 if trial >= 4 else 1))
+                            idx_keep = np.argsort(-p_min)[:topk]
+
+                    X_kept = X_try[idx_keep]
+                    y_kept = y_try[idx_keep]
+                    accept_count[distance_func] += len(idx_keep)
+
+                    if len(X_kept) > 0:
+                        X_new_parts.append(X_kept)
+                        y_new_parts.append(y_kept)
+                        remaining -= len(X_kept)
+
+                        # Optionally grow the working pool to diversify future proposals,
+                        # but cap the pool size relative to the original minority size.
+                        if (len(X_iter) / max(1, len(X_class))) < max_pool_ratio:
+                            X_iter = np.concatenate([X_iter, X_kept], axis=0)
+                            y_iter = np.concatenate([y_iter, y_kept], axis=0)
+
+                # If we still need more, backfill using the best-performing distance so far
+                if remaining > 0:
+                    best_distance = max(distance_funcs, key=lambda d: accept_count[d])
+                    self.distance = best_distance
+                    k = min(self.suggested_n_neighbors_ + 1, len(X_iter))
+                    k = max(2, k)
+                    nn_temp_ = KNeighborsTimeSeriesClassifier(
+                        n_neighbors=k,
+                        distance=self.distance,
+                        distance_params=self._distance_params,
+                        weights=self.weights,
+                        n_jobs=self.n_jobs,
+                    )
+                    nn_temp_.fit(X_iter, y_iter)
+                    nns = nn_temp_.kneighbors(X=X_iter, return_distance=False)[:, 1:]
+                    X_back, y_back = self._make_samples(
+                        X_iter,
+                        y.dtype,
+                        class_sample,
+                        X_iter,
+                        nns,
+                        remaining,
+                        1.0,
+                        n_jobs=self.n_jobs,
+                    )
+                    X_new_parts.append(X_back)
+                    y_new_parts.append(y_back)
+
+                if len(X_new_parts) > 0:
+                    X_new = np.vstack(X_new_parts)[:n_samples]
+                    y_new = np.hstack(y_new_parts)[:n_samples]
+                    X_resampled.append(X_new)
+                    y_resampled.append(y_new)
             else:
                 self.nn_temp_ = KNeighborsTimeSeriesClassifier(
                     n_neighbors=self.suggested_n_neighbors_ + 1,
