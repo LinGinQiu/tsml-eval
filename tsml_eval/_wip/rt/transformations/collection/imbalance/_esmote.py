@@ -239,7 +239,6 @@ class ESMOTE(BaseCollectionTransformer):
                 thr_start, thr_end = 0.65, 0.85  # dynamic probability threshold schedule
 
                 for it in range(num_iters):
-                    print(it)
                     if remaining <= 0:
                         break
 
