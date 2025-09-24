@@ -210,39 +210,72 @@ class ESMOTE(BaseCollectionTransformer):
                     X_resampled.append(X_new_dangerous)
                     y_resampled.append(y_new_dangerous)
             elif self.iteration_generate:
-                from aeon.classification.convolution_based import MultiRocketHydraClassifier as MRHydra
-                discriminator = MRHydra(n_jobs=self.n_jobs, random_state=self.random_state)
-                discriminator.fit(X, y)
-
-                # --- Iterative generation with adaptive filtering ---
-                # Use multiple elastic distances and track acceptance per distance
+                # --- Build a discriminator list based on a priority list ---
                 distance_funcs = ["adtw", "twe", "msm"]
-                accept_count = {d: 0 for d in distance_funcs}
+                discriminators = []
+                discriminator_names = []
+                # Priority: MRHydra, Rocket+RidgeClassifierCV, RandomForestClassifier
+                # Try to import and instantiate each, fit on (X, y), add to discriminators if successful
+                # 1. MRHydra
+                try:
+                    from aeon.classification.convolution_based import MultiRocketHydraClassifier as MRHydra
+                    disc = MRHydra(n_jobs=self.n_jobs, random_state=self.random_state)
+                    disc.fit(X, y)
+                    discriminators.append(disc)
+                    discriminator_names.append("MRHydra")
+                except Exception:
+                    pass
+                # 2. Rocket+RidgeClassifierCV
+                try:
+                    from aeon.transformations.collection.rocket import Rocket
+                    from sklearn.linear_model import RidgeClassifierCV
+                    from sklearn.pipeline import make_pipeline
+                    disc2 = make_pipeline(
+                        Rocket(random_state=self.random_state, n_jobs=self.n_jobs),
+                        RidgeClassifierCV(alphas=np.logspace(-3, 3, 10))
+                    )
+                    disc2.fit(X, y)
+                    # patch classes_ attribute for compatibility
+                    if not hasattr(disc2, "classes_"):
+                        disc2.classes_ = disc2.named_steps["ridgeclassifiercv"].classes_
+                    discriminators.append(disc2)
+                    discriminator_names.append("Rocket+RidgeClassifierCV")
+                except Exception:
+                    pass
+                # 3. RandomForestClassifier
+                try:
+                    from sklearn.ensemble import RandomForestClassifier
+                    # flatten for tabular
+                    X_flat = X.reshape((X.shape[0], -1))
+                    disc3 = RandomForestClassifier(n_estimators=100, random_state=self.random_state, n_jobs=self.n_jobs)
+                    disc3.fit(X_flat, y)
+                    # patch for compatibility (predict/predict_proba expects flat)
+                    disc3._esmote_flatten = True
+                    disc3.classes_ = disc3.classes_
+                    discriminators.append(disc3)
+                    discriminator_names.append("RandomForestClassifier")
+                except Exception:
+                    pass
+                # Fallback KNN-DTW will be appended later only if needed
+                knn_fallback_added = False
+                knn_fallback_idx = None
 
-                # Containers for accepted synthetic samples
+                accept_count = {d: 0 for d in distance_funcs}
                 X_new_parts = []
                 y_new_parts = []
-
-                # Working pool that we may augment with accepted synthetics
                 X_iter = X_class.copy()
                 y_iter = y_class.copy()
-
-                # Guard: if pool has a single sample, duplicate it to allow k-NN (k>=2 with self-exclusion)
                 if len(X_iter) == 1:
                     X_iter = np.concatenate([X_iter, X_iter], axis=0)
                     y_iter = np.concatenate([y_iter, y_iter], axis=0)
-
-                # Scheduling controls
                 num_iters = 5
-                remaining = n_samples  # how many we still need overall
-                max_pool_ratio = 1.5  # cap size of (real+synthetic) pool vs. original minority size
-                thr_start, thr_end = 0.65, 0.85  # dynamic probability threshold schedule
+                remaining = n_samples
+                max_pool_ratio = 1.5
+                thr_start, thr_end = 0.65, 0.85
 
                 for it in range(num_iters):
                     if remaining <= 0:
                         break
-
-                    # Choose distance: uniform in early iters, then weighted by past acceptance
                     if it < 2:
                         distance_func = self._random_state.choice(distance_funcs)
                     else:
@@ -250,12 +283,8 @@ class ESMOTE(BaseCollectionTransformer):
                         weights = weights / weights.sum()
                         distance_func = self._random_state.choice(distance_funcs, p=weights)
                     self.distance = distance_func
-
-                    # Size to try this round; ceil so we don't starve the tail
                     trial = int(np.ceil(remaining / max(1, (num_iters - it))))
                     trial = max(1, trial)
-
-                    # Safe k for k-NN (we query k including self, then drop self via [:,1:])
                     k = min(self.suggested_n_neighbors_ + 1, len(X_iter))
                     k = max(2, k)
                     nn_temp_ = KNeighborsTimeSeriesClassifier(
@@ -267,8 +296,6 @@ class ESMOTE(BaseCollectionTransformer):
                     )
                     nn_temp_.fit(X_iter, y_iter)
                     nns = nn_temp_.kneighbors(X=X_iter, return_distance=False)[:, 1:]
-
-                    # Propose synthetic samples
                     X_try, y_try = self._make_samples(
                         X_iter,
                         y.dtype,
@@ -279,38 +306,83 @@ class ESMOTE(BaseCollectionTransformer):
                         1.0,
                         n_jobs=self.n_jobs,
                     )
-
-                    # Score by discriminator; keep high-probability minority
-                    prob = discriminator.predict_proba(X_try)
-                    cls_idx_arr = np.where(discriminator.classes_ == class_sample)[0]
-                    if cls_idx_arr.size == 0:
-                        # Edge case: discriminator has not seen this class label
+                    prob_list = []
+                    for di, disc in enumerate(discriminators):
+                        try:
+                            # flatten if required
+                            if hasattr(disc, "_esmote_flatten") and disc._esmote_flatten:
+                                X_try_pred = X_try.reshape((X_try.shape[0], -1))
+                            else:
+                                X_try_pred = X_try
+                            pred_try = disc.predict(X_try_pred)
+                            # Only skip if all predictions are for a single class
+                            if np.unique(pred_try).size == 1:
+                                continue
+                            if hasattr(disc, "_esmote_flatten") and disc._esmote_flatten:
+                                prob = disc.predict_proba(X_try_pred)
+                            else:
+                                prob = disc.predict_proba(X_try_pred)
+                        except Exception:
+                            continue
+                        # get correct class index
+                        class_indices = [i for i, c in enumerate(disc.classes_) if c == class_sample]
+                        if not class_indices:
+                            continue
+                        min_idx = class_indices[0]
+                        p = prob[:, min_idx]
+                        if np.std(p) < 1e-3:
+                            continue
+                        prob_list.append(p)
+                    # If no valid discriminators, try to add KNN-DTW fallback if not already added
+                    if not prob_list:
+                        if not knn_fallback_added:
+                            try:
+                                knn_fallback = KNeighborsTimeSeriesClassifier(
+                                    n_neighbors=min(3, len(X)),
+                                    distance="dtw",
+                                    n_jobs=1,
+                                    weights="uniform",
+                                )
+                                knn_fallback.fit(X, y)
+                                discriminators.append(knn_fallback)
+                                discriminator_names.append("KNN-DTW")
+                                knn_fallback_added = True
+                                knn_fallback_idx = len(discriminators) - 1
+                            except Exception:
+                                knn_fallback_added = False
+                        # Try using the KNN-DTW fallback if it was added
+                        if knn_fallback_added and knn_fallback_idx is not None:
+                            disc = discriminators[knn_fallback_idx]
+                            try:
+                                prob = disc.predict_proba(X_try)
+                                class_indices = [i for i, c in enumerate(disc.classes_) if c == class_sample]
+                                if class_indices:
+                                    min_idx = class_indices[0]
+                                    p = prob[:, min_idx]
+                                    if np.std(p) >= 1e-3:
+                                        prob_list.append(p)
+                            except Exception:
+                                pass
+                    # After fallback, if still empty, accept all
+                    if not prob_list:
                         idx_keep = np.arange(len(X_try))
                     else:
-                        cls_idx = cls_idx_arr[0]
-                        p_min = prob[:, cls_idx]
+                        p_min = np.mean(prob_list, axis=0)
                         thr = thr_start + (thr_end - thr_start) * (it / max(1, num_iters - 1))
                         idx_keep = np.where(p_min >= thr)[0]
                         if idx_keep.size == 0:
-                            # Fallback: take the top few if none pass the threshold
                             topk = max(1, min(len(p_min), trial // 4 if trial >= 4 else 1))
                             idx_keep = np.argsort(-p_min)[:topk]
-
                     X_kept = X_try[idx_keep]
                     y_kept = y_try[idx_keep]
                     accept_count[distance_func] += len(idx_keep)
-
                     if len(X_kept) > 0:
                         X_new_parts.append(X_kept)
                         y_new_parts.append(y_kept)
                         remaining -= len(X_kept)
-
-                        # Optionally grow the working pool to diversify future proposals,
-                        # but cap the pool size relative to the original minority size.
                         if (len(X_iter) / max(1, len(X_class))) < max_pool_ratio:
                             X_iter = np.concatenate([X_iter, X_kept], axis=0)
                             y_iter = np.concatenate([y_iter, y_kept], axis=0)
-
                 # If we still need more, backfill using the best-performing distance so far
                 if remaining > 0:
                     best_distance = max(distance_funcs, key=lambda d: accept_count[d])
@@ -338,7 +410,6 @@ class ESMOTE(BaseCollectionTransformer):
                     )
                     X_new_parts.append(X_back)
                     y_new_parts.append(y_back)
-
                 if len(X_new_parts) > 0:
                     X_new = np.vstack(X_new_parts)[:n_samples]
                     y_new = np.hstack(y_new_parts)[:n_samples]
