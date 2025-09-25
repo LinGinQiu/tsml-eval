@@ -59,7 +59,8 @@ class ESMOTE(BaseCollectionTransformer):
             set_barycentre_averaging: bool = False,
             set_inner_add: bool = False,
             two_part_strategy: bool = False,
-            iteration_generate: bool = True,
+            iteration_generate: bool = False,
+            use_interpolated_path: bool = True,
         n_jobs: int = 1,
         random_state=None,
     ):
@@ -74,6 +75,7 @@ class ESMOTE(BaseCollectionTransformer):
         self.set_inner_add = set_inner_add
         self.two_part_strategy = two_part_strategy
         self.iteration_generate = iteration_generate
+        self.use_interpolated_path = use_interpolated_path
 
         self._random_state = None
         self._distance_params = distance_params or {}
@@ -134,7 +136,7 @@ class ESMOTE(BaseCollectionTransformer):
                     X_new[n] = self._generate_sample_use_elastic_distance(X_class[0], X_class[1],
                                                                           distance=self.distance,
                                                                           step=step,
-                                                                          use_barycentre_averaging=True, )
+                                                                          )
                 y_new = np.full(n_samples, fill_value=class_sample, dtype=y.dtype)
                 X_resampled.append(X_new)
                 y_resampled.append(y_new)
@@ -453,7 +455,7 @@ class ESMOTE(BaseCollectionTransformer):
             nn_ts = nn_data[nn_num[i, j]]
             X_new[count] = self._generate_sample_use_elastic_distance(X[i], nn_ts, distance=self.distance,
                                                                    step=steps[count],
-                                                                   use_barycentre_averaging=self.set_barycentre_averaging, )
+                                                                      )
 
         y_new = np.full(n_samples, fill_value=y_type, dtype=y_dtype)
         return X_new, y_new
@@ -518,7 +520,6 @@ class ESMOTE(BaseCollectionTransformer):
                                            transformed_x: Optional[np.ndarray] = None,
                                            transformed_y: Optional[np.ndarray] = None,
                                            return_bias=False,
-                                           use_barycentre_averaging=False
                                            ):
 
         """
@@ -528,7 +529,7 @@ class ESMOTE(BaseCollectionTransformer):
         # shape: (c, l)
         # shape: (c, l)
         new_ts = curr_ts.copy()
-        if use_barycentre_averaging:
+        if self.set_barycentre_averaging:
             if new_ts.ndim == 2:
                 new_ts = new_ts.squeeze()
                 curr_ts = curr_ts.squeeze()
@@ -583,6 +584,67 @@ class ESMOTE(BaseCollectionTransformer):
                 new_ts = new_ts.reshape(1, -1)
             return new_ts
 
+        elif self.use_interpolated_path:
+            # 1. 计算对齐路径
+            alignment, _ = _get_alignment_path(
+                nn_ts,
+                curr_ts,
+                distance,
+                window,
+                g,
+                epsilon,
+                nu,
+                lmbda,
+                independent,
+                c,
+                descriptor,
+                reach,
+                warp_penalty,
+                transformation_precomputed,
+                transformed_x,
+                transformed_y,
+            )
+
+            # 2. 在路径中插入中间点
+            series_point = 0
+            queue_1 = [[], []]
+            queue_2 = [[], []]
+
+            def simple_interpolate(queue, curr_point):
+                coef = np.polyfit(queue[0], queue[1], 1)
+                return np.polyval(coef, curr_point)
+
+            for k, l in alignment:
+                # 插值点 (midpoint)
+                i_mid = (k + l) / 2.0
+                j_mid = step * curr_ts[:, k] + (1 - step) * nn_ts[:, l]
+                if series_point - 1 <= i_mid <= series_point + 1:
+                    queue_1[0].append(i_mid)
+                    queue_1[1].append(j_mid)
+                if series_point <= i_mid <= series_point + 2:
+                    queue_2[0].append(i_mid)
+                    queue_2[1].append(j_mid)
+                if i_mid >= series_point + 1:
+                    # print(series_point, queue_1[0], queue_2[0])
+                    # if len(queue_1[0]) == 1:
+                    #     pass
+                    new_value = simple_interpolate(queue_1, series_point)
+                    new_ts[:, series_point] = new_value
+                    queue_1 = queue_2
+                    series_point += 1
+                    x_vals = queue_2[0]
+                    y_vals = queue_2[1]
+                    new_x = [x for x, y in zip(x_vals, y_vals) if x >= series_point]
+                    new_y = [y for x, y in zip(x_vals, y_vals) if x >= series_point]
+                    queue_2 = [new_x, new_y]
+
+            # calulate last point
+            new_value = simple_interpolate(queue_1, series_point)
+            new_ts[:, series_point] = new_value
+            if series_point != new_ts.shape[-1] - 1:
+                print(new_ts.shape[-1])
+                print('bug need check')
+            return new_ts
         alignment, _ = _get_alignment_path(
             nn_ts,
             curr_ts,
@@ -655,7 +717,7 @@ if __name__ == "__main__":
     minority_num = n_samples - majority_num  # number of minority class
     np.random.seed(42)
 
-    X = np.random.rand(n_samples, 1, 10)
+    X = np.random.rand(n_samples, 2, 10)
     y = np.array([0] * majority_num + [1] * minority_num)
     print(np.unique(y, return_counts=True))
     smote = ESMOTE(n_neighbors=5, random_state=1, distance="msm")
