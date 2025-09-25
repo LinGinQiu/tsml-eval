@@ -214,7 +214,7 @@ class ESMOTE(BaseCollectionTransformer):
                 distance_funcs = ["adtw", "twe", "msm"]
                 discriminators = []
                 discriminator_names = []
-                # Priority: MRHydra, Rocket+RidgeClassifierCV, RandomForestClassifier
+                # Priority: MRHydra, RocketClassifier, RandomForestClassifier
                 # Try to import and instantiate each, fit on (X, y), add to discriminators if successful
                 # 1. MRHydra
                 try:
@@ -227,19 +227,12 @@ class ESMOTE(BaseCollectionTransformer):
                     pass
                 # 2. Rocket+RidgeClassifierCV
                 try:
-                    from aeon.transformations.collection.rocket import Rocket
-                    from sklearn.linear_model import RidgeClassifierCV
-                    from sklearn.pipeline import make_pipeline
-                    disc2 = make_pipeline(
-                        Rocket(random_state=self.random_state, n_jobs=self.n_jobs),
-                        RidgeClassifierCV(alphas=np.logspace(-3, 3, 10))
-                    )
+                    from aeon.classification.convolution_based import RocketClassifier
+                    disc2 = RocketClassifier(random_state=self.random_state, n_jobs=self.n_jobs)
                     disc2.fit(X, y)
                     # patch classes_ attribute for compatibility
-                    if not hasattr(disc2, "classes_"):
-                        disc2.classes_ = disc2.named_steps["ridgeclassifiercv"].classes_
                     discriminators.append(disc2)
-                    discriminator_names.append("Rocket+RidgeClassifierCV")
+                    discriminator_names.append("RocketClassifier")
                 except Exception:
                     pass
                 # 3. RandomForestClassifier
