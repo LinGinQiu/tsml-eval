@@ -585,7 +585,8 @@ class ESMOTE(BaseCollectionTransformer):
             return new_ts
 
         elif self.use_interpolated_path:
-            # 1. 计算对齐路径
+            # 1) Compute alignment path. With _get_alignment_path(center=nn_ts, ts=curr_ts)
+            # each returned tuple is (i_curr, j_nn). We will anchor time on i_curr to stay on curr_ts timeline.
             alignment, _ = _get_alignment_path(
                 nn_ts,
                 curr_ts,
@@ -605,45 +606,98 @@ class ESMOTE(BaseCollectionTransformer):
                 transformed_y,
             )
 
-            # 2. 在路径中插入中间点
-            series_point = 0
-            queue_1 = [[], []]
-            queue_2 = [[], []]
+            # --- Helpers ---
+            def _safe_linear_predict(x_train: np.ndarray, y_train: np.ndarray, x_query: float) -> np.ndarray:
+                """Predict y at x_query via robust linear fit.
+                x_train: shape (M,)
+                y_train: shape (M, C) where C = n_channels
+                Returns shape (C,).
+                """
+                # Guard: need at least 2 distinct x to fit a line
+                if x_train.size < 2 or np.unique(x_train).size < 2:
+                    # Fallback to nearest neighbor in x
+                    idx = int(np.argmin(np.abs(x_train - x_query))) if x_train.size > 0 else 0
+                    return y_train[idx] if x_train.size > 0 else curr_ts[:, int(min(max(round(x_query), 0),
+                                                                                    curr_ts.shape[-1] - 1))]
 
-            def simple_interpolate(queue, curr_point):
-                coef = np.polyfit(queue[0], queue[1], 1)
-                return np.polyval(coef, curr_point)
+                # Center & scale x for numerical stability
+                x_mean = x_train.mean()
+                x_std = x_train.std()
+                if x_std == 0:
+                    x_std = 1.0
+                x_norm = (x_train - x_mean) / x_std
+                xq = (x_query - x_mean) / x_std
 
-            for k, l in alignment:
-                # 插值点 (midpoint)
-                i_mid = (k + l) / 2.0
-                j_mid = step * curr_ts[:, k] + (1 - step) * nn_ts[:, l]
-                if series_point - 1 <= i_mid <= series_point + 1:
-                    queue_1[0].append(i_mid)
-                    queue_1[1].append(j_mid)
-                if series_point <= i_mid <= series_point + 2:
-                    queue_2[0].append(i_mid)
-                    queue_2[1].append(j_mid)
-                if i_mid >= series_point + 1:
-                    # print(series_point, queue_1[0], queue_2[0])
-                    # if len(queue_1[0]) == 1:
-                    #     pass
-                    new_value = simple_interpolate(queue_1, series_point)
-                    new_ts[:, series_point] = new_value
-                    queue_1 = queue_2
-                    series_point += 1
-                    x_vals = queue_2[0]
-                    y_vals = queue_2[1]
-                    new_x = [x for x, y in zip(x_vals, y_vals) if x >= series_point]
-                    new_y = [y for x, y in zip(x_vals, y_vals) if x >= series_point]
-                    queue_2 = [new_x, new_y]
+                # Build design matrix [x, 1]
+                Xdm = np.column_stack([x_norm, np.ones_like(x_norm)])  # (M, 2)
+                # Solve for each channel using least squares (more stable than polyfit here)
+                # y_train is (M, C)
+                # Solution: beta = argmin ||Xdm beta - y||. We'll do batched via lstsq per channel.
+                C = y_train.shape[1]
+                y_pred = np.empty((C,), dtype=float)
+                # Use pinv based solve for stability
+                pinv = np.linalg.pinv(Xdm)
+                coef = pinv @ y_train  # (2, C)
+                a, b = coef[0], coef[1]  # each (C,)
+                y_pred = a * xq + b
+                return y_pred
 
-            # calulate last point
-            new_value = simple_interpolate(queue_1, series_point)
-            new_ts[:, series_point] = new_value
-            if series_point != new_ts.shape[-1] - 1:
-                print(new_ts.shape[-1])
-                print('bug need check')
+            # 2) Build candidate points (time, value) anchored on curr timeline (i_curr index)
+            # For each alignment pair (i_curr, j_nn), we create a fused value at time t=i_curr.
+            # Optionally, also create midpoints to densify local fitting.
+            pts_t = []  # list of float times on curr timeline
+            pts_v = []  # list of vectors, shape (C,)
+            C, L = curr_ts.shape
+
+            # Collect original aligned points (alignment yields (i_curr, j_nn))
+            for i_curr, j_nn in alignment:
+                t = float(i_curr)
+                v = step * curr_ts[:, i_curr] + (1.0 - step) * nn_ts[:, j_nn]
+                pts_t.append(t)
+                pts_v.append(v)
+
+            # Add midpoints between consecutive alignment entries (operate on curr timeline)
+            for (i1, j1), (i2, j2) in zip(alignment[:-1], alignment[1:]):
+                if i1 == i2:
+                    continue
+                t_mid = 0.5 * (i1 + i2)
+                # Fuse curr at the left endpoint and nn at the right endpoint
+                v_mid = step * curr_ts[:, i1] + (1.0 - step) * nn_ts[:, j2]
+                pts_t.append(float(t_mid))
+                pts_v.append(v_mid)
+
+            # Convert to arrays and sort by time
+            if len(pts_t) == 0:
+                return new_ts  # nothing to do
+            pts_t = np.asarray(pts_t, dtype=float)
+            pts_v = np.stack(pts_v, axis=0)  # (M, C)
+            order = np.argsort(pts_t)
+            pts_t = pts_t[order]
+            pts_v = pts_v[order]
+
+            # 3) For each integer time t in [0, L-1], perform a local linear regression using a sliding window
+            # Choose a small window radius in time units. Radius 1.5 ~ uses up to ~3 units around t.
+            radius = 1.5
+            new_vals = np.empty((C, L), dtype=float)
+            for t_int in range(L):
+                # Select neighborhood
+                mask = np.abs(pts_t - t_int) <= radius
+                if not np.any(mask):
+                    # Fallback to nearest two points (or nearest one)
+                    nearest_idx = np.argsort(np.abs(pts_t - t_int))[:min(3, len(pts_t))]
+                    x_train = pts_t[nearest_idx]
+                    y_train = pts_v[nearest_idx]  # (m, C)
+                else:
+                    x_train = pts_t[mask]
+                    y_train = pts_v[mask]
+                # Ensure right shape: (M,) and (M, C)
+                y_train = np.asarray(y_train, dtype=float)
+                if y_train.ndim == 1:
+                    y_train = y_train[None, :]
+                pred = _safe_linear_predict(x_train, y_train, float(t_int))  # (C,)
+                new_vals[:, t_int] = pred
+
+            new_ts = new_vals
             return new_ts
         alignment, _ = _get_alignment_path(
             nn_ts,
@@ -702,22 +756,22 @@ class ESMOTE(BaseCollectionTransformer):
 
 if __name__ == "__main__":
     ## Example usage
-    from local.load_ts_data import X_train, y_train, X_test, y_test
-
-    print(np.unique(y_train, return_counts=True))
-    smote = ESMOTE(n_neighbors=5, random_state=1, distance="msm")
-
-    X_resampled, y_resampled = smote.fit_transform(X_train, y_train)
-    print(X_resampled.shape)
-
-    print(np.unique(y_resampled, return_counts=True))
-    stop = ""
+    # from local.load_ts_data import X_train, y_train, X_test, y_test
+    #
+    # print(np.unique(y_train, return_counts=True))
+    # smote = ESMOTE(n_neighbors=5, random_state=1, distance="msm")
+    #
+    # X_resampled, y_resampled = smote.fit_transform(X_train, y_train)
+    # print(X_resampled.shape)
+    #
+    # print(np.unique(y_resampled, return_counts=True))
+    # stop = ""
     n_samples = 100  # Total number of labels
     majority_num = 90  # number of majority class
     minority_num = n_samples - majority_num  # number of minority class
     np.random.seed(42)
 
-    X = np.random.rand(n_samples, 2, 10)
+    X = np.random.rand(n_samples, 1, 10)
     y = np.array([0] * majority_num + [1] * minority_num)
     print(np.unique(y, return_counts=True))
     smote = ESMOTE(n_neighbors=5, random_state=1, distance="msm")
