@@ -192,6 +192,8 @@ def _set_unbalanced_transformer(t, random_state, n_jobs):
             n_neighbors=5,
             distance="msm",
             distance_params=None,
+            set_barycentre_averaging=True,
+            use_interpolated_path=False,
             weights="uniform",
             n_jobs=n_jobs,
             random_state=random_state,

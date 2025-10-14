@@ -129,11 +129,12 @@ class ESMOTE(BaseCollectionTransformer):
                 X_new = np.zeros((n_samples, *X.shape[1:]), dtype=X.dtype)
                 for n in range(n_samples):
                     # randomly select 2 samples to generate a new sample
-                    index_two_series = self._random_state.choice(len(X_class), size=2, replace=False)
-                    X_class = X_class[index_two_series]
-                    y_class = y_class[index_two_series]
+                    subset = 5
+                    index_subset_series = self._random_state.choice(len(X_class), size=subset, replace=False)
+                    X_class = X_class[index_subset_series]
+                    y_class = y_class[index_subset_series]
                     step = self._random_state.uniform(low=0, high=1)
-                    X_new[n] = self._generate_sample_use_elastic_distance(X_class[0], X_class[1],
+                    X_new[n] = self._generate_sample_use_elastic_distance(X_class[0], X_class[1:],
                                                                           distance=self.distance,
                                                                           step=step,
                                                                           )
@@ -541,8 +542,11 @@ class ESMOTE(BaseCollectionTransformer):
             n_time_points = new_ts.shape[0]
             alignment = np.zeros(n_time_points)  # Stores the sum of values warped to each point
             num_warps_to = np.zeros(n_time_points)  # Tracks how many times each point is warped to
+
             for i in range(max_iter):
-                for Xi in [curr_ts, nn_ts]:
+                if nn_ts.ndim == 1:
+                    nn_ts = [nn_ts]
+                for Xi in [curr_ts, *nn_ts]:
                     # Assume msm_alignment_path computes the alignment path.
                     # It's important that this function provides the full path, not just the distance.
                     curr_alignment, _ = _get_alignment_path(
