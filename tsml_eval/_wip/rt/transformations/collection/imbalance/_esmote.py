@@ -127,12 +127,15 @@ class ESMOTE(BaseCollectionTransformer):
 
             if self.set_barycentre_averaging:
                 X_new = np.zeros((n_samples, *X.shape[1:]), dtype=X.dtype)
+                majority_class_indices = np.flatnonzero(y != class_sample)
+                X_majority = X[majority_class_indices]
                 for n in range(n_samples):
-                    # randomly select 2 samples to generate a new sample
+                    # randomly select subset samples to generate a new sample
                     subset = 5
                     index_subset_series = self._random_state.choice(len(X_class), size=subset, replace=False)
                     X_class = X_class[index_subset_series]
-                    y_class = y_class[index_subset_series]
+                    random_one = self._random_state.choice(len(X_majority))
+                    X_class = np.concatenate([X_class, X_majority[random_one][None, ...]], axis=0)
                     step = self._random_state.uniform(low=0, high=1)
                     X_new[n] = self._generate_sample_use_elastic_distance(X_class[0], X_class[1:],
                                                                           distance=self.distance,
@@ -778,7 +781,7 @@ if __name__ == "__main__":
     X = np.random.rand(n_samples, 1, 10)
     y = np.array([0] * majority_num + [1] * minority_num)
     print(np.unique(y, return_counts=True))
-    smote = ESMOTE(n_neighbors=5, random_state=1, distance="msm")
+    smote = ESMOTE(n_neighbors=5, random_state=1, distance="msm", set_barycentre_averaging=True)
 
     X_resampled, y_resampled = smote.fit_transform(X, y)
     print(X_resampled.shape)
