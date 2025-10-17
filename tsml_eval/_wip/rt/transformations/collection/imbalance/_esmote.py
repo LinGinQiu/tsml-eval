@@ -129,18 +129,28 @@ class ESMOTE(BaseCollectionTransformer):
                 X_new = np.zeros((n_samples, *X.shape[1:]), dtype=X.dtype)
                 majority_class_indices = np.flatnonzero(y != class_sample)
                 X_majority = X[majority_class_indices]
+                y_majority = y[majority_class_indices]
+                self.nn_.fit(X_majority, y_majority)
                 for n in range(n_samples):
                     # randomly select subset samples to generate a new sample
                     subset = 5
                     index_subset_series = self._random_state.choice(len(X_class), size=subset, replace=False)
                     X_class = X_class[index_subset_series]
-                    random_one = self._random_state.choice(len(X_majority))
-                    X_class = np.concatenate([X_class, X_majority[random_one][None, ...]], axis=0)
+                    # random_one = self._random_state.choice(len(X_majority))
+                    # X_class = np.concatenate([X_class, X_majority[random_one][None, ...]], axis=0)
                     step = self._random_state.uniform(low=0, high=1)
+                    X_new_one = self._generate_sample_use_elastic_distance(X_class[0], X_class[1:],
+                                                                          distance=self.distance,
+                                                                          step=step,
+                                                                          )
+
+                    nearest_one = X_majority[self.nn_.kneighbors(X=X_new_one, return_distance=False)[0, 0]]
+                    X_class = np.concatenate([X_class, nearest_one[None, ...]], axis=0)
                     X_new[n] = self._generate_sample_use_elastic_distance(X_class[0], X_class[1:],
                                                                           distance=self.distance,
                                                                           step=step,
                                                                           )
+
                 y_new = np.full(n_samples, fill_value=class_sample, dtype=y.dtype)
                 X_resampled.append(X_new)
                 y_resampled.append(y_new)
@@ -545,10 +555,10 @@ class ESMOTE(BaseCollectionTransformer):
             n_time_points = new_ts.shape[0]
             alignment = np.zeros(n_time_points)  # Stores the sum of values warped to each point
             num_warps_to = np.zeros(n_time_points)  # Tracks how many times each point is warped to
-
+            if nn_ts.ndim == 1:
+                nn_ts = [nn_ts]
             for i in range(max_iter):
-                if nn_ts.ndim == 1:
-                    nn_ts = [nn_ts]
+
                 for Xi in [curr_ts, *nn_ts]:
                     # Assume msm_alignment_path computes the alignment path.
                     # It's important that this function provides the full path, not just the distance.
