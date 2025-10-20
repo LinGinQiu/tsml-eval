@@ -131,9 +131,10 @@ class ESMOTE(BaseCollectionTransformer):
                 X_majority = X[majority_class_indices]
                 y_majority = y[majority_class_indices]
                 self.nn_.fit(X_majority, y_majority)
+                X_class_size = len(X_class)
                 for n in range(n_samples):
                     # randomly select subset samples to generate a new sample
-                    subset = 5
+                    subset = max(4, X_class_size // 10 + 1)
                     index_subset_series = self._random_state.choice(len(X_class), size=subset, replace=False)
                     X_class = X_class[index_subset_series]
                     # random_one = self._random_state.choice(len(X_majority))
@@ -143,13 +144,19 @@ class ESMOTE(BaseCollectionTransformer):
                                                                           distance=self.distance,
                                                                           step=step,
                                                                           )
-
+                    # calculate the l2 distance between X_class[0] and X_class[1:],
+                    distances = np.linalg.norm(X_class[1:].squeeze() - X_class[0].squeeze(), axis=1)
+                    distance_sum = np.sum(distances)
                     nearest_one = X_majority[self.nn_.kneighbors(X=X_new_one, return_distance=False)[0, 0]]
-                    X_class = np.concatenate([X_class, nearest_one[None, ...]], axis=0)
-                    X_new[n] = self._generate_sample_use_elastic_distance(X_class[0], X_class[1:],
-                                                                          distance=self.distance,
-                                                                          step=step,
-                                                                          )
+                    distance_vary = np.sqrt(np.sum((X_new_one.squeeze() - nearest_one.squeeze()) ** 2))
+                    if distance_vary > distance_sum:
+                        X_new[n] = X_new_one
+                    else:
+                        X_class = np.concatenate([X_class, nearest_one[None, ...]], axis=0)
+                        X_new[n] = self._generate_sample_use_elastic_distance(X_class[0], X_class[1:],
+                                                                              distance=self.distance,
+                                                                              step=step,
+                                                                              )
 
                 y_new = np.full(n_samples, fill_value=class_sample, dtype=y.dtype)
                 X_resampled.append(X_new)
@@ -544,6 +551,7 @@ class ESMOTE(BaseCollectionTransformer):
         # shape: (c, l)
         new_ts = curr_ts.copy()
         if self.set_barycentre_averaging:
+            reshape_ts = False
             if new_ts.ndim == 2:
                 new_ts = new_ts.squeeze()
                 curr_ts = curr_ts.squeeze()
