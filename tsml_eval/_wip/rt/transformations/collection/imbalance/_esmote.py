@@ -136,24 +136,24 @@ class ESMOTE(BaseCollectionTransformer):
                     # randomly select subset samples to generate a new sample
                     subset = max(4, X_class_size // 10 + 1)
                     index_subset_series = self._random_state.choice(len(X_class), size=subset, replace=False)
-                    X_class = X_class[index_subset_series]
+                    X_sub = X_class[index_subset_series]
                     # random_one = self._random_state.choice(len(X_majority))
                     # X_class = np.concatenate([X_class, X_majority[random_one][None, ...]], axis=0)
                     step = self._random_state.uniform(low=0, high=1)
-                    X_new_one = self._generate_sample_use_elastic_distance(X_class[0], X_class[1:],
+                    X_new_one = self._generate_sample_use_elastic_distance(X_sub[0], X_sub[1:],
                                                                           distance=self.distance,
                                                                           step=step,
                                                                           )
-                    # calculate the l2 distance between X_class[0] and X_class[1:],
-                    distances = np.linalg.norm(X_class[1:].squeeze() - X_class[0].squeeze(), axis=1)
+                    # calculate the l2 distance between X_sub[0] and X_sub[1:],
+                    distances = np.linalg.norm(X_sub[1:].squeeze() - X_sub[0].squeeze(), axis=1)
                     distance_sum = np.sum(distances)
                     nearest_one = X_majority[self.nn_.kneighbors(X=X_new_one, return_distance=False)[0, 0]]
                     distance_vary = np.sqrt(np.sum((X_new_one.squeeze() - nearest_one.squeeze()) ** 2))
                     if distance_vary > distance_sum:
                         X_new[n] = X_new_one
                     else:
-                        X_class = np.concatenate([X_class, nearest_one[None, ...]], axis=0)
-                        X_new[n] = self._generate_sample_use_elastic_distance(X_class[0], X_class[1:],
+                        X_sub = np.concatenate([X_sub, nearest_one[None, ...]], axis=0)
+                        X_new[n] = self._generate_sample_use_elastic_distance(X_sub[0], X_sub[1:],
                                                                               distance=self.distance,
                                                                               step=step,
                                                                               )
