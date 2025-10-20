@@ -9,6 +9,7 @@ from tsml_eval._wip.rt.classification.distance_based import KNeighborsTimeSeries
 from tsml_eval._wip.rt.clustering.averaging._ba_utils import _get_alignment_path
 from aeon.transformations.collection import BaseCollectionTransformer
 
+
 __maintainer__ = ["chrisholder"]
 __all__ = ["ESMOTE"]
 
@@ -60,7 +61,8 @@ class ESMOTE(BaseCollectionTransformer):
             set_inner_add: bool = False,
             two_part_strategy: bool = False,
             iteration_generate: bool = False,
-            use_interpolated_path: bool = True,
+            use_interpolated_path: bool = False,
+            use_soft_distance: bool = False,
         n_jobs: int = 1,
         random_state=None,
     ):
@@ -76,7 +78,7 @@ class ESMOTE(BaseCollectionTransformer):
         self.two_part_strategy = two_part_strategy
         self.iteration_generate = iteration_generate
         self.use_interpolated_path = use_interpolated_path
-
+        self.use_soft_distance = use_soft_distance
         self._random_state = None
         self._distance_params = distance_params or {}
 
@@ -570,6 +572,7 @@ class ESMOTE(BaseCollectionTransformer):
                 for Xi in [curr_ts, *nn_ts]:
                     # Assume msm_alignment_path computes the alignment path.
                     # It's important that this function provides the full path, not just the distance.
+
                     curr_alignment, _ = _get_alignment_path(
                         centre,
                         Xi,
@@ -724,44 +727,65 @@ class ESMOTE(BaseCollectionTransformer):
 
             new_ts = new_vals
             return new_ts
-        alignment, _ = _get_alignment_path(
-            nn_ts,
-            curr_ts,
-            distance,
-            window,
-            g,
-            epsilon,
-            nu,
-            lmbda,
-            independent,
-            c,
-            descriptor,
-            reach,
-            warp_penalty,
-            transformation_precomputed,
-            transformed_x,
-            transformed_y,
-        )
+        if self.use_soft_distance:
+            if distance == 'msm':
+                from tsml_eval._wip.rt.distances.elastic import soft_msm_gradient
+                A, _ = soft_msm_gradient(curr_ts, nn_ts)
+            elif distance == 'dtw':
+                from tsml_eval._wip.rt.distances.elastic import soft_dtw_gradient
+                A, _ = soft_dtw_gradient(curr_ts, nn_ts)
+            elif distance == 'twe':
+                from tsml_eval._wip.rt.distances.elastic import soft_twe_gradient
+                A, _ = soft_twe_gradient(curr_ts, nn_ts)
+            elif distance == 'adtw':
+                from tsml_eval._wip.rt.distances.elastic import soft_adtw_gradient
+                A, _ = soft_adtw_gradient(curr_ts, nn_ts)
+            else:
+                raise ValueError(f"Soft distance not implemented for distance: {distance}")
+            A = np.maximum(A, 0.0)
+            row_sum = A.sum(axis=1, keepdims=True) + 1e-12
+            W = A / row_sum
+            proj = W @ nn_ts.squeeze()
+            empty_of_array = curr_ts - proj
+        else:
+            alignment, _ = _get_alignment_path(
+                nn_ts,
+                curr_ts,
+                distance,
+                window,
+                g,
+                epsilon,
+                nu,
+                lmbda,
+                independent,
+                c,
+                descriptor,
+                reach,
+                warp_penalty,
+                transformation_precomputed,
+                transformed_x,
+                transformed_y,
+            )
 
-        path_list = [[] for _ in range(curr_ts.shape[1])]
-        for k, l in alignment:
-            path_list[k].append(l)
+            path_list = [[] for _ in range(curr_ts.shape[1])]
+            for k, l in alignment:
+                path_list[k].append(l)
 
-        # num_of_alignments = np.zeros_like(curr_ts, dtype=np.int32)
-        empty_of_array = np.zeros_like(curr_ts, dtype=float)  # shape: (c, l)
+            # num_of_alignments = np.zeros_like(curr_ts, dtype=np.int32)
+            empty_of_array = np.zeros_like(curr_ts, dtype=float)  # shape: (c, l)
 
-        for k, l in enumerate(path_list):
-            if len(l) == 0:
-                import logging
-                logging.getLogger("aeon").setLevel(logging.WARNING)
-                logging.warning(
-                    f"Alignment path for channel {k} is empty. "
-                    "Returning the original time series.")
-                return new_ts
+            for k, l in enumerate(path_list):
+                if len(l) == 0:
+                    import logging
+                    logging.getLogger("aeon").setLevel(logging.WARNING)
+                    logging.warning(
+                        f"Alignment path for channel {k} is empty. "
+                        "Returning the original time series.")
+                    return new_ts
 
-            key = self._random_state.choice(l)
-            # Compute difference for all channels at this time step
-            empty_of_array[:, k] = curr_ts[:, k] - nn_ts[:, key]
+                key = self._random_state.choice(l)
+                # Compute difference for all channels at this time step
+                empty_of_array[:, k] = curr_ts[:, k] - nn_ts[:, key]
 
         #  apply_local_smoothing to empty_of_array
         # windowsize = int(np.ceil(curr_ts.shape[-1] * 0.1))  # 10% of the length
@@ -799,7 +823,7 @@ if __name__ == "__main__":
     X = np.random.rand(n_samples, 1, 10)
     y = np.array([0] * majority_num + [1] * minority_num)
     print(np.unique(y, return_counts=True))
-    smote = ESMOTE(n_neighbors=5, random_state=1, distance="msm", set_barycentre_averaging=True)
+    smote = ESMOTE(n_neighbors=5, random_state=1, distance="twe", use_soft_distance=True)
 
     X_resampled, y_resampled = smote.fit_transform(X, y)
     print(X_resampled.shape)

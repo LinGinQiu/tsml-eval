@@ -237,11 +237,43 @@ def _twe_cost_matrix(
 
 @njit(cache=True, fastmath=True)
 def _pad_arrs(x: np.ndarray) -> np.ndarray:
-    padded_x = np.zeros((x.shape[0], x.shape[1] + 1))
-    zero_arr = np.array([0.0])
-    for i in range(x.shape[0]):
-        padded_x[i, :] = np.concatenate((zero_arr, x[i, :]))
-    return padded_x
+    """Pad a time series array with a leading zero column.
+
+    This function ensures the returned array is 2D with shape
+    (n_channels, n_timepoints + 1), placing a zero column at index 0
+    and copying the original data starting from column 1. It supports
+    both univariate (1D) and multivariate (2D) inputs.
+
+    Parameters
+    ----------
+    x : np.ndarray
+        Either 1D array of shape (n_timepoints,) or 2D array of shape
+        (n_channels, n_timepoints).
+
+    Returns
+    -------
+    np.ndarray
+        2D array of shape (n_channels, n_timepoints + 1) with a leading
+        zero column.
+    """
+    # Determine dimensions robustly for Numba
+    if x.ndim == 1:
+        n_channels = 1
+        n_timepoints = x.shape[0]
+        padded_x = np.zeros((n_channels, n_timepoints + 1))
+        # place original series in the second through last columns
+        for t in range(n_timepoints):
+            padded_x[0, t + 1] = x[t]
+        return padded_x
+    else:
+        n_channels = x.shape[0]
+        n_timepoints = x.shape[1]
+        padded_x = np.zeros((n_channels, n_timepoints + 1))
+        # copy each channel, shifted by one column
+        for c in range(n_channels):
+            for t in range(n_timepoints):
+                padded_x[c, t + 1] = x[c, t]
+        return padded_x
 
 
 @threaded
