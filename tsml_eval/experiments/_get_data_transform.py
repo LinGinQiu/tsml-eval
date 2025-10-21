@@ -255,6 +255,7 @@ def _set_unbalanced_transformer(t, random_state, n_jobs):
             n_jobs=n_jobs,
             random_state=random_state,
             use_soft_distance=True,
+            use_multi_soft_distance=True,
         )
     elif t == "adtw":
         from tsml_eval._wip.rt.transformations.collection.imbalance._esmote import (
@@ -310,6 +311,7 @@ def _set_unbalanced_transformer(t, random_state, n_jobs):
             n_jobs=n_jobs,
             random_state=random_state,
             use_soft_distance=True,
+            use_multi_soft_distance=True,
         )
     elif t == "state":
         from tsml_eval._wip.rt.transformations.collection.imbalance._stlor import (

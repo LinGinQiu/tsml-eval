@@ -15,69 +15,89 @@ __all__ = ["ESMOTE"]
 
 from tsml_eval._wip.rt.utils._threading import threaded
 
+import numpy as np
+from typing import Tuple, Dict
 
 def _neighbor_consensus_mask(
         diffs: np.ndarray,
-        eps: float = 1e-8,
+        eps: float = 1e-12,
         sign_tau: float = 0.6,
         spread_tau: float = 0.6,
-        mag_eps_quantile: float = 0.2,
+        q_mag: float = 0.2,
+        combine: str = "geom",  # "geom": sign*(1-spread); "lin": a*sign + b*(1-spread)
+        a: float = 0.5,  # weight for sign in linear combine
+        b: float = 0.5,  # weight for (1-spread) in linear combine
+        min_effective: int = 2,  # require at least this many effective neighbors
+        smooth_window: int = 0,  # optional temporal smoothing window for r (0=off)
 ) -> tuple[np.ndarray, dict]:
     """
-    Compute per-timestep neighbor-consensus mask from per-neighbor deformations.
+    Compute per-timestep neighbor consensus (mask + soft score) from deformations.
+    diffs: (m, T) with d_i(t) = proj_i(t) - anchor(t)
 
-    Parameters
-    ----------
-    diffs : array, shape (m, T)
-        Per-neighbor deformation on anchor timeline: d_i(t) = proj_i(t) - anchor(t)
-    eps : float
-        Numerical stability.
-    sign_tau : float in [0,1]
-        Threshold for sign consistency; higher = stricter (e.g., 0.6–0.8).
-    spread_tau : float in [0,1]
-        Threshold for magnitude dispersion after robust normalization; lower = stricter.
-    mag_eps_quantile : float in (0,1)
-        Quantile for negligible-magnitude gating; below this magnitude we don’t penalize
-        sign conflicts (treat them as neutral).
-
-    Returns
-    -------
-    mask : (T,) bool
-        True where consensus is strong enough.
-    info : dict
-        Diagnostics with 'sign_consistency', 'spread', 'mag_ref'.
+    Returns:
+      mask: (T,) bool   -- hard consensus (direction agreement & low dispersion)
+      info: dict with:
+            'sign_consistency': (T,) in [0,1]
+            'spread': (T,) in [0,1]
+            'r': (T,) soft consensus score in [0,1]
+            'mag_ref': (T,)
+            'effective_count': (T,) int
     """
     m, T = diffs.shape
 
-    # Robust magnitude reference per timestep (median |d|)
+    # Robust magnitude reference per timestep
     abs_d = np.abs(diffs)
-    mag_ref = np.median(abs_d, axis=0)  # (T,)
+    mag_ref = np.median(abs_d, axis=0) + eps  # (T,)
 
-    # Treat tiny deformations as neutral to avoid random sign flips near zero
-    mag_eps = np.quantile(mag_ref + eps, mag_eps_quantile)
-    effective = abs_d >= mag_eps  # (m, T)
+    # Per-timestep negligible-magnitude gating (avoid random sign near zero)
+    # eps_t depends on the distribution at each t rather than a global threshold.
+    eps_t = np.quantile(abs_d, q_mag, axis=0)  # (T,)
+    effective = abs_d >= eps_t[None, :]  # (m, T)
+    eff_count = effective.sum(axis=0)  # (T,)
 
-    # Sign consistency: average of signs over effective neighbors, abs() to ignore polarity
-    # Map tiny (ineffective) to 0 so they do not vote
+    # Direction (sign) consensus in [0,1]
     signs = np.sign(diffs) * effective.astype(diffs.dtype)
-    # If all ineffective => denom=0; fallback to 0 consistency
-    denom = np.maximum(effective.sum(axis=0), 1)  # (T,)
-    sign_consistency = np.abs(signs.sum(axis=0) / denom)  # in [0,1]
+    denom = np.maximum(eff_count, 1)  # avoid /0; if 0 -> returns 0
+    sign_cons = np.abs(signs.sum(axis=0) / denom)
 
-    # Magnitude spread: robust MAD over |d|, normalized by mag_ref
+    # Magnitude dispersion in [0,1]: robust MAD normalized by mag_ref
     mad = np.median(np.abs(abs_d - np.median(abs_d, axis=0)), axis=0)  # (T,)
-    # Normalize dispersion into [0,1]-ish: small = good, large = bad
-    spread = mad / (mag_ref + eps)
-    spread = np.clip(spread, 0.0, 1.0)
+    # Fallback if MAD is degenerate
+    mad0 = (mad <= eps)
+    if np.any(mad0):
+        std = abs_d.std(axis=0)
+        mad[mad0] = std[mad0]
+    spread = np.clip(mad / mag_ref, 0.0, 1.0)
 
-    # Consensus mask: require both direction agreement and low dispersion
-    mask = (sign_consistency >= sign_tau) & (spread <= spread_tau)
+    # Soft consensus r(t) in [0,1]
+    if combine == "lin":
+        r = np.clip(a * sign_cons + b * (1.0 - spread), 0.0, 1.0)
+    else:  # geometric-like combine is stricter when any component is weak
+        r = np.clip(sign_cons * (1.0 - spread), 0.0, 1.0)
+
+    # Optional temporal smoothing on r
+    if smooth_window and smooth_window > 1:
+        w = smooth_window
+        # simple box filter; keep ends unchanged if you prefer
+        r_sm = np.copy(r)
+        half = w // 2
+        for t in range(T):
+            t0 = max(0, t - half)
+            t1 = min(T, t + half + 1)
+            r_sm[t] = r[t0:t1].mean()
+        r = r_sm
+
+    # Hard consensus mask
+    # Also require a minimum effective voter count to avoid spurious agreement.
+    mask = (sign_cons >= sign_tau) & (spread <= spread_tau) & (eff_count >= min_effective)
 
     info = {
-        "sign_consistency": sign_consistency,
+        "sign_consistency": sign_cons,
         "spread": spread,
+        "r": r,
         "mag_ref": mag_ref,
-        "mag_eps": mag_eps,
+        "effective_count": eff_count,
+        "eps_t": eps_t,
     }
     return mask, info
 
@@ -194,7 +214,7 @@ class ESMOTE(BaseCollectionTransformer):
             X_class = X[target_class_indices]
             y_class = y[target_class_indices]
 
-            if self.set_barycentre_averaging or self.use_multi_soft_distance:
+            if self.set_barycentre_averaging:
                 X_new = np.zeros((n_samples, *X.shape[1:]), dtype=X.dtype)
                 majority_class_indices = np.flatnonzero(y != class_sample)
                 X_majority = X[majority_class_indices]
@@ -213,22 +233,21 @@ class ESMOTE(BaseCollectionTransformer):
                                                                           distance=self.distance,
                                                                           step=step,
                                                                           )
-                    if self.set_barycentre_averaging:
-                        # calculate the l2 distance between X_sub[0] and X_sub[1:],
-                        distances = np.linalg.norm(X_sub[1:].squeeze() - X_sub[0].squeeze(), axis=1)
-                        distance_sum = np.sum(distances)
-                        nearest_one = X_majority[self.nn_.kneighbors(X=X_new_one, return_distance=False)[0, 0]]
-                        distance_vary = np.sqrt(np.sum((X_new_one.squeeze() - nearest_one.squeeze()) ** 2))
-                        if distance_vary < distance_sum:
-                            X_new[n] = X_new_one
-                        else:
-                            X_sub = np.concatenate([X_sub, nearest_one[None, ...]], axis=0)
-                            X_new[n] = self._generate_sample_use_elastic_distance(X_sub[0], X_sub[1:],
-                                                                                  distance=self.distance,
-                                                                                  step=step,
-                                                                                  )
-                    else:
+
+                    # calculate the l2 distance between X_sub[0] and X_sub[1:],
+                    distances = np.linalg.norm(X_sub[1:].squeeze() - X_sub[0].squeeze(), axis=1)
+                    distance_sum = np.sum(distances)
+                    nearest_one = X_majority[self.nn_.kneighbors(X=X_new_one, return_distance=False)[0, 0]]
+                    distance_vary = np.sqrt(np.sum((X_new_one.squeeze() - nearest_one.squeeze()) ** 2))
+                    if distance_vary < distance_sum:
                         X_new[n] = X_new_one
+                    else:
+                        X_sub = np.concatenate([X_sub, nearest_one[None, ...]], axis=0)
+                        X_new[n] = self._generate_sample_use_elastic_distance(X_sub[0], X_sub[1:],
+                                                                              distance=self.distance,
+                                                                              step=step,
+                                                                              )
+
 
                 y_new = np.full(n_samples, fill_value=class_sample, dtype=y.dtype)
                 X_resampled.append(X_new)
@@ -534,21 +553,33 @@ class ESMOTE(BaseCollectionTransformer):
     def _make_samples(
         self, X, y_dtype, y_type, nn_data, nn_num, n_samples, step_size=1.0, n_jobs=1
     ):
-        samples_indices = self._random_state.randint(
-            low=0, high=nn_num.size, size=n_samples
-        )
-
-        steps = step_size * self._random_state.uniform(low=0, high=1, size=n_samples)[:, np.newaxis]
-        rows = np.floor_divide(samples_indices, nn_num.shape[1])
-        cols = np.mod(samples_indices, nn_num.shape[1])
-        X_new = np.zeros((len(rows), *X.shape[1:]), dtype=X.dtype)
-        for count in range(len(rows)):
-            i = rows[count]
-            j = cols[count]
-            nn_ts = nn_data[nn_num[i, j]]
-            X_new[count] = self._generate_sample_use_elastic_distance(X[i], nn_ts, distance=self.distance,
-                                                                   step=steps[count],
+        if self.use_multi_soft_distance:
+            X_new = np.zeros((n_samples, *X.shape[1:]), dtype=X.dtype)
+            for i in range(n_samples):
+                sample_index = self._random_state.randint(low=0, high=len(X))
+                nn_indices = nn_num[sample_index]
+                nn_indices_minus1 = self._random_state.choice(nn_indices, size=len(nn_indices) - 1, replace=False)
+                nn_ts = nn_data[nn_indices_minus1]
+                step = step_size * self._random_state.uniform(low=0, high=1.3)
+                X_new[i] = self._generate_sample_use_elastic_distance(X[sample_index], nn_ts,
+                                                                      distance=self.distance,
+                                                                      step=step,
                                                                       )
+        else:
+            samples_indices = self._random_state.randint(
+                low=0, high=nn_num.size, size=n_samples
+            )
+            steps = step_size * self._random_state.uniform(low=0, high=1, size=n_samples)[:, np.newaxis]
+            rows = np.floor_divide(samples_indices, nn_num.shape[1])
+            cols = np.mod(samples_indices, nn_num.shape[1])
+            X_new = np.zeros((len(rows), *X.shape[1:]), dtype=X.dtype)
+            for count in range(len(rows)):
+                i = rows[count]
+                j = cols[count]
+                nn_ts = nn_data[nn_num[i, j]]
+                X_new[count] = self._generate_sample_use_elastic_distance(X[i], nn_ts, distance=self.distance,
+                                                                          step=steps[count],
+                                                                          )
 
         y_new = np.full(n_samples, fill_value=y_type, dtype=y_dtype)
         return X_new, y_new
@@ -682,34 +713,64 @@ class ESMOTE(BaseCollectionTransformer):
             elif self.use_multi_soft_distance:
                 T = len(curr_ts)
                 projs, confs = [], []
+
                 for nb in nn_ts:
-                    W = self._generate_sample_use_soft_distance(curr_ts, nb,
-                                                                distance=distance,
-                                                                step=step,
-                                                                return_weights=True)
-                    proj = W @ nb  # projected neighbor
-                    # 2. Confidence = 1 - normalized entropy of row distribution
+                    # 1) Soft alignment weights (row-stochastic W)
+                    W = self._generate_sample_use_soft_distance(
+                        curr_ts,
+                        nb,
+                        distance=distance,
+                        step=step,
+                        return_weights=True,
+                    )
+                    # Ensure neighbor is 1D (T_neighbor,)
+                    nb_1d = nb.squeeze()
+                    # Project neighbor onto current (anchor) timeline
+                    proj = W @ nb_1d  # (T,)
+
+                    # 2) Confidence from row entropy: conf = 1 - H_row
                     P = np.clip(W, 1e-12, None)
                     ent = -(P * np.log(P)).sum(axis=1) / np.log(P.shape[1])
-                    conf = 1.0 - ent
+                    conf = 1.0 - ent  # (T,) in [0,1]
+
                     projs.append(proj)
                     confs.append(conf)
 
-                projs = np.stack(projs, axis=0)
-                confs = np.stack(confs, axis=0)
+                projs = np.stack(projs, axis=0)  # (m, T)
+                confs = np.stack(confs, axis=0)  # (m, T)
 
-                # 3. Compute robust deformation direction
-                direction = np.median(projs, axis=0) - curr_ts
+                # 3) Robust deformation direction on anchor timeline
+                direction = np.median(projs, axis=0) - curr_ts  # (T,)
 
-                # 4. Compute confidence mask
-                conf_mean = confs.mean(axis=0)
-                conf_tau = 0.4
-                gamma_max = 0.5
-                safe_mask = conf_mean >= conf_tau
+                # 4) Aggregate confidence and compute soft neighbor consensus
+                conf_mean = confs.mean(axis=0)  # (T,) in [0,1]
+                diffs = projs - curr_ts[None, :]  # (m, T)
+                cons_mask, cons_info = _neighbor_consensus_mask(
+                    diffs,
+                    sign_tau=0.6,
+                    spread_tau=0.6,
+                )
+                # Soft consensus score r(t) in [0,1]
+                r = cons_info["sign_consistency"] * (1.0 - cons_info["spread"])  # (T,)
+                r = np.clip(r, 0.0, 1.0)
 
-                # 5. Extrapolation with safety gating
+                # 5) Build per-timestep gamma caps via soft gating by conf & consensus
+                #    s(t) = w_conf * conf_mean(t) + w_cons * r(t), optionally sharpened
+                w_conf, w_cons, sharp = 0.5, 0.5, 1.5
+                s = np.clip(w_conf * conf_mean + w_cons * r, 0.0, 1.0)
+                if sharp != 1.0:
+                    s = np.power(s, sharp)
+                # `step` is the target global cap sampled upstream; scale it by s(t)
+                gamma_cap = step * s  # (T,)
+
+                # 6) Sample per-timestep gamma within [0, gamma_cap(t)] (interp-only here)
+                #    To allow extrapolation, make `step` > 1.0 at call site.
+                rng = self._random_state
                 gamma = np.zeros(T)
-                gamma[safe_mask] = np.random.uniform(0.0, gamma_max, size=safe_mask.sum())
+                safe_mask = s > 1e-6  # tiny threshold to avoid needless sampling
+                if np.any(safe_mask):
+                    gamma[safe_mask] = rng.uniform(0.0, 1.0, size=safe_mask.sum()) * gamma_cap[safe_mask]
+
                 x_new = curr_ts + gamma * direction
                 return x_new
 
@@ -946,7 +1007,7 @@ class ESMOTE(BaseCollectionTransformer):
         return new_ts
 
 if __name__ == "__main__":
-    smote = ESMOTE(n_neighbors=5, random_state=1, distance="twe", use_soft_distance=True, use_multi_soft_distance=False)
+    smote = ESMOTE(n_neighbors=5, random_state=1, distance="twe", use_soft_distance=True, use_multi_soft_distance=True)
     # Example usage
     from local.load_ts_data import X_train, y_train, X_test, y_test
 
