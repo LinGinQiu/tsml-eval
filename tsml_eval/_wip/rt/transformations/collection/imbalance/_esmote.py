@@ -16,6 +16,71 @@ __all__ = ["ESMOTE"]
 from tsml_eval._wip.rt.utils._threading import threaded
 
 
+def _neighbor_consensus_mask(
+        diffs: np.ndarray,
+        eps: float = 1e-8,
+        sign_tau: float = 0.6,
+        spread_tau: float = 0.6,
+        mag_eps_quantile: float = 0.2,
+) -> tuple[np.ndarray, dict]:
+    """
+    Compute per-timestep neighbor-consensus mask from per-neighbor deformations.
+
+    Parameters
+    ----------
+    diffs : array, shape (m, T)
+        Per-neighbor deformation on anchor timeline: d_i(t) = proj_i(t) - anchor(t)
+    eps : float
+        Numerical stability.
+    sign_tau : float in [0,1]
+        Threshold for sign consistency; higher = stricter (e.g., 0.6–0.8).
+    spread_tau : float in [0,1]
+        Threshold for magnitude dispersion after robust normalization; lower = stricter.
+    mag_eps_quantile : float in (0,1)
+        Quantile for negligible-magnitude gating; below this magnitude we don’t penalize
+        sign conflicts (treat them as neutral).
+
+    Returns
+    -------
+    mask : (T,) bool
+        True where consensus is strong enough.
+    info : dict
+        Diagnostics with 'sign_consistency', 'spread', 'mag_ref'.
+    """
+    m, T = diffs.shape
+
+    # Robust magnitude reference per timestep (median |d|)
+    abs_d = np.abs(diffs)
+    mag_ref = np.median(abs_d, axis=0)  # (T,)
+
+    # Treat tiny deformations as neutral to avoid random sign flips near zero
+    mag_eps = np.quantile(mag_ref + eps, mag_eps_quantile)
+    effective = abs_d >= mag_eps  # (m, T)
+
+    # Sign consistency: average of signs over effective neighbors, abs() to ignore polarity
+    # Map tiny (ineffective) to 0 so they do not vote
+    signs = np.sign(diffs) * effective.astype(diffs.dtype)
+    # If all ineffective => denom=0; fallback to 0 consistency
+    denom = np.maximum(effective.sum(axis=0), 1)  # (T,)
+    sign_consistency = np.abs(signs.sum(axis=0) / denom)  # in [0,1]
+
+    # Magnitude spread: robust MAD over |d|, normalized by mag_ref
+    mad = np.median(np.abs(abs_d - np.median(abs_d, axis=0)), axis=0)  # (T,)
+    # Normalize dispersion into [0,1]-ish: small = good, large = bad
+    spread = mad / (mag_ref + eps)
+    spread = np.clip(spread, 0.0, 1.0)
+
+    # Consensus mask: require both direction agreement and low dispersion
+    mask = (sign_consistency >= sign_tau) & (spread <= spread_tau)
+
+    info = {
+        "sign_consistency": sign_consistency,
+        "spread": spread,
+        "mag_ref": mag_ref,
+        "mag_eps": mag_eps,
+    }
+    return mask, info
+
 class ESMOTE(BaseCollectionTransformer):
     """
     Over-sampling using the Synthetic Minority Over-sampling TEchnique (SMOTE)[1]_.
@@ -63,6 +128,7 @@ class ESMOTE(BaseCollectionTransformer):
             iteration_generate: bool = False,
             use_interpolated_path: bool = False,
             use_soft_distance: bool = False,
+            use_multi_soft_distance: bool = False,
         n_jobs: int = 1,
         random_state=None,
     ):
@@ -79,6 +145,7 @@ class ESMOTE(BaseCollectionTransformer):
         self.iteration_generate = iteration_generate
         self.use_interpolated_path = use_interpolated_path
         self.use_soft_distance = use_soft_distance
+        self.use_multi_soft_distance = use_multi_soft_distance
         self._random_state = None
         self._distance_params = distance_params or {}
 
@@ -127,7 +194,7 @@ class ESMOTE(BaseCollectionTransformer):
             X_class = X[target_class_indices]
             y_class = y[target_class_indices]
 
-            if self.set_barycentre_averaging:
+            if self.set_barycentre_averaging or self.use_multi_soft_distance:
                 X_new = np.zeros((n_samples, *X.shape[1:]), dtype=X.dtype)
                 majority_class_indices = np.flatnonzero(y != class_sample)
                 X_majority = X[majority_class_indices]
@@ -146,19 +213,22 @@ class ESMOTE(BaseCollectionTransformer):
                                                                           distance=self.distance,
                                                                           step=step,
                                                                           )
-                    # calculate the l2 distance between X_sub[0] and X_sub[1:],
-                    distances = np.linalg.norm(X_sub[1:].squeeze() - X_sub[0].squeeze(), axis=1)
-                    distance_sum = np.sum(distances)
-                    nearest_one = X_majority[self.nn_.kneighbors(X=X_new_one, return_distance=False)[0, 0]]
-                    distance_vary = np.sqrt(np.sum((X_new_one.squeeze() - nearest_one.squeeze()) ** 2))
-                    if distance_vary > distance_sum:
-                        X_new[n] = X_new_one
+                    if self.set_barycentre_averaging:
+                        # calculate the l2 distance between X_sub[0] and X_sub[1:],
+                        distances = np.linalg.norm(X_sub[1:].squeeze() - X_sub[0].squeeze(), axis=1)
+                        distance_sum = np.sum(distances)
+                        nearest_one = X_majority[self.nn_.kneighbors(X=X_new_one, return_distance=False)[0, 0]]
+                        distance_vary = np.sqrt(np.sum((X_new_one.squeeze() - nearest_one.squeeze()) ** 2))
+                        if distance_vary < distance_sum:
+                            X_new[n] = X_new_one
+                        else:
+                            X_sub = np.concatenate([X_sub, nearest_one[None, ...]], axis=0)
+                            X_new[n] = self._generate_sample_use_elastic_distance(X_sub[0], X_sub[1:],
+                                                                                  distance=self.distance,
+                                                                                  step=step,
+                                                                                  )
                     else:
-                        X_sub = np.concatenate([X_sub, nearest_one[None, ...]], axis=0)
-                        X_new[n] = self._generate_sample_use_elastic_distance(X_sub[0], X_sub[1:],
-                                                                              distance=self.distance,
-                                                                              step=step,
-                                                                              )
+                        X_new[n] = X_new_one
 
                 y_new = np.full(n_samples, fill_value=class_sample, dtype=y.dtype)
                 X_resampled.append(X_new)
@@ -552,62 +622,97 @@ class ESMOTE(BaseCollectionTransformer):
         # shape: (c, l)
         # shape: (c, l)
         new_ts = curr_ts.copy()
-        if self.set_barycentre_averaging:
+        if self.set_barycentre_averaging or self.use_multi_soft_distance:
             reshape_ts = False
             if new_ts.ndim == 2:
                 new_ts = new_ts.squeeze()
                 curr_ts = curr_ts.squeeze()
                 nn_ts = nn_ts.squeeze()
                 reshape_ts = True
-            distance = 'msm'  # Barycentre averaging is only applicable with MSM distance
-            max_iter = 5
-            centre = new_ts  # Initial centre is the current time series
-            n_time_points = new_ts.shape[0]
-            alignment = np.zeros(n_time_points)  # Stores the sum of values warped to each point
-            num_warps_to = np.zeros(n_time_points)  # Tracks how many times each point is warped to
-            if nn_ts.ndim == 1:
-                nn_ts = [nn_ts]
-            for i in range(max_iter):
+            if self.set_barycentre_averaging:
+                distance = 'msm'  # Barycentre averaging is only applicable with MSM distance
+                max_iter = 5
+                centre = new_ts  # Initial centre is the current time series
+                n_time_points = new_ts.shape[0]
+                alignment = np.zeros(n_time_points)  # Stores the sum of values warped to each point
+                num_warps_to = np.zeros(n_time_points)  # Tracks how many times each point is warped to
+                if nn_ts.ndim == 1:
+                    nn_ts = [nn_ts]
+                for i in range(max_iter):
 
-                for Xi in [curr_ts, *nn_ts]:
-                    # Assume msm_alignment_path computes the alignment path.
-                    # It's important that this function provides the full path, not just the distance.
+                    for Xi in [curr_ts, *nn_ts]:
+                        # Assume msm_alignment_path computes the alignment path.
+                        # It's important that this function provides the full path, not just the distance.
 
-                    curr_alignment, _ = _get_alignment_path(
-                        centre,
-                        Xi,
-                        distance,
-                        window,
-                        g,
-                        epsilon,
-                        nu,
-                        lmbda,
-                        independent,
-                        c,
-                        descriptor,
-                        reach,
-                        warp_penalty,
-                        transformation_precomputed,
-                        transformed_x,
-                        transformed_y,
-                    )
+                        curr_alignment, _ = _get_alignment_path(
+                            centre,
+                            Xi,
+                            distance,
+                            window,
+                            g,
+                            epsilon,
+                            nu,
+                            lmbda,
+                            independent,
+                            c,
+                            descriptor,
+                            reach,
+                            warp_penalty,
+                            transformation_precomputed,
+                            transformed_x,
+                            transformed_y,
+                        )
 
-                    for j, k in curr_alignment:
-                        alignment[k] += Xi[j]
-                        num_warps_to[k] += 1
+                        for j, k in curr_alignment:
+                            alignment[k] += Xi[j]
+                            num_warps_to[k] += 1
 
-                # Avoid division by zero for points that were never warped to
-                # If a point was never warped to, we can set it to 1 to avoid
-                num_warps_to[num_warps_to == 0] = 1
-                new_centre = alignment / num_warps_to
+                    # Avoid division by zero for points that were never warped to
+                    # If a point was never warped to, we can set it to 1 to avoid
+                    num_warps_to[num_warps_to == 0] = 1
+                    new_centre = alignment / num_warps_to
 
-                # Check for convergence. If the new centre is not significantly different, stop.
-                # This is a simplified check. A more robust check would involve the sum of squared distances.
-                if np.array_equal(new_centre, centre):
-                    break
+                    # Check for convergence. If the new centre is not significantly different, stop.
+                    # This is a simplified check. A more robust check would involve the sum of squared distances.
+                    if np.array_equal(new_centre, centre):
+                        break
 
-                centre = new_centre
-            new_ts = centre
+                    centre = new_centre
+                new_ts = centre
+            elif self.use_multi_soft_distance:
+                T = len(curr_ts)
+                projs, confs = [], []
+                for nb in nn_ts:
+                    W = self._generate_sample_use_soft_distance(curr_ts, nb,
+                                                                distance=distance,
+                                                                step=step,
+                                                                return_weights=True)
+                    proj = W @ nb  # projected neighbor
+                    # 2. Confidence = 1 - normalized entropy of row distribution
+                    P = np.clip(W, 1e-12, None)
+                    ent = -(P * np.log(P)).sum(axis=1) / np.log(P.shape[1])
+                    conf = 1.0 - ent
+                    projs.append(proj)
+                    confs.append(conf)
+
+                projs = np.stack(projs, axis=0)
+                confs = np.stack(confs, axis=0)
+
+                # 3. Compute robust deformation direction
+                direction = np.median(projs, axis=0) - curr_ts
+
+                # 4. Compute confidence mask
+                conf_mean = confs.mean(axis=0)
+                conf_tau = 0.4
+                gamma_max = 0.5
+                safe_mask = conf_mean >= conf_tau
+
+                # 5. Extrapolation with safety gating
+                gamma = np.zeros(T)
+                gamma[safe_mask] = np.random.uniform(0.0, gamma_max, size=safe_mask.sum())
+                x_new = curr_ts + gamma * direction
+                return x_new
+
             if reshape_ts:
                 new_ts = new_ts.reshape(1, -1)
             return new_ts
@@ -728,25 +833,14 @@ class ESMOTE(BaseCollectionTransformer):
             new_ts = new_vals
             return new_ts
         if self.use_soft_distance:
-            if distance == 'msm':
-                from tsml_eval._wip.rt.distances.elastic import soft_msm_gradient
-                A, _ = soft_msm_gradient(curr_ts, nn_ts)
-            elif distance == 'dtw':
-                from tsml_eval._wip.rt.distances.elastic import soft_dtw_gradient
-                A, _ = soft_dtw_gradient(curr_ts, nn_ts)
-            elif distance == 'twe':
-                from tsml_eval._wip.rt.distances.elastic import soft_twe_gradient
-                A, _ = soft_twe_gradient(curr_ts, nn_ts)
-            elif distance == 'adtw':
-                from tsml_eval._wip.rt.distances.elastic import soft_adtw_gradient
-                A, _ = soft_adtw_gradient(curr_ts, nn_ts)
-            else:
-                raise ValueError(f"Soft distance not implemented for distance: {distance}")
-            A = np.maximum(A, 0.0)
-            row_sum = A.sum(axis=1, keepdims=True) + 1e-12
-            W = A / row_sum
-            proj = W @ nn_ts.squeeze()
-            empty_of_array = curr_ts - proj
+            new_ts = self._generate_sample_use_soft_distance(
+                curr_ts,
+                nn_ts,
+                distance,
+                step,
+                return_bias=return_bias,
+            )
+            return new_ts
         else:
             alignment, _ = _get_alignment_path(
                 nn_ts,
@@ -803,18 +897,66 @@ class ESMOTE(BaseCollectionTransformer):
             new_ts = new_ts - bias  # / num_of_alignments
         return new_ts
 
+    def _generate_sample_use_soft_distance(self, curr_ts, nn_ts, distance, step,
+                                           return_bias=False, return_weights=False,
+                                           ):
+
+        """
+        Generate a single synthetic sample using soft distance.
+        .
+        """
+        # shape: (c, l)
+        # shape: (c, l)
+        new_ts = curr_ts.copy()
+        T = curr_ts.shape[-1]
+        if distance == 'msm':
+            from tsml_eval._wip.rt.distances.elastic import soft_msm_gradient
+            A, _ = soft_msm_gradient(curr_ts, nn_ts)
+        elif distance == 'dtw':
+            from tsml_eval._wip.rt.distances.elastic import soft_dtw_gradient
+            A, _ = soft_dtw_gradient(curr_ts, nn_ts)
+        elif distance == 'twe':
+            from tsml_eval._wip.rt.distances.elastic import soft_twe_gradient
+            A, _ = soft_twe_gradient(curr_ts, nn_ts)
+        elif distance == 'adtw':
+            from tsml_eval._wip.rt.distances.elastic import soft_adtw_gradient
+            A, _ = soft_adtw_gradient(curr_ts, nn_ts)
+        else:
+            raise ValueError(f"Soft distance not implemented for distance: {distance}")
+        A = np.maximum(A, 0.0)
+        row_sum = A.sum(axis=1, keepdims=True) + 1e-12
+        W = A / row_sum
+        if return_weights:
+            return W
+        proj = W @ nn_ts.squeeze()
+        P = np.clip(W, 1e-12, None)
+        ent = -(P * np.log(P)).sum(axis=1) / np.log(P.shape[1])
+        conf = 1.0 - ent
+
+        direction = proj - curr_ts
+        if return_bias:
+            return direction
+
+        conf_tau = 0.4
+        conf[conf < conf_tau] = 0.0
+        s = np.clip(conf, 0.0, 1.0)
+        s = np.power(s, 2.0)
+        gamma = 0.0 + step * s
+        new_ts = curr_ts + gamma * direction
+        return new_ts
+
 if __name__ == "__main__":
-    ## Example usage
-    # from local.load_ts_data import X_train, y_train, X_test, y_test
-    #
-    # print(np.unique(y_train, return_counts=True))
-    # smote = ESMOTE(n_neighbors=5, random_state=1, distance="msm")
-    #
-    # X_resampled, y_resampled = smote.fit_transform(X_train, y_train)
-    # print(X_resampled.shape)
-    #
-    # print(np.unique(y_resampled, return_counts=True))
-    # stop = ""
+    smote = ESMOTE(n_neighbors=5, random_state=1, distance="twe", use_soft_distance=True, use_multi_soft_distance=False)
+    # Example usage
+    from local.load_ts_data import X_train, y_train, X_test, y_test
+
+    print(np.unique(y_train, return_counts=True))
+
+    X_resampled, y_resampled = smote.fit_transform(X_train, y_train)
+    print(X_resampled.shape)
+
+    print(np.unique(y_resampled, return_counts=True))
+    stop = ""
     n_samples = 100  # Total number of labels
     majority_num = 90  # number of majority class
     minority_num = n_samples - majority_num  # number of minority class
@@ -823,7 +965,6 @@ if __name__ == "__main__":
     X = np.random.rand(n_samples, 1, 10)
     y = np.array([0] * majority_num + [1] * minority_num)
     print(np.unique(y, return_counts=True))
-    smote = ESMOTE(n_neighbors=5, random_state=1, distance="twe", use_soft_distance=True)
 
     X_resampled, y_resampled = smote.fit_transform(X, y)
     print(X_resampled.shape)

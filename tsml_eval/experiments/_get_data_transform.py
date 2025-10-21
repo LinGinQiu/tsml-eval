@@ -309,7 +309,6 @@ def _set_unbalanced_transformer(t, random_state, n_jobs):
             weights="uniform",
             n_jobs=n_jobs,
             random_state=random_state,
-            set_inner_add=True,
             use_soft_distance=True,
         )
     elif t == "state":
