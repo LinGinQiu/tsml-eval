@@ -228,6 +228,7 @@ def _set_unbalanced_transformer(t, random_state, n_jobs):
             n_jobs=n_jobs,
             random_state=random_state,
             use_soft_distance=True,
+            use_multi_soft_distance=True,
         )
     elif t == "msm":
         from tsml_eval._wip.rt.transformations.collection.imbalance._esmote import (
@@ -283,6 +284,7 @@ def _set_unbalanced_transformer(t, random_state, n_jobs):
             n_jobs=n_jobs,
             random_state=random_state,
             use_soft_distance=True,
+            use_multi_soft_distance=True,
         )
     elif t == "twe":
         from tsml_eval._wip.rt.transformations.collection.imbalance._esmote import (
@@ -296,7 +298,6 @@ def _set_unbalanced_transformer(t, random_state, n_jobs):
             weights="uniform",
             n_jobs=n_jobs,
             random_state=random_state,
-            set_inner_add=True,
         )
     elif t == "soft_twe":
         from tsml_eval._wip.rt.transformations.collection.imbalance._esmote import (
