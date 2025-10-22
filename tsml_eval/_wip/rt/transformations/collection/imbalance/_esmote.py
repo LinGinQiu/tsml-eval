@@ -558,9 +558,9 @@ class ESMOTE(BaseCollectionTransformer):
             for i in range(n_samples):
                 sample_index = self._random_state.randint(low=0, high=len(X))
                 nn_indices = nn_num[sample_index]
-                nn_indices_minus1 = self._random_state.choice(nn_indices, size=len(nn_indices) - 1, replace=False)
+                nn_indices_minus1 = self._random_state.choice(nn_indices, size=3, replace=False)  # select 3 neighbors
                 nn_ts = nn_data[nn_indices_minus1]
-                step = step_size * self._random_state.uniform(low=0, high=1.3)
+                step = step_size * self._random_state.uniform(low=0, high=1.4)
                 X_new[i] = self._generate_sample_use_elastic_distance(X[sample_index], nn_ts,
                                                                       distance=self.distance,
                                                                       step=step,
