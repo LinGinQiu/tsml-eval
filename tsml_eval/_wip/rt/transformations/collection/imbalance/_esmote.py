@@ -754,22 +754,51 @@ class ESMOTE(BaseCollectionTransformer):
                 r = cons_info["sign_consistency"] * (1.0 - cons_info["spread"])  # (T,)
                 r = np.clip(r, 0.0, 1.0)
 
-                # 5) Build per-timestep gamma caps via soft gating by conf & consensus
+                # 5) Build per-timestep gamma caps via soft gating by conf & consensus (smoothed)
                 #    s(t) = w_conf * conf_mean(t) + w_cons * r(t), optionally sharpened
                 w_conf, w_cons, sharp = 0.5, 0.5, 1.5
                 s = np.clip(w_conf * conf_mean + w_cons * r, 0.0, 1.0)
                 if sharp != 1.0:
                     s = np.power(s, sharp)
-                # `step` is the target global cap sampled upstream; scale it by s(t)
-                gamma_cap = step * s  # (T,)
 
-                # 6) Sample per-timestep gamma within [0, gamma_cap(t)] (interp-only here)
-                #    To allow extrapolation, make `step` > 1.0 at call site.
-                rng = self._random_state
-                gamma = np.zeros(T)
-                safe_mask = s > 1e-6  # tiny threshold to avoid needless sampling
-                if np.any(safe_mask):
-                    gamma[safe_mask] = rng.uniform(0.0, 1.0, size=safe_mask.sum()) * gamma_cap[safe_mask]
+                # ---- Smooth s over time to avoid jagged pointwise decisions ----
+                def _smooth1d(x: np.ndarray, win: int = 5) -> np.ndarray:
+                    win = max(1, int(win))
+                    if win == 1:
+                        return x
+                    k = np.ones(win, dtype=float) / float(win)
+                    # reflect padding to preserve edges better
+                    pad = win // 2
+                    xp = np.pad(x, (pad, pad), mode="reflect")
+                    xs = np.convolve(xp, k, mode="valid")
+                    return xs[: x.shape[0]]
+
+                s_smooth = _smooth1d(s, win=5)  # small window for gentle continuity
+
+                # ---- Soft gate: sigmoid around a center threshold to avoid hard cuts ----
+                gate_center, gate_sharp = 0.5, 8.0  # center in [0,1], larger sharp -> crisper transition
+                gate = 1.0 / (1.0 + np.exp(-gate_sharp * (s_smooth - gate_center)))  # in (0,1)
+
+                # ---- Build coherent gamma curve ----
+                # If step <= 1: interpolation only. Use smoothed score and soft gate to attenuate.
+                # If step  > 1: blend interpolation (where gate low) and extrapolation (where gate high)
+                T = s.shape[0]
+                gamma = np.zeros(T, dtype=float)
+
+                if step <= 1.0:
+                    # Pure interpolation, capped by step, smoothly attenuated by gate
+                    gamma = step * s_smooth * gate
+                else:
+                    # Mixed interp/extrap in a *continuous* manner
+                    # Interp component (near off regions)
+                    interp_comp = min(1.0, step) * s_smooth * (1.0 - gate)
+                    # Extrap component (near on regions): 1 + alpha*s, where alpha = step-1
+                    alpha = max(0.0, step - 1.0)
+                    extrap_comp = gate * (1.0 + alpha * s_smooth)
+                    gamma = interp_comp + extrap_comp
+
+                # Final gentle smoothing on gamma to ensure segment consistency
+                gamma = _smooth1d(gamma, win=5)
 
                 x_new = curr_ts + gamma * direction
                 return x_new
