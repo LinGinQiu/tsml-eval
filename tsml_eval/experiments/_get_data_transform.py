@@ -19,6 +19,7 @@ unbalanced_transformers = [
     "hw",
     "state",
     "dtw",
+    "soft_dtw_proj",
     "soft_dtw",
     "msm",
     "soft_msm",
@@ -215,6 +216,22 @@ def _set_unbalanced_transformer(t, random_state, n_jobs):
             n_jobs=n_jobs,
             random_state=random_state,
         )
+    elif t == "soft_dtw_proj":
+        from tsml_eval._wip.rt.transformations.collection.imbalance._esmote import (
+            ESMOTE,
+        )
+
+        return ESMOTE(
+            n_neighbors=5,
+            distance="dtw",
+            distance_params=None,
+            weights="uniform",
+            n_jobs=n_jobs,
+            random_state=random_state,
+            use_soft_distance=True,
+            use_project=True,
+            use_multi_soft_distance=False,
+        )
     elif t == "soft_dtw":
         from tsml_eval._wip.rt.transformations.collection.imbalance._esmote import (
             ESMOTE,
@@ -228,7 +245,7 @@ def _set_unbalanced_transformer(t, random_state, n_jobs):
             n_jobs=n_jobs,
             random_state=random_state,
             use_soft_distance=True,
-            use_multi_soft_distance=True,
+            use_multi_soft_distance=False,
         )
     elif t == "msm":
         from tsml_eval._wip.rt.transformations.collection.imbalance._esmote import (

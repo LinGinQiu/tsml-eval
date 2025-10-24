@@ -4,6 +4,7 @@ import tqdm
 import numpy as np
 from numba import prange
 from sklearn.utils import check_random_state
+import matplotlib.pyplot as plt
 
 from tsml_eval._wip.rt.classification.distance_based import KNeighborsTimeSeriesClassifier
 from tsml_eval._wip.rt.clustering.averaging._ba_utils import _get_alignment_path
@@ -14,8 +15,6 @@ __maintainer__ = ["chrisholder"]
 __all__ = ["ESMOTE"]
 
 from tsml_eval._wip.rt.utils._threading import threaded
-
-import numpy as np
 from typing import Tuple, Dict
 
 def _neighbor_consensus_mask(
@@ -149,6 +148,8 @@ class ESMOTE(BaseCollectionTransformer):
             use_interpolated_path: bool = False,
             use_soft_distance: bool = False,
             use_multi_soft_distance: bool = False,
+            visualize: bool = False,
+            use_project: bool = False,
         n_jobs: int = 1,
         random_state=None,
     ):
@@ -166,8 +167,12 @@ class ESMOTE(BaseCollectionTransformer):
         self.use_interpolated_path = use_interpolated_path
         self.use_soft_distance = use_soft_distance
         self.use_multi_soft_distance = use_multi_soft_distance
+        self.use_project = use_project
+
         self._random_state = None
         self._distance_params = distance_params or {}
+
+        self.visualize = visualize
 
         self.nn_ = None
         super().__init__()
@@ -560,7 +565,7 @@ class ESMOTE(BaseCollectionTransformer):
                 nn_indices = nn_num[sample_index]
                 nn_indices_minus1 = self._random_state.choice(nn_indices, size=3, replace=False)  # select 3 neighbors
                 nn_ts = nn_data[nn_indices_minus1]
-                step = step_size * self._random_state.uniform(low=0, high=1.4)
+                step = step_size * self._random_state.uniform(low=0, high=1.1)
                 X_new[i] = self._generate_sample_use_elastic_distance(X[sample_index], nn_ts,
                                                                       distance=self.distance,
                                                                       step=step,
@@ -929,6 +934,7 @@ class ESMOTE(BaseCollectionTransformer):
                 distance,
                 step,
                 return_bias=return_bias,
+                visualize=self.visualize,
             )
             return new_ts
         else:
@@ -989,6 +995,7 @@ class ESMOTE(BaseCollectionTransformer):
 
     def _generate_sample_use_soft_distance(self, curr_ts, nn_ts, distance, step,
                                            return_bias=False, return_weights=False,
+                                           visualize: bool = False,
                                            ):
 
         """
@@ -999,18 +1006,64 @@ class ESMOTE(BaseCollectionTransformer):
         # shape: (c, l)
         new_ts = curr_ts.copy()
         T = curr_ts.shape[-1]
+
+        # draw curr.ts
+        # --- lightweight plotting helpers ---
+        def _plot_series_list(series_list, title):
+            try:
+                fig, ax = plt.subplots()
+            except Exception:
+                return  # matplotlib may be unavailable in some environments
+            for s in series_list:
+                s_arr = np.asarray(s)
+                if s_arr.ndim == 1:
+                    ax.plot(s_arr)
+                elif s_arr.ndim == 2:
+                    # shape assumed (C, L); draw each channel
+                    for c in range(s_arr.shape[0]):
+                        ax.plot(s_arr[c])
+                else:
+                    ax.plot(s_arr.reshape(-1))
+            ax.set_title(title)
+            ax.set_xlabel("Time")
+            ax.set_ylabel("Value")
+            fig.tight_layout()
+            try:
+                plt.show(block=False)
+            except Exception:
+                plt.show()
+
+        if visualize:
+            _plot_series_list([curr_ts, nn_ts], title="Anchor (curr_ts) and Neighbor (nn_ts)")
+        # reduce the magnitute between curr_ts and nn_ts
+        # Match per-channel mean absolute amplitude of nn_ts to curr_ts before soft alignment
+        # This keeps the DC offset intact and only rescales magnitudes.
+        eps_amp = 1e-12
+        if nn_ts.ndim == 2 and curr_ts.ndim == 2:
+            # shapes (C, L)
+            m_curr = np.mean(np.abs(curr_ts), axis=1, keepdims=True)  # (C, 1)
+            m_nn = np.mean(np.abs(nn_ts), axis=1, keepdims=True) + eps_amp  # (C, 1)
+            scale = m_curr / m_nn  # (C, 1)
+            nn_ts_cp = nn_ts * scale
+        else:
+            # Fallback: flatten channels jointly if unexpected shape appears
+            m_curr = np.mean(np.abs(curr_ts))
+            m_nn = np.mean(np.abs(nn_ts)) + eps_amp
+            scale = m_curr / m_nn
+            nn_ts_cp = nn_ts * scale
+
         if distance == 'msm':
             from tsml_eval._wip.rt.distances.elastic import soft_msm_gradient
-            A, _ = soft_msm_gradient(curr_ts, nn_ts)
+            A, _ = soft_msm_gradient(curr_ts, nn_ts_cp)
         elif distance == 'dtw':
             from tsml_eval._wip.rt.distances.elastic import soft_dtw_gradient
-            A, _ = soft_dtw_gradient(curr_ts, nn_ts)
+            A, _ = soft_dtw_gradient(curr_ts, nn_ts_cp)
         elif distance == 'twe':
             from tsml_eval._wip.rt.distances.elastic import soft_twe_gradient
-            A, _ = soft_twe_gradient(curr_ts, nn_ts)
+            A, _ = soft_twe_gradient(curr_ts, nn_ts_cp)
         elif distance == 'adtw':
             from tsml_eval._wip.rt.distances.elastic import soft_adtw_gradient
-            A, _ = soft_adtw_gradient(curr_ts, nn_ts)
+            A, _ = soft_adtw_gradient(curr_ts, nn_ts_cp)
         else:
             raise ValueError(f"Soft distance not implemented for distance: {distance}")
         A = np.maximum(A, 0.0)
@@ -1019,6 +1072,12 @@ class ESMOTE(BaseCollectionTransformer):
         if return_weights:
             return W
         proj = W @ nn_ts.squeeze()
+        if self.use_project:
+            return proj.reshape(new_ts.shape)
+        if visualize:
+            # Show projected neighbor on the anchor timeline (compare with curr_ts)
+            _plot_series_list([curr_ts, proj], title="Projected neighbor onto anchor timeline")
+        # draw projected point
         P = np.clip(W, 1e-12, None)
         ent = -(P * np.log(P)).sum(axis=1) / np.log(P.shape[1])
         conf = 1.0 - ent
@@ -1027,16 +1086,19 @@ class ESMOTE(BaseCollectionTransformer):
         if return_bias:
             return direction
 
-        conf_tau = 0.4
-        conf[conf < conf_tau] = 0.0
-        s = np.clip(conf, 0.0, 1.0)
-        s = np.power(s, 2.0)
-        gamma = 0.0 + step * s
-        new_ts = curr_ts + gamma * direction
+        # conf_tau = 0.4
+        # conf[conf < conf_tau] = 0.0
+        # s = np.clip(conf, 0.0, 1.0)
+        # gamma = 0.0 + step*s
+        new_ts = curr_ts + step * direction
+        # draw new point
+        if visualize and not return_bias and not return_weights:
+            _plot_series_list([curr_ts, new_ts], title="Soft-ESMOTE synthetic vs anchor")
         return new_ts
 
 if __name__ == "__main__":
-    smote = ESMOTE(n_neighbors=5, random_state=1, distance="twe", use_soft_distance=True, use_multi_soft_distance=True)
+    smote = ESMOTE(n_neighbors=5, random_state=1, distance="dtw", use_soft_distance=True, use_project=True,
+                   use_multi_soft_distance=False, visualize=True)
     # Example usage
     from local.load_ts_data import X_train, y_train, X_test, y_test
 
@@ -1046,16 +1108,16 @@ if __name__ == "__main__":
     print(X_resampled.shape)
 
     print(np.unique(y_resampled, return_counts=True))
-    stop = ""
-    n_samples = 100  # Total number of labels
-    majority_num = 90  # number of majority class
-    minority_num = n_samples - majority_num  # number of minority class
-    np.random.seed(42)
-
-    X = np.random.rand(n_samples, 1, 10)
-    y = np.array([0] * majority_num + [1] * minority_num)
-    print(np.unique(y, return_counts=True))
-
-    X_resampled, y_resampled = smote.fit_transform(X, y)
-    print(X_resampled.shape)
-    print(np.unique(y_resampled, return_counts=True))
+    # stop = ""
+    # n_samples = 100  # Total number of labels
+    # majority_num = 90  # number of majority class
+    # minority_num = n_samples - majority_num  # number of minority class
+    # np.random.seed(42)
+    #
+    # X = np.random.rand(n_samples, 1, 10)
+    # y = np.array([0] * majority_num + [1] * minority_num)
+    # print(np.unique(y, return_counts=True))
+    #
+    # X_resampled, y_resampled = smote.fit_transform(X, y)
+    # print(X_resampled.shape)
+    # print(np.unique(y_resampled, return_counts=True))
