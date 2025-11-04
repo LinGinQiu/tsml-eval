@@ -22,6 +22,7 @@ unbalanced_transformers = [
     "soft_dtw_proj",
     "soft_dtw",
     "msm",
+    "maesmote",
     "soft_msm",
     "adtw",
     "soft_adtw",
@@ -44,6 +45,7 @@ unequal_transformers = [
 
 def get_data_transform_by_name(
     transformer_names,
+    dataset_name=None,
     row_normalise=False,
     random_state=None,
     n_jobs=1,
@@ -84,7 +86,9 @@ def get_data_transform_by_name(
             if str_in_nested_list(scaling_transformers, t):
                 t_list.append(_set_scaling_transformer(t, random_state, n_jobs))
             elif str_in_nested_list(unbalanced_transformers, t):
-                t_list.append(_set_unbalanced_transformer(t, random_state, n_jobs))
+                t_list.append(
+                    _set_unbalanced_transformer(t, dataset_name, random_state, n_jobs)
+                )
             elif str_in_nested_list(unequal_transformers, t):
                 t_list.append(_set_unequal_transformer(t, random_state, n_jobs))
             else:
@@ -140,7 +144,7 @@ def _set_unequal_transformer(t, random_state, n_jobs):
         return Resizer()
 
 
-def _set_unbalanced_transformer(t, random_state, n_jobs):
+def _set_unbalanced_transformer(t, dataset_name, random_state, n_jobs):
     if t == "smote":
         from tsml_eval._wip.rt.transformations.collection.imbalance._smote import (
             SMOTE,
@@ -187,7 +191,20 @@ def _set_unbalanced_transformer(t, random_state, n_jobs):
         )
 
         return OHIT(distance="euclidean", random_state=random_state)
+    elif t == "maesmote":
+        from tsml_eval._wip.rt.transformations.collection.imbalance._maesmote import (
+            MAESMOTE,
+        )
 
+        return MAESMOTE(
+            n_neighbors=5,
+            distance="msm",
+            n_jobs=n_jobs,
+            use_soft_distance=True,
+            mae_imputation=True,
+            dataset_name=dataset_name,
+            random_state=random_state,
+        )
     elif t == "esmote":
         from tsml_eval._wip.rt.transformations.collection.imbalance._esmote import (
             ESMOTE,
