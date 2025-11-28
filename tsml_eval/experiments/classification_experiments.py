@@ -57,7 +57,6 @@ def run_experiment(args):
             print(f"Assigned GPU {gpu} to process.")  # pragma: no cover
         except Exception:
             print("Unable to assign GPU to process.")
-    print(args.data_transform_name)
     # cluster run (with args), this is fragile
     if args is not None and args.__len__() > 0:
         print("Input args = ", args)
