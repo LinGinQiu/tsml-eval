@@ -177,8 +177,9 @@ def run_classification_experiment(
     y_train = le.transform(y_train)
     y_test = le.transform(y_test)
     n_cases_test = get_n_cases(X_test)
+    print(data_transforms)
     if data_transforms is not None:
-        print(data_transforms)
+
         if not isinstance(data_transforms, list):
             data_transforms = [data_transforms]
 
