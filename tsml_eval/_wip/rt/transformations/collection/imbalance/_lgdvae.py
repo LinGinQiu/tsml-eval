@@ -119,10 +119,10 @@ class VOTE(BaseCollectionTransformer):
             self._device = torch.device("cpu")
         else:
             print("[ENV] Unknown environment, fallback to current dir")
-            self._root = Path.cwd()
+            self._root = Path("/home/cq2u24/LGD_VAE")
             # self._ckpt = self._root / "checkpoints"
             # self._stats = self._root / "stats"
-            self._device = torch.device("cpu")
+            self._device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     def _fit(self, X, y=None):
         # Make sure inference.py can be imported
