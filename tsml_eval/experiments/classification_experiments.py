@@ -93,6 +93,7 @@ def run_experiment(args):
                 resample_id=args.resample_id,
                 data_transforms=get_data_transform_by_name(
                     args.data_transform_name,
+                    dataset_name=args.dataset_name,
                     row_normalise=args.row_normalise,
                     random_state=(
                         args.resample_id
