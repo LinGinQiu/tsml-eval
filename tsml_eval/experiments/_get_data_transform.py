@@ -22,7 +22,9 @@ unbalanced_transformers = [
     "soft_dtw_proj",
     "soft_dtw",
     "msm",
-    "maesmote",
+    "lgd_l",
+    "lgd_p",
+    "lgd_lp",
     "soft_msm",
     "adtw",
     "soft_adtw",
@@ -191,18 +193,37 @@ def _set_unbalanced_transformer(t, dataset_name, random_state, n_jobs):
         )
 
         return OHIT(distance="euclidean", random_state=random_state)
-    elif t == "maesmote":
-        from tsml_eval._wip.rt.transformations.collection.imbalance._maesmote import (
-            MAESMOTE,
+    elif t == "lgd_l":
+        from tsml_eval._wip.rt.transformations.collection.imbalance._lgdvae import (
+            VOTE,
         )
 
-        return MAESMOTE(
-            n_neighbors=5,
-            distance="msm",
+        return VOTE(
             n_jobs=n_jobs,
-            use_soft_distance=True,
-            mae_imputation=True,
             dataset_name=dataset_name,
+            mode="latent",
+            random_state=random_state,
+        )
+    elif t == "lgd_p":
+        from tsml_eval._wip.rt.transformations.collection.imbalance._lgdvae import (
+            VOTE,
+        )
+
+        return VOTE(
+            n_jobs=n_jobs,
+            dataset_name=dataset_name,
+            mode="pair",
+            random_state=random_state,
+        )
+    elif t == "lgd_lp":
+        from tsml_eval._wip.rt.transformations.collection.imbalance._lgdvae import (
+            VOTE,
+        )
+
+        return VOTE(
+            n_jobs=n_jobs,
+            dataset_name=dataset_name,
+            mode="lp",
             random_state=random_state,
         )
     elif t == "esmote":

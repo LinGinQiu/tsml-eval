@@ -1,17 +1,20 @@
 from collections import OrderedDict
+from os import major
 from typing import Optional, Union
 import tqdm
 import numpy as np
 from numba import prange
 from sklearn.utils import check_random_state
 import matplotlib.pyplot as plt
+
+plt.close('all')
 import glob
+
 from tsml_eval._wip.rt.classification.distance_based import KNeighborsTimeSeriesClassifier
 from tsml_eval._wip.rt.clustering.averaging._ba_utils import _get_alignment_path
 from aeon.transformations.collection import BaseCollectionTransformer
 
-__maintainer__ = ["chrisholder"]
-__all__ = ["ESMOTE"]
+__all__ = ["VOTE"]
 
 from tsml_eval._wip.rt.utils._threading import threaded
 from typing import Tuple, Dict
@@ -148,7 +151,7 @@ def _neighbor_consensus_mask(
     return mask, info
 
 
-class MAESMOTE(BaseCollectionTransformer):
+class VOTE(BaseCollectionTransformer):
     """
     Over-sampling using the Synthetic Minority Over-sampling TEchnique (SMOTE)[1]_.
     An adaptation of the imbalance-learn implementation of SMOTE in
@@ -185,8 +188,6 @@ class MAESMOTE(BaseCollectionTransformer):
     def __init__(
             self,
             n_neighbors=5,
-            distance: Union[str, callable] = "twe",
-            distance_params: Optional[dict] = None,
             weights: Union[str, callable] = "uniform",
             use_soft_distance: bool = True,
             dataset_name: str = "",
@@ -198,17 +199,11 @@ class MAESMOTE(BaseCollectionTransformer):
             mae_imputation: bool = False,
     ):
         self.random_state = random_state
-        self.n_neighbors = n_neighbors
-        self.distance = distance
-        self.distance_params = distance_params
         self.weights = weights
         self.n_jobs = n_jobs
-        self.use_soft_distance = use_soft_distance
-        self.use_multi_soft_distance = use_multi_soft_distance
         self.use_project = use_project
         self.dataset_name = dataset_name
         self._random_state = None
-        self._distance_params = distance_params or {}
 
         self.mae_imputation = mae_imputation
         self._root = None
@@ -231,15 +226,15 @@ class MAESMOTE(BaseCollectionTransformer):
 
         if is_iridis:
             print("[ENV] Detected Iridis HPC environment")
-            self._root = Path("/home/cq2u24/ti-mae-master")
-            self._ckpt = Path("/scratch/cq2u24/ti-mae/checkpoints")
-            self._stats = Path("/scratch/cq2u24/ti-mae/stats")
+            self._root = Path("/home/cq2u24/LGD_VAE")
+            self._ckpt = Path("/scratch/cq2u24/LGD_VAE/checkpoints")
+            self._stats = Path("/scratch/cq2u24/LGD_VAE/stats")
             self._device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         elif is_mac:
             print("[ENV] Detected local macOS environment")
-            self._root = Path("/Users/qiuchuanhang/PycharmProjects/ti-mae-master")
-            self._ckpt = self._root / "checkpoints"
-            self._stats = self._root / "stats"
+            self._root = Path("/Users/qiuchuanhang/PycharmProjects/LGD_VAE")
+            self._ckpt = self._root / "local/LGD_VAE/checkpoints"
+            self._stats = self._root / "local/LGD_VAE/stats"
             self._device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
         else:
             print("[ENV] Unknown environment, fallback to current dir")
@@ -610,11 +605,6 @@ class MAESMOTE(BaseCollectionTransformer):
         if return_weights:
             return W
         proj = W @ nn_ts.squeeze()
-        if self.use_project:
-            return proj.reshape(new_ts.shape)
-        if visualize:
-            # Show projected neighbor on the anchor timeline (compare with curr_ts)
-            _plot_series_list([curr_ts[:, :100], proj[:100]], title="Projected neighbor onto anchor timeline")
         # draw projected point
         P = np.clip(W, 1e-12, None)
         ent = -(P * np.log(P)).sum(axis=1) / np.log(P.shape[1])
@@ -629,37 +619,57 @@ class MAESMOTE(BaseCollectionTransformer):
         # s = np.clip(conf, 0.0, 1.0)
         # gamma = 0.0 + step*s
         new_ts = curr_ts + step * direction
-        if visualize and not return_bias and not return_weights:
-            _plot_series_list([curr_ts[:, :100], new_ts[:, :100]], title="Soft-ESMOTE synthetic vs anchor")
+        plot_ts = new_ts.copy()
         if self.mae_imputation:
-            mask = torch.zeros(1, T)
-            # 前 20% & 后 20%
-            num_mask = int(0.2 * T)
-            mask[:, :num_mask] = 1  # 前20%
-            mask[:, -num_mask:] = 1  # 后20%
+            new_ts_f = curr_ts.copy()
+            _plot_series_list([curr_ts[:, :leng], X_majority[:, :leng]],
+                              title="minority vs majority samples")
+
             if self._device == torch.device("mps"):
-                new_ts = torch.from_numpy(new_ts[np.newaxis, :].astype(np.float32))
+                new_ts_f = torch.from_numpy(new_ts_f[np.newaxis, :].astype(np.float32))
+                new_ts_t = torch.from_numpy(nn_ts[np.newaxis, :].astype(np.float32))
+                x_major = torch.from_numpy(X_majority[np.newaxis, :].astype(np.float32))
             else:
-                new_ts = torch.from_numpy(new_ts[np.newaxis, :])
-            new_ts = self._inference.impute_from_stats_path(
-                x_raw=new_ts,
-                mask=mask,
-                stats_path=self._stats_path,
+                new_ts_f = torch.from_numpy(new_ts_f[np.newaxis, :])
+                new_ts_t = torch.from_numpy(nn_ts[np.newaxis, :])
+                x_major = torch.from_numpy(X_majority[np.newaxis, :])
+
+            new_ts = self._inference.generate_vae_prior(
             )
             new_ts = new_ts.squeeze(0).cpu().numpy()
-        if visualize and not return_bias and not return_weights:
-            _plot_series_list([curr_ts[:, :100], new_ts[:, :100]],
-                              title="maesmote synthetic vs anchor after mae imputation")
+            _plot_series_list([curr_ts[:, :leng], new_ts[:, :leng]],
+                              title="vae prior synthetic vs anchor")
+            x_min = new_ts_f
+            print(dir(self._inference))
+            new_ts = self._inference.generate_mix_pair(x_min, x_major)
+            new_ts = new_ts.squeeze(0).cpu().numpy()
+            _plot_series_list([curr_ts[:, :leng], new_ts[:, :leng]],
+                              title="vae pair synthetic vs anchor")
+
+            new_ts = self._inference.generate_smote_latent(new_ts_f, new_ts_t)
+            new_ts = new_ts.squeeze(0).cpu().numpy()
+            _plot_series_list([curr_ts[:, :leng], new_ts[:, :leng]],
+                              title="vae latent synthetic vs anchor")
+
         return new_ts
 
 
 if __name__ == "__main__":
+    global leng
+    global X_majority
+    leng = -1
+    dataset_name = 'MedicalImages'
     smote = MAESMOTE(n_neighbors=5, random_state=1, distance="dtw", use_soft_distance=True, use_project=False,
-                     use_multi_soft_distance=False, visualize=True, mae_imputation=True, dataset_name='ACSF1')
+                     use_multi_soft_distance=False, visualize=True, mae_imputation=True, dataset_name=dataset_name)
     # Example usage
-    from local.load_ts_data import X_train, y_train, X_test, y_test
+    from local.load_ts_data import load_ts_data
 
+    X_train, y_train, X_test, y_test = load_ts_data(dataset_name)
     print(np.unique(y_train, return_counts=True))
+    X_majority = X_train[y_train == '0'][0]
+    print(X_majority.shape)
+    # _plot_series_list([X_majority[0][0][:leng], X_majority[1][0][:leng]], title="Majority class example")
+    # _plot_series_list([X_majority[2][0][:leng], X_majority[3][0][:leng]], title="Majority class example")
 
     X_resampled, y_resampled = smote.fit_transform(X_train, y_train)
     print(X_resampled.shape)

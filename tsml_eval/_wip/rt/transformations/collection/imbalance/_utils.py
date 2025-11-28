@@ -14,6 +14,34 @@ from sklearn.utils import check_random_state
 from sklearn.decomposition import PCA # For PCA
 # import umap # For UMAP (uncomment if using and installed)
 
+import matplotlib.pyplot as plt
+
+
+def _plot_series_list(series_list, title):
+    try:
+        fig, ax = plt.subplots()
+    except Exception:
+        return  # matplotlib may be unavailable in some environments
+    for i, s in enumerate(series_list):
+        s_arr = np.asarray(s)
+        if s_arr.ndim == 1:
+            ax.plot(s_arr, label=i)
+        elif s_arr.ndim == 2:
+            # shape assumed (C, L); draw each channel
+            for c in range(s_arr.shape[0]):
+                ax.plot(s_arr[c], label=i)
+        else:
+            ax.plot(s_arr.reshape(-1), label=i)
+    ax.set_title(title)
+    ax.set_xlabel("Time")
+    ax.set_ylabel("Value")
+    plt.legend()  # 显示图例
+    fig.tight_layout()
+    try:
+        plt.show(block=False)
+    except Exception:
+        plt.show()
+
 
 class SyntheticSampleSelector:
     """

@@ -280,32 +280,35 @@ class SMOTE(BaseCollectionTransformer):
         return X_new.astype(X.dtype)
 
 if __name__ == "__main__":
-    X = np.random.randn(100, 3, 100)
-    y = np.random.choice([0, 0, 1], size=100)
-    print(np.unique(y, return_counts=True))
+    global leng
+    leng = -1
+    dataset_name = 'MedicalImages'
+    # Example usage
+    from local.load_ts_data import load_ts_data
+
+    X_train, y_train, X_test, y_test = load_ts_data(dataset_name)
+    print(np.unique(y_train, return_counts=True))
+    # _plot_series_list([X_majority[0][0][:leng], X_majority[1][0][:leng]], title="Majority class example")
+    # _plot_series_list([X_majority[2][0][:leng], X_majority[3][0][:leng]], title="Majority class example")
+
+    from aeon.classification.deep_learning import MLPClassifier
+
+    hc2 = MLPClassifier()
+    hc2.fit(X_train, y_train)
+    y_pred = hc2.predict(X_test)
+    acc = np.mean(y_pred == y_test)
+    print(f'imbalance test accuracy: {acc}')
     smote = SMOTE(
             n_neighbors=5,
             distance="euclidean",
             distance_params=None,
             weights="uniform")
 
-    X_resampled, y_resampled = smote.fit_transform(X, y)
+    X_resampled, y_resampled = smote.fit_transform(X_train, y_train)
     print(X_resampled.shape)
     print(np.unique(y_resampled, return_counts=True))
     stop = ""
-
-    # === Multivariate SMOTE Verification ===
-    print("\n=== Multivariate SMOTE alignment test with near-identical channels ===")
-    base = np.random.randn(30, 50)
-    X = np.stack([base, base + np.random.normal(0, 1e-5, size=base.shape)], axis=1)
-    y = np.array([0] * 20 + [1] * 10)
-
-    smote = SMOTE(n_neighbors=3, random_state=42, distance="euclidean")
-    smote.fit(X, y)
-    X_resampled, y_resampled = smote.transform(X, y)
-
-    new_samples = X_resampled[len(X):]
-    diffs = new_samples[:, 0, :] - new_samples[:, 1, :]
-    std_dev = np.std(diffs, axis=1)
-
-    print("Mean std deviation across channels (should be < 1e-4 if aligned):", np.mean(std_dev))
+    hc2.fit(X_resampled, y_resampled)
+    y_pred = hc2.predict(X_test)
+    acc = np.mean(y_pred == y_test)
+    print(acc)
