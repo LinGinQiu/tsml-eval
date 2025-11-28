@@ -137,7 +137,7 @@ class VOTE(BaseCollectionTransformer):
         sys.path.append(str(self._root))
         from lgd_pipline import LGDVAEPipeline
         self.pipeline = LGDVAEPipeline(dataset_name=self.dataset_name, seed=self.random_state, device=self._device)
-        self.pipeline.fit(X_tr=X_train, y_tr=y_train)
+        self.pipeline.fit(X_tr=X, y_tr=y)
         return self
 
     def _transform(self, X, y=None):
