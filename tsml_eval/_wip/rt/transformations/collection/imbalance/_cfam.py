@@ -67,9 +67,9 @@ class CFAM(BaseCollectionTransformer):
         is_maj = ~is_min
         X_majority, y_majority = X[is_maj], y[is_maj]
         X_minority, y_minority = X[is_min], y[is_min]
-        _plot_series_list([X_majority[:10, 0, :leng]],
-                          title="majority samples")
-        _plot_series_list(X_minority[:10, 0, :leng], title='minority samples')
+        # _plot_series_list([X_majority[:10, 0, :leng]],
+        #                   title="majority samples")
+        # _plot_series_list(X_minority[:10, 0, :leng], title='minority samples')
         X_train, y_train, generated_samples = self.CFAMG_model.generator_sample()
         inv_class_label_project = {v: k for k, v in self.class_label_project.items()}
         y_train = np.array([inv_class_label_project[label] for label in y_train])
