@@ -126,6 +126,7 @@ class VOTE(BaseCollectionTransformer):
 
     def _fit(self, X, y=None):
         # Make sure inference.py can be imported
+        print(f"device in oversampler is {self._device}")
         self._random_state = check_random_state(self.random_state)
         classes, counts = np.unique(y, return_counts=True)
         label_majority = classes[np.argmax(counts)]
