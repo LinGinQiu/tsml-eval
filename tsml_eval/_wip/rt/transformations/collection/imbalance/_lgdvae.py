@@ -173,6 +173,7 @@ class VOTE(BaseCollectionTransformer):
                 index = self._random_state.choice(X_majority.shape[0])
                 x_maj = torch.from_numpy(X_majority[index][np.newaxis, :]).float().to(self._device)
                 new_series = self.pipeline.transform(mode=self.mode, x_min=x_min, x_maj=x_maj, use_y=True)
+                new_series = new_series.cpu().numpy()
                 assert new_series.shape == (1, C, L), f"VAE output shape {new_series.shape} != {(1, C, L)}"
                 new_ts[i] = new_series.squeeze(0)
             if self.visualize:
