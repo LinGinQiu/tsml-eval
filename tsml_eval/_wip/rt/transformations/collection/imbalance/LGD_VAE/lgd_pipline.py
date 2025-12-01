@@ -130,14 +130,14 @@ class LGDVAEPipeline:
         self.is_iridis = is_iridis
         if is_iridis:
             print("[ENV] Detected Iridis HPC environment")
-            cfg_path = "home/cq2u24/tsml_eval/_wip/rt/transformations/collection/imbalance/LGD_VAE/config.yaml"
+            cfg_path = "home/cq2u24/tsml-eval/tsml_eval/_wip/rt/transformations/collection/imbalance/LGD_VAE/config.yaml"
         elif is_mac:
             print("[ENV] Detected local macOS environment")
             cfg_path = ("/Users/qiuchuanhang/PycharmProjects/tsml-eval/tsml_eval/_wip/rt/transformations"
                         "/collection/imbalance/LGD_VAE/local_test.yaml")
         else:
             print(f"[ENV] Unknown environment {hostname}, fallback to iridis")
-            cfg_path = "home/cq2u24/tsml_eval/_wip/rt/transformations/collection/imbalance/LGD_VAE/config.yaml"
+            cfg_path = "home/cq2u24/tsml-eval/tsml_eval/_wip/rt/transformations/collection/imbalance/LGD_VAE/config.yaml"
 
         with open(cfg_path) as f:
             raw_cfg = yaml.safe_load(f)
