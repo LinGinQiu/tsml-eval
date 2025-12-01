@@ -17,7 +17,7 @@ data:
   format: "ucr"
   problem_path: "/scratch/cq2u24/Data/imbalanced_9_1"
   # —— 关键：从 data.loader.* 挪到 data 顶层 ——
-  train_batch_size: 32
+  train_batch_size: 16
   eval_batch_size: 32
   loader_workers: 4
   train_dataset:
