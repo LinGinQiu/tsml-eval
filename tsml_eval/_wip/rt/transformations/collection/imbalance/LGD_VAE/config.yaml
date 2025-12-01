@@ -93,7 +93,7 @@ optim:
 
 trainer:
   max_epochs: 500
-  accelerator: "gpu"
+  accelerator: "auto"
   devices: 1
   strategy: "auto"
   deterministic: true
