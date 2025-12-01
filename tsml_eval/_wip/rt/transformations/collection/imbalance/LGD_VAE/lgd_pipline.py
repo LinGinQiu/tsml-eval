@@ -396,6 +396,7 @@ class LGDVAEPipeline:
         ckpt_path = None
         ckpt_dir = getattr(self.cfg.paths, "ckpt_dir", None)
         if ckpt_dir is not None and os.path.isdir(ckpt_dir):
+            print(f"loading checkpoint from {ckpt_dir}")
             ckpt_candidates = [f for f in os.listdir(ckpt_dir) if f.endswith(".ckpt")]
             if ckpt_candidates:
                 # 优先 last.ckpt，其次任意一个 ckpt 文件
@@ -414,6 +415,9 @@ class LGDVAEPipeline:
                         strict=False,
                     )
                     print("load successfully!")
+                    if self.mean_ and self.std_:
+                        print(f"[LGDVAEPipeline] Loading mean and std: mean: {self.mean_}, std: {self.std_}")
+                        self.infer.load_zscore_values(mean=self.mean_, std=self.std_)
                     return self
                 except Exception as e:
                     print(f"[LGDVAEPipeline] Failed to load checkpoint ({e}), fallback to training from scratch.")
