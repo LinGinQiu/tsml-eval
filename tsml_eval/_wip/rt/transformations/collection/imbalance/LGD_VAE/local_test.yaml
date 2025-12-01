@@ -1,0 +1,130 @@
+---  # LGD-VAE local debug (macOS/MPS)
+
+experiment:
+  task: "lgd_vae_generation_local"
+  seed: 42
+  note: "Local debug for Latent-Gated Dual-VAE (small batch/epochs)"
+
+paths:
+  data_root: "/Users/qiuchuanhang/PycharmProjects/AALTD2025imbalance/UCR_Imbalanced_9_1"
+  work_root: "/Users/qiuchuanhang/PycharmProjects/tsml-eval/local/LGD_VAE"
+  logs_dir: "/Users/qiuchuanhang/PycharmProjects/tsml-eval/local/LGD_VAE/logs"
+  ckpt_dir: "/Users/qiuchuanhang/PycharmProjects/tsml-eval/local/LGD_VAE/checkpoints"
+  outputs_dir: "/Users/qiuchuanhang/PycharmProjects/tsml-eval/local/LGD_VAE/samples"
+
+data:
+  dataset_name: "FiftyWords"          # 本地先固定一个小数据集，或用 CLI 覆盖
+  format: "ucr"
+  problem_path: "/Users/qiuchuanhang/PycharmProjects/AALTD2025imbalance/UCR_Imbalanced_9_1"
+  train_batch_size: 16             # 本地小一点，避免显存/内存溢出
+  eval_batch_size: 16
+  loader_workers: 0                # mac 本地调试多进程常出问题，先设 0
+  train_dataset:
+    shuffle: true
+  train_suffix: "_TRAIN.ts"
+  test_suffix: "_TEST.ts"
+  in_channels: 1
+  normalize: "zscore_from_train"  # 训练时保存 mean/std，用于 inference
+  sampling_time: 30
+  windowing:
+    use_sliding_window: false
+
+# =====================
+# Model: Latent-Gated Dual-VAE
+# =====================
+model:
+  # 输入尺寸（由 datamodule 推断 seq_len；这里只放 in_channels 以统一接口）
+  in_chans: 1
+  # Encoder backbone
+  embed_dim: 64
+  depth: 2
+  num_heads: 4
+  d_hid: 128
+  # Conv1d embedder
+  kernel_size: 3
+  stride: 1
+  padding: 1
+  dropout: 0.1
+  norm_first: true
+  # Latents
+  latent_dim_global: 32
+  latent_dim_class: 32
+  # Decoder
+  decoder_depth: 2
+  # Gating head
+  gate_hidden: 64
+  # Loss weights（见 pl_model 中对应 log 键）
+  align_lambda: 0.10        # \lambda_align，用于 \mathcal{L}_{align}
+  cls_lambda: 0.50          # 若不开类别监督，这里为 0
+  kl_g_lambda: 0.05         # 全局 KL 系数（beta-VAE 风格）
+  kl_c_lambda: 0.05         # 类别 KL 系数
+  recon_lambda: 1.00        # 重构项系数
+  disentangle_lambda: 0.10
+  center_lambda: 0.01
+  # Other flags
+  minority_class_id: 1      # 你的少数类 id（UCR 使用 np.unique 后得到的索引）
+  cls_embed: true
+  recon_metric: "dilate"   # 同loss recon_metric, works here soft_dtw, dilate, mse
+
+
+loss:
+  type: "lgd_vae_default"
+  # 如果需要：指定 recon 的具体度量（mse / l1 / huber）
+  recon_metric: "mse"
+  huber_delta: 1.0
+
+optim:
+  optimizer: "adamw"
+  lr: 0.001
+  weight_decay: 0.01
+  betas: [0.9, 0.999]
+  scheduler: "cosine"
+  cosine:
+    T_max: 2               # 对齐本地 epochs
+    eta_min: 0.0
+    warmup_epochs: 0
+
+trainer:
+  max_epochs: 2
+  accelerator: "cpu"        # 若 MPS 不可用就改成 "cpu"
+  devices: 1
+  strategy: "auto"
+  deterministic: true
+  log_every_n_steps: 5
+  check_val_every_n_epoch: 1
+  accumulate_grad_batches: 1
+  gradient_clip_val: 1.0
+
+callbacks:
+  checkpointing:
+    dirpath: "/Users/qiuchuanhang/PycharmProjects/tsml-eval/local/LGD_VAE/checkpoints"
+    filename: "lgd-vae-{epoch:02d}"
+    monitor: "eval/loss"
+    mode: "min"
+    save_top_k: 1
+    save_last: true
+    every_n_epochs: 1
+
+  early_stopping:
+    monitor: "eval/loss"
+    mode: "min"
+    patience: 10
+    min_delta: 0.0
+
+logging:
+  use_tensorboard: true
+  project: "LGD_VAE_local"
+  run_name: "LGD_VAE_ACSF1_debug"
+
+impute_infer:
+  # 对 LGD-VAE 来说，这里可用于后续生成/插补脚本的默认参数
+  write_outputs: true
+  save_format: "npy"
+
+repro:
+  cudnn_benchmark: false
+  seed: 42
+
+ddp:
+  find_unused_parameters: false
+  broadcast_buffers: false

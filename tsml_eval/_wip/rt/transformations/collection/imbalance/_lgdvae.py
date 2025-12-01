@@ -6,7 +6,7 @@ import numpy as np
 from numba import prange
 from sklearn.utils import check_random_state
 import matplotlib.pyplot as plt
-
+from tsml_eval._wip.rt.transformations.collection.imbalance.LGD_VAE.lgd_pipline import LGDVAEPipeline
 plt.close('all')
 import glob
 from tsml_eval._wip.rt.transformations.collection.imbalance._utils import _plot_series_list
@@ -107,21 +107,12 @@ class VOTE(BaseCollectionTransformer):
 
         if is_iridis:
             print("[ENV] Detected Iridis HPC environment")
-            self._root = Path("/home/cq2u24/LGD_VAE")
-            # self._ckpt = Path("/scratch/cq2u24/LGD_VAE/checkpoints")
-            # self._stats = Path("/scratch/cq2u24/LGD_VAE/stats")
             self._device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         elif is_mac:
             print("[ENV] Detected local macOS environment")
-            self._root = Path("/Users/qiuchuanhang/PycharmProjects/LGD_VAE")
-            # self._ckpt = self._root / "local/LGD_VAE/checkpoints"
-            # self._stats = self._root / "local/LGD_VAE/stats"
             self._device = torch.device("cpu")
         else:
             print("[ENV] Unknown environment, fallback to current dir")
-            self._root = Path("/home/cq2u24/LGD_VAE")
-            # self._ckpt = self._root / "checkpoints"
-            # self._stats = self._root / "stats"
             self._device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     def _fit(self, X, y=None):
@@ -135,8 +126,6 @@ class VOTE(BaseCollectionTransformer):
         self._cls_min = label_minority
         n_generate_samples = counts[np.argmax(counts)] - counts[np.argmin(counts)]
         self.n_generate_samples = n_generate_samples
-        sys.path.append(str(self._root))
-        from lgd_pipline import LGDVAEPipeline
         self.pipeline = LGDVAEPipeline(dataset_name=self.dataset_name, seed=self.random_state, device=self._device)
         self.pipeline.fit(X_tr=X, y_tr=y)
         return self
@@ -228,9 +217,6 @@ if __name__ == "__main__":
     arr = X_test
     # 检查是否有 NaN
     print(np.isnan(arr).any())  # True
-
-    # 找出 NaN 位置
-    print(np.isfinite(arr).all())
 
     X_resampled, y_resampled = smote.fit_transform(X_train, y_train)
     print(X_resampled.shape)

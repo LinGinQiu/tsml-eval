@@ -1,0 +1,139 @@
+---  # LGD_VAE paper-aligned defaults (CLI-friendly)
+experiment:
+  task: "mae_pretrain_imputation"
+  seed: 42
+  note: "Paper-default LGD_VAE on UCR"
+
+paths:
+  data_root: "/scratch/cq2u24/Data/imbalanced_9_1"
+  work_root: "/scratch/cq2u24/LGD_VAE"
+  logs_dir: "/scratch/cq2u24/LGD_VAE/logs"          # 不用 ${} 插值
+  ckpt_dir: "/scratch/cq2u24/LGD_VAE/checkpoints"
+  outputs_dir: "/scratch/cq2u24/LGD_VAE/imputations"
+
+data:
+  # 由 CLI 覆盖：--dataset_name <UCR_NAME>
+  dataset_name: null
+  format: "ucr"
+  problem_path: "/scratch/cq2u24/Data/imbalanced_9_1"
+  # —— 关键：从 data.loader.* 挪到 data 顶层 ——
+  train_batch_size: 32
+  eval_batch_size: 32
+  loader_workers: 4
+  train_dataset:
+    shuffle: true
+
+  # 其余原来的字段保留（若你用得到）
+  train_suffix: "_TRAIN.ts"
+  test_suffix: "_TEST.ts"
+  in_channels: 1
+  normalize: "zscore_from_train"
+  sampling_time: 30
+
+  # 可保留或先关掉（我们代码默认不依赖）
+  windowing:
+    use_sliding_window: false
+
+model:
+  # Encoder
+  in_chans: 1
+  embed_dim: 128          # 原 d_model
+  depth: 4               # 原 enc_depth
+  num_heads: 8           # 原 n_heads
+  d_hid: 128
+  # Latents
+  latent_dim_global: 32
+  latent_dim_class: 32
+  # Gating head
+  gate_hidden: 64
+  # Decoder
+  decoder_embed_dim: 64  # 原 dec_dim
+  decoder_depth: 4       # 原 dec_depth
+  decoder_num_heads: 4   # 若无单独 dec_heads 就与 num_heads 一致
+
+  # Conv1d embedder (由我们在 Embedder 中实现)
+  kernel_size: 3         # 原 conv.kernel_size
+  stride: 1              # 原 conv.stride
+  padding: 1             # 原 conv.padding
+
+  # Regularization / layout
+  dropout: 0.1
+  norm_first: true
+  # Initialization & extras
+
+  # Loss weights（见 pl_model 中对应 log 键）
+  align_lambda: 0.10        # \lambda_align，用于 \mathcal{L}_{align}
+  cls_lambda: 0.5          # 若不开类别监督，这里为 0
+  kl_g_lambda: 0.05         # 全局 KL 系数（beta-VAE 风格）
+  kl_c_lambda: 0.05         # 类别 KL 系数
+  recon_lambda: 1.00        # 重构项系数
+  disentangle_lambda: 0.10
+  center_lambda: 0.01
+  # Other flags
+  minority_class_id: 1      # 你的少数类 id（UCR 使用 np.unique 后得到的索引）
+  cls_embed: true
+  recon_metric: "dilate"   # 同loss recon_metric, works here soft_dtw, dilate, mse
+
+loss:
+  type: "lgd_vae_default"
+  # 如果需要：指定 recon 的具体度量（mse / l1 / huber）
+  recon_metric: "mse"
+  huber_delta: 1.0
+
+optim:
+  optimizer: "adamw"
+  lr: 0.0001
+  weight_decay: 0.01
+  betas: [0.9, 0.999]
+  scheduler: "cosine"
+  cosine:
+    T_max: 500               # 对齐本地 epochs
+    eta_min: 0.0
+    warmup_epochs: 0
+
+trainer:
+  max_epochs: 500
+  accelerator: "gpu"
+  devices: 1
+  strategy: "auto"
+  deterministic: true
+  log_every_n_steps: 50
+  check_val_every_n_epoch: 1
+  accumulate_grad_batches: 1
+  precision: "32-true"
+  gradient_clip_val: 1.0
+
+
+# —— 新增：配合 train.py 里 callbacks 的访问 ——
+callbacks:
+  checkpointing:
+    dirpath: "/scratch/cq2u24/LGD_VAE/checkpoints"
+    filename: "LGD_VAE-{epoch:02d}"
+    monitor: "eval/loss"
+    mode: "min"
+    save_top_k: 1
+    save_last: true
+    every_n_epochs: 1
+
+  early_stopping:
+    monitor: "eval/loss"
+    mode: "min"
+    patience: 10
+    min_delta: 0.0
+
+logging:
+  use_tensorboard: true
+  project: "LGD_VAE-ucr"
+  run_name: null
+
+impute_infer:
+  write_outputs: true
+  save_format: "npy"
+
+repro:
+  cudnn_benchmark: false
+  seed: 42
+
+ddp:
+  find_unused_parameters: false
+  broadcast_buffers: false
