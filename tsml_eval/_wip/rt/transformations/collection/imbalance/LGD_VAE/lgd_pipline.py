@@ -192,6 +192,7 @@ class LGDVAEPipeline:
         cfg = self.cfg
 
         # 构建 Dataset（注意：此时 data 已经是 zscore 后的，所以 normalizer=None）
+        _,C,L = X_tr.shape
         train_dataset = UCRDataset(
             data=X_tr,
             labels=y_tr,
@@ -212,6 +213,7 @@ class LGDVAEPipeline:
         print(
             f"{datetime.now()} : Train size: {len(train_dataset)}; "
             f"Eval size: {len(eval_dataset)if eval_dataset else None}."
+            f"Series Channel and length: {C}, {L}"
         )
 
         # DataLoader，支持 WeightedRandomSampler
