@@ -211,17 +211,26 @@ class VOTE(BaseCollectionTransformer):
         y_resampled.append(new_ys)
         X_synthetic = np.vstack(X_resampled)
         y_synthetic = np.hstack(y_resampled)
+        print(np.isfinite(X).all())  # 整体是否存在异常值
+        print(np.isnan(X).any())  # 是否有 NaN
+        print(np.isinf(X).any())  # 是否有 Inf
         return X_synthetic, y_synthetic
 
 
 if __name__ == "__main__":
-    dataset_name = 'MedicalImages'
+    dataset_name = 'MelbournePedestrian_nmv'
     smote = VOTE(mode='latent', random_state=0, visualize=True, dataset_name=dataset_name)
     # Example usage
     from local.load_ts_data import load_ts_data
 
     X_train, y_train, X_test, y_test = load_ts_data(dataset_name)
     print(np.unique(y_train, return_counts=True))
+    arr = X_test
+    # 检查是否有 NaN
+    print(np.isnan(arr).any())  # True
+
+    # 找出 NaN 位置
+    print(np.isfinite(arr).all())
 
     X_resampled, y_resampled = smote.fit_transform(X_train, y_train)
     print(X_resampled.shape)
