@@ -112,10 +112,11 @@ class Inference:
         std = torch.from_numpy(std_np).float().to(self.device)
         return mean, std
 
-    def load_zscore_values(self, mean:np.array, std:np.array) -> tuple[Tensor, Tensor]:
+    def load_zscore_values(self, mean:np.array, std:np.array):
         mean = torch.from_numpy(mean).float().to(self.device)
         std = torch.from_numpy(std).float().to(self.device)
         self.mean_, self.std_ = mean, std
+        return self
 
 
     @staticmethod

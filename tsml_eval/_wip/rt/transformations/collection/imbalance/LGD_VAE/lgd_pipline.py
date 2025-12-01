@@ -372,7 +372,7 @@ class LGDVAEPipeline:
 
             X_te, y_te = X_te_, y_te_
 
-        # apple z-score
+        # apply z-score
         normalizer = ZScoreNormalizer().fit(X_tr)
         stats_dir = os.path.join(cfg.paths.work_root, "stats")
         os.makedirs(stats_dir, exist_ok=True)
@@ -380,6 +380,7 @@ class LGDVAEPipeline:
                  mean=normalizer.mean_, std=normalizer.std_)
         self.mean_ = normalizer.mean_
         self.std_ = normalizer.std_
+        print(f"dataset mean: {normalizer.mean_} and std: {normalizer.std_}")
         X_tr = normalizer.transform(X_tr)
         X_te = normalizer.transform(X_te)
         # 2) DataLoader + Dataset
@@ -439,6 +440,7 @@ class LGDVAEPipeline:
         # 训练完直接建一个 Inference wrapper（不从 ckpt 读，直接包内存模型）
         self.infer = Inference(autoencoder, device=self.device)
         if self.mean_ and self.std_:
+            print(f"[LGDVAEPipeline] Loading mean and std: mean: {self.mean_}, std: {self.std_}")
             self.infer.load_zscore_values(mean=self.mean_, std=self.std_)
         return self
 
