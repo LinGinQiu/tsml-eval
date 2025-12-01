@@ -207,7 +207,7 @@ class VOTE(BaseCollectionTransformer):
 
 
 if __name__ == "__main__":
-    dataset_name = 'MelbournePedestrian_nmv'
+    dataset_name = 'AllGestureWiimoteX_eq'
     smote = VOTE(mode='latent', random_state=0, visualize=True, dataset_name=dataset_name)
     # Example usage
     from local.load_ts_data import load_ts_data

@@ -358,9 +358,9 @@ class LGDVAEPipeline:
 
             dataset_name = cfg.data.dataset_name
             problem_path = cfg.paths.data_root
-            resample_id = getattr(cfg, "seed", 0)
+            resample_id = self.seed
             predefined_resample = getattr(cfg.data, "predefined_resample", False)
-
+            print(f'random id in pipline is {resample_id}')
             X_tr_, y_tr_, X_te_, y_te_ = load_ucr_splits(
                 problem_path=problem_path,
                 dataset_name=dataset_name,

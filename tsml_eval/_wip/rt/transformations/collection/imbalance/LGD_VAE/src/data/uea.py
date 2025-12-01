@@ -108,6 +108,7 @@ def stratified_resample_data(X_train, y_train, X_test, y_test, random_state=None
     )
 
     # shuffle data indices
+    from sklearn.utils import check_random_state
     rng = check_random_state(random_state)
 
     # count class occurrences
