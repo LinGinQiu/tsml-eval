@@ -315,12 +315,13 @@ class LGDVAEPipeline:
         if "callbacks" in cfg and "early_stopping" in cfg.callbacks:
             callbacks.append(EarlyStopping(**cfg.callbacks.early_stopping))
         callbacks.append(PrintLossCallback())
-
+        import time
+        run_suffix = str(int(time.time()))
         # logger: 每个 dataset_name 一个子目录，版本用 seed
         logger = CSVLogger(
             save_dir=cfg.paths.logs_dir,
             name=self.dataset_name+str(self.seed),
-            version=cfg.experiment.seed,
+            version=f'{cfg.experiment.seed}_{run_suffix}',
         )
 
         trainer = pl.Trainer(
