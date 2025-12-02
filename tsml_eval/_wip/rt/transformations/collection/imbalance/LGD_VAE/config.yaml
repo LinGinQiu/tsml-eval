@@ -76,8 +76,7 @@ model:
 
 loss:
   type: "lgd_vae_default"
-  # 如果需要：指定 recon 的具体度量（mse / l1 / huber）
-  recon_metric: "mse"
+  recon_metric: "dilate"
   huber_delta: 1.0
 
 optim:

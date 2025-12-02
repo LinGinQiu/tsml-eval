@@ -148,7 +148,14 @@ class LitAutoEncoder(pl.LightningModule):
         else:
             x, y = batch, None
 
-        recon_w, kl_g_w, kl_c_w, align_w, disentangle_w, center_w, cls_w = self._current_loss_weights()
+        # use fix weights for validation
+        recon_w = self.recon_lambda
+        kl_g_w = self.kl_g_lambda
+        kl_c_w = self.kl_c_lambda
+        align_w = self.align_lambda
+        center_w = self.center_lambda
+        cls_w = self.cls_lambda  # 现在不 warmup 分类
+        disentangle_w = self.disentangle_lambda
         out = self.model(x, y)
 
         recon_loss = out.get("recon_loss", 0.0)
