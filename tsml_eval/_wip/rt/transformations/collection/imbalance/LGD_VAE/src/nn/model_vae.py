@@ -372,9 +372,8 @@ class LatentGatedDualVAE(nn.Module):
         """
         device = x.device
         feat, mu_g, logvar_g, mu_c, logvar_c = self.encode(x, y)
-        # AE version: use deterministic latents (no sampling)
-        z_g = mu_g   # [B, G]
-        z_c = mu_c   # [B, C]
+        z_g = self.reparameterize(mu_g, logvar_g)   # [B, G]
+        z_c = self.reparameterize(mu_c, logvar_c)   # [B, C]
 
         disentangle_loss = torch.tensor(0.0, device=device)
         if y is None:
@@ -457,9 +456,8 @@ class LatentGatedDualVAE(nn.Module):
         else:
             raise NotImplementedError
 
-        # AE version: no KL divergence term
-        kl_g = torch.tensor(0.0, device=device)
-        kl_c = torch.tensor(0.0, device=device)
+        kl_g = self.kl_loss(mu_g, logvar_g)
+        kl_c = self.kl_loss(mu_c, logvar_c)
 
         cls_loss = torch.tensor(0.0, device=device)
         cls_logits = None
@@ -581,10 +579,9 @@ class LatentGatedDualVAE(nn.Module):
         _, mu_g_min, logvar_g_min, mu_c_min, logvar_c_min = self.encode(x_min, y=y_min)
         _, mu_g_maj, logvar_g_maj, _, _ = self.encode(x_maj, y=y_maj)
 
-        # AE version: use encoder means directly (no sampling)
-        z_g_min = mu_g_min
-        z_g_maj = mu_g_maj
-        z_c_min = mu_c_min
+        z_g_min = self.reparameterize(mu_g_min, logvar_g_min)
+        z_g_maj = self.reparameterize(mu_g_maj, logvar_g_maj)
+        z_c_min = self.reparameterize(mu_c_min, logvar_c_min)
 
         gate = self.gate(z_c_min)  # [1, G]
         z_g_mix = gate * z_g_min + (1.0 - gate) * z_g_maj
@@ -628,11 +625,10 @@ class LatentGatedDualVAE(nn.Module):
         _, mu_g1, logvar_g1, mu_c1, logvar_c1 = self.encode(x_min1,y=y_min1)
         _, mu_g2, logvar_g2, mu_c2, logvar_c2 = self.encode(x_min2,y=y_min2)
 
-        # AE version: use deterministic encoder outputs
-        z_g1 = mu_g1  # [B, G]
-        z_g2 = mu_g2  # [B, G]
-        z_c1 = mu_c1  # [B, C]
-        z_c2 = mu_c2  # [B, C]
+        z_g1 = self.reparameterize(mu_g1, logvar_g1)  # [B, G]
+        z_g2 = self.reparameterize(mu_g2, logvar_g2)  # [B, G]
+        z_c1 = self.reparameterize(mu_c1, logvar_c1)  # [B, C]
+        z_c2 = self.reparameterize(mu_c2, logvar_c2)  # [B, C]
 
         B = z_g1.size(0)
 
