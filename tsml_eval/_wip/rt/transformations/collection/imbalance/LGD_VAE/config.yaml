@@ -62,13 +62,13 @@ model:
   # Initialization & extras
 
   # Loss weights（见 pl_model 中对应 log 键）
-  align_lambda: 0.00        # \lambda_align，用于 \mathcal{L}_{align}
+  align_lambda: 0.00        # \lambda_align，用于 \mathcal{L}_{align} 0.10
   cls_lambda: 0.5          # 若不开类别监督，这里为 0
   kl_g_lambda: 0.05         # 全局 KL 系数（beta-VAE 风格）
   kl_c_lambda: 0.05         # 类别 KL 系数
   recon_lambda: 1.00        # 重构项系数
-  disentangle_lambda: 0.10
-  center_lambda: 0.01
+  disentangle_lambda: 0.0  # 0.10
+  center_lambda: 0.0       # 0.01
   # Other flags
   minority_class_id: 1      # 你的少数类 id（UCR 使用 np.unique 后得到的索引）
   cls_embed: true
