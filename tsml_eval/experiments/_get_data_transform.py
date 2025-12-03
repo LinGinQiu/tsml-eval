@@ -25,6 +25,7 @@ unbalanced_transformers = [
     "lgd_l",
     "lgd_p",
     "lgd_lp",
+    "ibgan",
     "soft_msm",
     "adtw",
     "soft_adtw",
@@ -354,6 +355,16 @@ def _set_unbalanced_transformer(t, dataset_name, random_state, n_jobs):
             n_jobs=n_jobs,
             random_state=random_state,
         )
+    elif t == "ibgan":
+        from tsml_eval._wip.rt.transformations.collection.imbalance._ibgan import (
+            IBGANAugmenter,
+        )
+
+        return IBGANAugmenter(
+            n_jobs=n_jobs,
+            random_state=random_state,
+        )
+
     elif t == "soft_twe":
         from tsml_eval._wip.rt.transformations.collection.imbalance._esmote import (
             ESMOTE,

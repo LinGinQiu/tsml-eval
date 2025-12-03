@@ -16,7 +16,7 @@ from tensorflow.keras.layers import (
 )
 from tensorflow.keras.utils import to_categorical
 from aeon.transformations.collection import BaseCollectionTransformer
-
+from sklearn.utils import check_random_state
 
 class IBGANAugmenter(BaseCollectionTransformer):
     """
@@ -43,6 +43,8 @@ class IBGANAugmenter(BaseCollectionTransformer):
         alpha=0.5,
         kernel_size=3,
         verbose=True,
+        n_jobs=1,
+        random_state=1,
     ):
         # These will be inferred in _fit
         self.n_classes = None
@@ -71,6 +73,9 @@ class IBGANAugmenter(BaseCollectionTransformer):
         self.c_optimizer = tf.keras.optimizers.Adam(learning_rate=self.c_lr)
         self._fitted = False
 
+        self.n_jobs = n_jobs
+        self.random_state = random_state
+        self._random_state = None
         super().__init__()
 
     # ------------------------------------------------------------------
@@ -85,6 +90,8 @@ class IBGANAugmenter(BaseCollectionTransformer):
         X : np.ndarray, shape (n_samples, n_features, sequence_length)
         y : np.ndarray, shape (n_samples,)
         """
+        self._random_state = check_random_state(self.random_state)
+
         X = np.asarray(X, dtype=np.float32)
         y = np.asarray(y, dtype=np.int64)
 
@@ -109,7 +116,7 @@ class IBGANAugmenter(BaseCollectionTransformer):
             print(f"[IBGAN] n_samples={n_samples}, steps_per_epoch={steps_per_epoch}")
 
         for epoch in range(self.epochs):
-            idx_all = np.random.permutation(n_samples)
+            idx_all = self._random_state.permutation(n_samples)
 
             for step in range(steps_per_epoch):
                 start = step * self.batch_size
@@ -130,7 +137,7 @@ class IBGANAugmenter(BaseCollectionTransformer):
                 )
                 hint = self._sample_hint_matrix(M, p_hint=self.p_hint)
 
-                z_noise = np.random.normal(
+                z_noise = self._random_state.normal(
                     loc=0.0,
                     scale=1.0,
                     size=(batch_size, self.sequence_length, self.n_feature),
@@ -318,7 +325,7 @@ class IBGANAugmenter(BaseCollectionTransformer):
 
             # Sample existing indices (with replacement) for this class
             idx_cls = np.where(y == cls)[0]
-            chosen_idx = np.random.choice(idx_cls, size=n_needed, replace=True)
+            chosen_idx = self._random_state.choice(idx_cls, size=n_needed, replace=True)
 
             x_real = X[chosen_idx]  # (B, n_features, T)
             y_real_int = y[chosen_idx]
@@ -338,7 +345,7 @@ class IBGANAugmenter(BaseCollectionTransformer):
             )
             hint = self._sample_hint_matrix(M, p_hint=self.p_hint)
 
-            z_noise = np.random.normal(
+            z_noise = self._random_state.normal(
                 loc=0.0,
                 scale=1.0,
                 size=(batch_size, self.sequence_length, self.n_feature),
@@ -367,7 +374,7 @@ class IBGANAugmenter(BaseCollectionTransformer):
         y_aug = np.concatenate([y, y_synth], axis=0)
 
         # Shuffle after augmentation
-        idx = np.random.permutation(X_aug.shape[0])
+        idx = self._random_state.permutation(X_aug.shape[0])
         X_aug = X_aug[idx]
         y_aug = y_aug[idx]
 
@@ -527,15 +534,14 @@ class IBGANAugmenter(BaseCollectionTransformer):
     # ------------------------------------------------------------------
     # small helpers
     # ------------------------------------------------------------------
-    @staticmethod
-    def _sample_mask(shape, p_missing):
+    def _sample_mask(self, shape, p_missing):
         """Binary mask matrix M ~ Bernoulli(1 - p_missing)."""
-        mask = np.random.rand(*shape) > p_missing
+        mask = self._random_state.rand(*shape) > p_missing
         return mask.astype(np.float32)
 
     def _sample_hint_matrix(self, mask_matrix, p_hint=0.8):
         """Hint matrix as in GAIN/IB-GAN: subset of mask entries revealed to D."""
-        hints = np.random.rand(*mask_matrix.shape) > p_hint
+        hints = self._random_state.rand(*mask_matrix.shape) > p_hint
         hints = hints.astype(np.float32)
         hint_matrix = hints * mask_matrix
         return hint_matrix
@@ -543,7 +549,7 @@ class IBGANAugmenter(BaseCollectionTransformer):
 
 if __name__ == "__main__":
     dataset_name = 'AllGestureWiimoteX_eq'
-    smote = IBGANAugmenter()
+    smote = IBGANAugmenter(epochs=10,)
     # Example usage
     from local.load_ts_data import load_ts_data
 
