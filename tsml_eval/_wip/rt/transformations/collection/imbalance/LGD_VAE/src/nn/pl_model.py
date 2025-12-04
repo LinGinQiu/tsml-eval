@@ -229,7 +229,7 @@ class LitAutoEncoder(pl.LightningModule):
         scheduler_name = str(optim_cfg.get("scheduler", "cosine")).lower()
         if scheduler_name == "cosine":
             cos = optim_cfg.get("cosine", {}) or {}
-            T_max = int(cos.get("T_max", int(trainer_cfg.get("max_epochs", 10))))
+            T_max = int(trainer_cfg.get("max_epochs", cos.get("T_max", 10)))
             eta_min = float(cos.get("eta_min", 0.0))
             scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=T_max, eta_min=eta_min)
             return [opt], [{"scheduler": scheduler, "interval": "epoch"}]

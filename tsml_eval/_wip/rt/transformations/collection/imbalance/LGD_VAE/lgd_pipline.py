@@ -266,17 +266,17 @@ class LGDVAEPipeline:
                 cfg_model.setdefault("dec_depth", 2)
                 cfg_model.setdefault("n_heads", 4)
                 cfg.trainer["max_epochs"] = max(int(cfg.trainer.get("max_epochs", 0)), 150)
-            elif train_size <= 520:
-                cfg_model.setdefault("embed_dim", 96)
-                cfg_model.setdefault("enc_depth", 4)
-                cfg_model.setdefault("dec_depth", 4)
-                cfg_model.setdefault("n_heads", 6)
-                cfg.trainer["max_epochs"] = max(int(cfg.trainer.get("max_epochs", 0)), 200)
-            else:
+            elif train_size > 520 and seq_len > 300:
                 cfg_model.setdefault("embed_dim", 128)
                 cfg_model.setdefault("enc_depth", 6)
                 cfg_model.setdefault("dec_depth", 4)
                 cfg_model.setdefault("n_heads", 8)
+                cfg.trainer["max_epochs"] = max(int(cfg.trainer.get("max_epochs", 0)), 500)
+            else:
+                cfg_model.setdefault("embed_dim", 96)
+                cfg_model.setdefault("enc_depth", 4)
+                cfg_model.setdefault("dec_depth", 4)
+                cfg_model.setdefault("n_heads", 6)
                 cfg.trainer["max_epochs"] = max(int(cfg.trainer.get("max_epochs", 0)), 300)
 
         # LightningModule 的 __init__ 参数过滤（防止多余键报错）
