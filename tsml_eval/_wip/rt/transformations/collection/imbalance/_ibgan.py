@@ -548,7 +548,7 @@ class IBGANAugmenter(BaseCollectionTransformer):
 
 
 if __name__ == "__main__":
-    dataset_name = 'AllGestureWiimoteX_eq'
+    dataset_name = 'ChlorineConcentration'
     smote = IBGANAugmenter(epochs=10,)
     # Example usage
     from local.load_ts_data import load_ts_data
