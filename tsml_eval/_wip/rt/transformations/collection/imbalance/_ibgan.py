@@ -558,7 +558,6 @@ if __name__ == "__main__":
     arr = X_test
     # 检查是否有 NaN
     print(np.isnan(arr).any())  # True
-
     X_resampled, y_resampled = smote.fit_transform(X_train, y_train)
     print(X_resampled.shape)
     print(np.unique(y_resampled, return_counts=True))
