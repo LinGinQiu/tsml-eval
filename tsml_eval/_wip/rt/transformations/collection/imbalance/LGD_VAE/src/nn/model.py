@@ -425,7 +425,7 @@ class LatentGatedDualVAE(nn.Module):
 
                 # 对齐损失: 让 minority 的 z_g 靠近 majority 的均值
                 if is_min.any():
-                    align_loss = (z_g[is_min] - z_g_maj_mean).pow(2).mean()
+                    align_loss = (z_g[is_min] - z_g_maj_mean.detach()).pow(2).mean()
                 else:
                     align_loss = torch.tensor(0.0, device=device)
             else:
