@@ -88,7 +88,7 @@ optim:
   cosine:
     T_max: 500               # 对齐本地 epochs
     eta_min: 1e-6
-    warmup_epochs: 20
+    warmup_epochs: 10
 
 trainer:
   max_epochs: 500
