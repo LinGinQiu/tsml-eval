@@ -17,8 +17,8 @@ def dilate_loss(outputs, targets, device, alpha=1,gamma=0.01):
 		Dk = soft_dtw.pairwise_distances(targets[k,:,:].view(-1,1),outputs[k,:,:].view(-1,1))
 		D[k:k+1,:,:] = Dk
 	loss_shape = softdtw_batch(D,gamma)
-	bias_estimate = N_output * gamma * 2.0
-	loss_shape = loss_shape + bias_estimate
+	bias_estimate = gamma * 2.0
+	loss_shape = loss_shape/N_output + bias_estimate
 
 	loss_temporal = 0
 	if alpha != 1:
