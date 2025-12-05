@@ -400,7 +400,6 @@ class LGDVAEPipeline:
             print(f"loading checkpoint from {ckpt_dir}")
             ckpt_candidates = [f for f in os.listdir(ckpt_dir) if f.endswith(".ckpt")]
             if ckpt_candidates:
-                import os
                 import re
                 def extract_epoch(name: str):
                     """ 解析文件名中的 epoch 数字，例如 'lgd-vae-epoch=50.ckpt' → 50 """
