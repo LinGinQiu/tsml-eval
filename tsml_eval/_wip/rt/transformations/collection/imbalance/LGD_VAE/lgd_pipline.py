@@ -400,13 +400,28 @@ class LGDVAEPipeline:
             print(f"loading checkpoint from {ckpt_dir}")
             ckpt_candidates = [f for f in os.listdir(ckpt_dir) if f.endswith(".ckpt")]
             if ckpt_candidates:
-                # 优先 last.ckpt，其次任意一个 ckpt 文件
-                last_ckpt = [f for f in ckpt_candidates if "last" in f]
-                ckpt_file = last_ckpt[0] if last_ckpt else sorted(ckpt_candidates)[0]
-                ckpt_path = os.path.join(ckpt_dir, ckpt_file)
+                import os
+                import re
+                def extract_epoch(name: str):
+                    """ 解析文件名中的 epoch 数字，例如 'lgd-vae-epoch=50.ckpt' → 50 """
+                    match = re.search(r"epoch=(\d+)", name)
+                    return int(match.group(1)) if match else -1
+
+                epoch_ckpts = [f for f in ckpt_candidates if "epoch=" in f]
+                if epoch_ckpts:
+                    ckpt_file = max(epoch_ckpts, key=extract_epoch)
+                    ckpt_path = os.path.join(ckpt_dir, ckpt_file)
+                else:
+                    # 其次：fallback 用 last.ckpt（如果存在）
+                    last_ckpts = [f for f in ckpt_candidates if "last" in f]
+                    if last_ckpts:
+                        ckpt_path = os.path.join(ckpt_dir, last_ckpts[0])
+                    else:
+                        # 最后：随便选一个（通常不会到这里）
+                        ckpt_path = os.path.join(ckpt_dir, sorted(ckpt_candidates)[0])
+
                 try:
-                    print(f"[LGDVAEPipeline] Found existing checkpoint: {ckpt_path}, trying to load and skip training.")
-                    # 直接从 checkpoint 加载 LightningModule；如果失败会进入 except
+                    print(f"[LGDVAEPipeline] Auto-loading checkpoint: {ckpt_path}")
                     from tsml_eval._wip.rt.transformations.collection.imbalance.LGD_VAE.src.nn.pl_model import LitAutoEncoder
                     self.infer = Inference.from_checkpoint(
                         ckpt_path,
