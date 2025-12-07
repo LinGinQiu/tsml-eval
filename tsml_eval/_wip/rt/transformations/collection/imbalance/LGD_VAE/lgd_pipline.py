@@ -456,7 +456,7 @@ class LGDVAEPipeline:
         self.trainer = trainer
         self.model = autoencoder
         print("training finished! exiting here and storage the model...")
-        exit()
+        raise EOFError
         # # 训练完直接建一个 Inference wrapper（不从 ckpt 读，直接包内存模型）
         # self.infer = Inference(autoencoder, device=self.device)
         # if self.mean_ and self.std_:
