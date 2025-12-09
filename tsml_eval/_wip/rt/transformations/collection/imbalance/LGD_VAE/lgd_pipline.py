@@ -244,26 +244,26 @@ class LGDVAEPipeline:
         )
 
         # DataLoader，支持 WeightedRandomSampler
-        if getattr(train_dataset, "sample_weights", None) is not None:
-            sampler = WeightedRandomSampler(
-                weights=train_dataset.sample_weights,
-                num_samples=len(train_dataset.sample_weights),
-                replacement=True,
-            )
-            train_loader = DataLoader(
-                train_dataset,
-                batch_size=cfg.data.train_batch_size,
-                sampler=sampler,
-                shuffle=False,
-                num_workers=cfg.data.loader_workers,
-            )
-        else:
-            train_loader = DataLoader(
-                train_dataset,
-                batch_size=cfg.data.train_batch_size,
-                shuffle=True,
-                num_workers=cfg.data.loader_workers,
-            )
+        # if getattr(train_dataset, "sample_weights", None) is not None:
+        #     sampler = WeightedRandomSampler(
+        #         weights=train_dataset.sample_weights,
+        #         num_samples=len(train_dataset.sample_weights),
+        #         replacement=True,
+        #     )
+        #     train_loader = DataLoader(
+        #         train_dataset,
+        #         batch_size=cfg.data.train_batch_size,
+        #         sampler=sampler,
+        #         shuffle=False,
+        #         num_workers=cfg.data.loader_workers,
+        #     )
+        # else:
+        train_loader = DataLoader(
+            train_dataset,
+            batch_size=cfg.data.train_batch_size,
+            shuffle=True,
+            num_workers=cfg.data.loader_workers,
+        )
         if eval_dataset:
             eval_loader = DataLoader(
                 eval_dataset,
