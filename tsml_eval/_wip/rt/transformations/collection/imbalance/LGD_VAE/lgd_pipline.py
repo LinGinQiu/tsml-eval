@@ -100,6 +100,33 @@ class PrintLossCallback(Callback):
             print(f"[Epoch {epoch}] Val Loss={float(val_loss):.4f}")
 
 
+# --------------------------------------------------------
+# EarlyStopping with warmup: DelayedEarlyStopping
+# --------------------------------------------------------
+class DelayedEarlyStopping(EarlyStopping):
+    """EarlyStopping that ignores validation checks for the first `warmup_epochs`.
+
+    It subclasses Lightning's EarlyStopping and simply skips calling the parent's
+    validation hooks until the trainer has reached `warmup_epochs`.
+
+    Configure the warmup period via the callback config key `warmup_epochs` (int).
+    """
+    def __init__(self, warmup_epochs: int = 10, *args, **kwargs):
+        self.warmup_epochs = int(warmup_epochs)
+        super().__init__(*args, **kwargs)
+
+    def on_validation_epoch_end(self, trainer, pl_module):
+        # trainer.current_epoch is 0-based; skip checks while < warmup
+        if trainer.current_epoch < self.warmup_epochs:
+            return
+        return super().on_validation_epoch_end(trainer, pl_module)
+
+    def on_validation_end(self, trainer, pl_module):
+        if trainer.current_epoch < self.warmup_epochs:
+            return
+        return super().on_validation_end(trainer, pl_module)
+
+
 # ========================================================
 # LGD-VAE 端到端 Pipeline: __init__ + fit + transform
 # ========================================================
@@ -313,7 +340,11 @@ class LGDVAEPipeline:
             callbacks.append(ModelCheckpoint(**cfg.callbacks.checkpointing))
 
         if "callbacks" in cfg and "early_stopping" in cfg.callbacks:
-            callbacks.append(EarlyStopping(**cfg.callbacks.early_stopping))
+            # allow an optional `warmup_epochs` key in the early_stopping config
+            # so we can ignore early-stopping checks for the initial training epochs
+            es_cfg = dict(cfg.callbacks.early_stopping)
+            warmup = int(es_cfg.pop("warmup_epochs", 20))
+            callbacks.append(DelayedEarlyStopping(warmup_epochs=warmup, **es_cfg))
         callbacks.append(PrintLossCallback())
         import time
         run_suffix = str(int(time.time()))
