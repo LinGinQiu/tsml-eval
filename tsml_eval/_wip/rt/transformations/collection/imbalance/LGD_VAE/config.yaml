@@ -19,7 +19,7 @@ data:
   # —— 关键：从 data.loader.* 挪到 data 顶层 ——
   train_batch_size: 32
   eval_batch_size: 128
-  loader_workers: 1
+  loader_workers: 4
   train_dataset:
     shuffle: true
 
