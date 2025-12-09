@@ -118,15 +118,14 @@ class LitAutoEncoder(pl.LightningModule):
         )
 
         # 6) 各项 raw loss
-        self.log("train/recon_loss", recon_loss, prog_bar=False, sync_dist=True)
-        self.log("train/kl_g", kl_g, prog_bar=False, sync_dist=True)
-        self.log("train/kl_c", kl_c, prog_bar=False, sync_dist=True)
-        self.log("train/align_loss", align_loss, prog_bar=False, sync_dist=True)
-        self.log("train/disentangle_loss", disentangle_loss, prog_bar=False, sync_dist=True)
-        self.log("train/loss_center", loss_center, prog_bar=False, sync_dist=True)
-
+        self.log("train/recon_loss", recon_loss, on_step=False, on_epoch=True, sync_dist=True)
+        self.log("train/kl_g", kl_g, on_step=False, on_epoch=True, sync_dist=True)
+        self.log("train/kl_c", kl_c, on_step=False, on_epoch=True, sync_dist=True)
+        self.log("train/align_loss", align_loss, on_step=False, on_epoch=True, sync_dist=True)
+        self.log("train/disentangle_loss", disentangle_loss, on_step=False, on_epoch=True, sync_dist=True)
+        self.log("train/loss_center", loss_center, on_step=False, on_epoch=True, sync_dist=True)
         if cls_loss is not None:
-            self.log("train/cls_loss", cls_loss, prog_bar=False, sync_dist=True)
+            self.log("train/cls_loss", cls_loss, on_step=False, on_epoch=True, sync_dist=True)
             if (
                     self.train_f1 is not None
                     and out.get("cls_logits") is not None
