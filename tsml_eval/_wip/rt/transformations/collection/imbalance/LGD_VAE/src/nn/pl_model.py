@@ -174,14 +174,14 @@ class LitAutoEncoder(pl.LightningModule):
             loss = loss + cls_w * cls_loss
 
         # log 各项
-        self.log("eval/recon_loss", recon_loss, sync_dist=True)
-        self.log("eval/kl_g", kl_g, sync_dist=True)
-        self.log("eval/kl_c", kl_c, sync_dist=True)
-        self.log("eval/align_loss", align_loss, sync_dist=True)
-        self.log("eval/disentangle_loss", disentangle_loss, sync_dist=True)
-        self.log("eval/loss_center", loss_center, sync_dist=True)
+        self.log("eval/recon_loss", recon_loss, on_step=False, on_epoch=True, sync_dist=True)
+        self.log("eval/kl_g", kl_g, on_step=False, on_epoch=True, sync_dist=True)
+        self.log("eval/kl_c", kl_c, on_step=False, on_epoch=True, sync_dist=True)
+        self.log("eval/align_loss", align_loss, on_step=False, on_epoch=True, sync_dist=True)
+        self.log("eval/disentangle_loss", disentangle_loss, on_step=False, on_epoch=True, sync_dist=True)
+        self.log("eval/loss_center", loss_center, on_step=False, on_epoch=True, sync_dist=True)
         if cls_loss is not None:
-            self.log("eval/cls_loss", cls_loss, sync_dist=True)
+            self.log("eval/cls_loss", cls_loss, on_step=False, on_epoch=True, sync_dist=True)
             if (
                     self.valid_acc is not None
                     and out.get("cls_logits") is not None
