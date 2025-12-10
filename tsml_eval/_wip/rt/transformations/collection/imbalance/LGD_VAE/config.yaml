@@ -6,10 +6,10 @@ experiment:
 
 paths:
   data_root: "/scratch/cq2u24/Data/imbalanced_9_1"
-  work_root: "/scratch/cq2u24/LGD_VAE_baselineFF"
-  logs_dir: "/scratch/cq2u24/LGD_VAE_baselineFF/logs"          # 不用 ${} 插值
-  ckpt_dir: "/scratch/cq2u24/LGD_VAE_baselineFF/checkpoints"
-  outputs_dir: "/scratch/cq2u24/LGD_VAE_baselineFF/imputations"
+  work_root: "/scratch/cq2u24/LGD_VAE_baselineFFF"
+  logs_dir: "/scratch/cq2u24/LGD_VAE_baselineFFF/logs"          # 不用 ${} 插值
+  ckpt_dir: "/scratch/cq2u24/LGD_VAE_baselineFFF/checkpoints"
+  outputs_dir: "/scratch/cq2u24/LGD_VAE_baselineFFF/imputations"
 
 data:
   # 由 CLI 覆盖：--dataset_name <UCR_NAME>
@@ -106,8 +106,8 @@ trainer:
 # —— 新增：配合 train.py 里 callbacks 的访问 ——
 callbacks:
   checkpointing:
-    dirpath: "/scratch/cq2u24/LGD_VAE_baselineFF/checkpoints"
-    filename: "LGD_VAE_baselineFF-{epoch:02d}"
+    dirpath: "/scratch/cq2u24/LGD_VAE_baselineFFF/checkpoints"
+    filename: "LGD_VAE_baselineFFF-{epoch:02d}"
     monitor: "eval/loss"
     mode: "min"
     save_top_k: 1
@@ -123,7 +123,7 @@ callbacks:
 
 logging:
   use_tensorboard: true
-  project: "LGD_VAE_baselineFF-ucr"
+  project: "LGD_VAE_baselineFFF-ucr"
   run_name: null
 
 impute_infer:
