@@ -240,9 +240,9 @@ class LitAutoEncoder(pl.LightningModule):
         epoch = float(self.current_epoch)
 
         # 可以以后丢到 config 里
-        align_warmup_epochs = 10.0
-        kl_warmup_epochs = 10.0
-        center_warmup_epochs = 10.0
+        align_warmup_epochs = 5.0
+        kl_warmup_epochs = 5.0
+        center_warmup_epochs = 5.0
 
         # 线性 0 → 1
         align_factor = min(1.0, max(0.0, epoch / align_warmup_epochs))
