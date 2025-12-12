@@ -96,8 +96,10 @@ class PrintLossCallback(Callback):
         metrics = trainer.callback_metrics
         epoch = trainer.current_epoch
         val_loss = metrics.get("eval/loss")
+        recon_loss = metrics.get("eval/recon_loss")
         if val_loss is not None:
-            print(f"[Epoch {epoch}] Val Loss={float(val_loss):.4f}")
+            print(f"[Epoch {epoch}] Val Loss={float(val_loss):.4f}"
+                  f", Recon={float(recon_loss):.4f}")
 
 
 # --------------------------------------------------------
