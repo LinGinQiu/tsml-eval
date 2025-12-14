@@ -387,28 +387,29 @@ class LGDVAEPipeline:
         如果你已经在外面自己做好了 split，就可以把 numpy 数组直接传进来。
         """
         cfg = self.cfg
-
+        dataset_name = cfg.data.dataset_name
         # 1) 准备数据
         if  X_te is None or y_te is None:
             # 只支持 UCR 格式（保持和你的原脚本一致）
             if getattr(cfg.data, "format", "ucr") != "ucr":
                 raise NotImplementedError("Only UCR format is implemented yet.")
 
-            dataset_name = cfg.data.dataset_name
             problem_path = cfg.paths.data_root
             resample_id = self.seed
-            predefined_resample = getattr(cfg.data, "predefined_resample", False)
-            print(f'random id in pipline is {resample_id}')
-            X_tr_, y_tr_, X_te_, y_te_ = load_ucr_splits(
-                problem_path=problem_path,
-                dataset_name=dataset_name,
-                resample_id=resample_id,
-                predefined_resample=predefined_resample,
-            )
-            assert np.array_equal(X_tr, X_tr_), "Train data mismatch!"
-            assert np.array_equal(y_tr, y_tr_), "Train labels mismatch!"
-
-            X_te, y_te = X_te_, y_te_
+            print("[LGDVAEPipeline] No eval dataset: using train dataset as validation (monitoring train/loss).")
+            X_te, y_te = X_tr, y_tr
+            # predefined_resample = getattr(cfg.data, "predefined_resample", False)
+            # print(f'random id in pipline is {resample_id}')
+            # X_tr_, y_tr_, X_te_, y_te_ = load_ucr_splits(
+            #     problem_path=problem_path,
+            #     dataset_name=dataset_name,
+            #     resample_id=resample_id,
+            #     predefined_resample=predefined_resample,
+            # )
+            # assert np.array_equal(X_tr, X_tr_), "Train data mismatch!"
+            # assert np.array_equal(y_tr, y_tr_), "Train labels mismatch!"
+            #
+            # X_te, y_te = X_te_, y_te_
 
         # apply z-score
         normalizer = ZScoreNormalizer().fit(X_tr)
