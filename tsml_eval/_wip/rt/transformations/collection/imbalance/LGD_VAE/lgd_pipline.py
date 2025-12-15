@@ -396,20 +396,18 @@ class LGDVAEPipeline:
 
             problem_path = cfg.paths.data_root
             resample_id = self.seed
-            print("[LGDVAEPipeline] No eval dataset: using train dataset as validation (monitoring train/loss).")
-            X_te, y_te = X_tr, y_tr
-            # predefined_resample = getattr(cfg.data, "predefined_resample", False)
-            # print(f'random id in pipline is {resample_id}')
-            # X_tr_, y_tr_, X_te_, y_te_ = load_ucr_splits(
-            #     problem_path=problem_path,
-            #     dataset_name=dataset_name,
-            #     resample_id=resample_id,
-            #     predefined_resample=predefined_resample,
-            # )
-            # assert np.array_equal(X_tr, X_tr_), "Train data mismatch!"
-            # assert np.array_equal(y_tr, y_tr_), "Train labels mismatch!"
-            #
-            # X_te, y_te = X_te_, y_te_
+            predefined_resample = getattr(cfg.data, "predefined_resample", False)
+            print(f'random id in pipline is {resample_id}')
+            X_tr_, y_tr_, X_te_, y_te_ = load_ucr_splits(
+                problem_path=problem_path,
+                dataset_name=dataset_name,
+                resample_id=resample_id,
+                predefined_resample=predefined_resample,
+            )
+            assert np.array_equal(X_tr, X_tr_), "Train data mismatch!"
+            assert np.array_equal(y_tr, y_tr_), "Train labels mismatch!"
+
+            X_te, y_te = X_te_, y_te_
 
         # apply z-score
         normalizer = ZScoreNormalizer().fit(X_tr)
