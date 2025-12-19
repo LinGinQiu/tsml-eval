@@ -72,7 +72,7 @@ model:
   # Other flags
   minority_class_id: 1      # 你的少数类 id（UCR 使用 np.unique 后得到的索引）
   cls_embed: true
-  recon_metric: "dilate"   # 同loss recon_metric, works here soft_dtw, dilate, mse
+  recon_metric: "mse"   # 同loss recon_metric, works here soft_dtw, dilate, mse
 
 loss:
   type: "lgd_vae_default"
