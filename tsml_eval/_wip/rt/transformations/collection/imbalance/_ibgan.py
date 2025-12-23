@@ -76,6 +76,8 @@ class IBGANAugmenter(BaseCollectionTransformer):
         self.n_jobs = n_jobs
         self.random_state = random_state
         self._random_state = None
+
+        self._generated_samples = None
         super().__init__()
 
     # ------------------------------------------------------------------
@@ -146,9 +148,8 @@ class IBGANAugmenter(BaseCollectionTransformer):
                 x_masked = M * x_real_ts + (1.0 - M) * z_noise
 
                 # (2) use current G to generate fake (numpy, used for D/C updates)
-                fake_ts, _ = self.generator.predict(
-                    [x_masked, hint, M, y_real], verbose=0
-                )  # (B, T, F)
+                fake_ts_tensor, _ = self.generator([x_masked, hint, M, y_real], training=False)
+                fake_ts = fake_ts_tensor.numpy()  # (B, T, F)
 
                 # ----------------------------------------------------
                 # Step 1: train Discriminator (fix G, C)
@@ -369,7 +370,7 @@ class IBGANAugmenter(BaseCollectionTransformer):
 
         X_synth = np.concatenate(X_synth_list, axis=0)
         y_synth = np.concatenate(y_synth_list, axis=0)
-
+        self._generated_samples = X_synth
         X_aug = np.concatenate([X, X_synth], axis=0)
         y_aug = np.concatenate([y, y_synth], axis=0)
 
@@ -548,8 +549,8 @@ class IBGANAugmenter(BaseCollectionTransformer):
 
 
 if __name__ == "__main__":
-    dataset_name = 'ChlorineConcentration'
-    smote = IBGANAugmenter(epochs=10,)
+    dataset_name = 'AllGestureWiimoteX_eq'
+    smote = IBGANAugmenter()
     # Example usage
     from local.load_ts_data import load_ts_data
 
@@ -558,16 +559,76 @@ if __name__ == "__main__":
     arr = X_test
     # 检查是否有 NaN
     print(np.isnan(arr).any())  # True
+
     X_resampled, y_resampled = smote.fit_transform(X_train, y_train)
     print(X_resampled.shape)
     print(np.unique(y_resampled, return_counts=True))
-
-    # from aeon.classification.deep_learning import MLPClassifier
-    # hc2 = MLPClassifier()
-    # from aeon.classification.hybrid import HIVECOTEV2
+    # # Example usage
+    # dataset_name = 'yanran'
+    # from local.baseline_rf_classifier import load_samples_from_directory, extract_raw_features
+    # from pathlib import Path
     #
-    # hc2 = HIVECOTEV2()
-    # hc2.fit(X_resampled, y_resampled)
-    # y_pred = hc2.predict(X_test)
-    # acc = np.mean(y_pred == y_test)
-    # print(acc)
+    # dataset_path = Path('/Users/qiuchuanhang/PycharmProjects/tsml-eval/local')
+    # train_dangerous_dir = dataset_path / "train" / "dangerous"
+    # train_normal_dir = dataset_path / "train" / "normal"
+    # train_dangerous_orig = load_samples_from_directory(train_dangerous_dir)
+    # train_normal = load_samples_from_directory(train_normal_dir)
+    # train_dangerous = np.array([extract_raw_features(s) for s in train_dangerous_orig])
+    # train_normal = np.array([extract_raw_features(s) for s in train_normal])
+    # X_tr = np.concatenate([train_dangerous, train_normal], axis=0)
+    # y_tr = np.array([1] * len(train_dangerous_orig) + [0] * len(train_normal))
+    # X_tr = X_tr[:, np.newaxis, :]  # (N, C=1, T)
+    # try:
+    #     X_resampled, y_resampled = np.load('/Users/qiuchuanhang/PycharmProjects/tsml-eval/local/yanran')
+    # except FileNotFoundError:
+    #     smote = IBGANAugmenter(epochs=10, )
+    #     X_resampled, y_resampled = smote.fit_transform(X_tr, y_tr)
+    #     X_resampled = X_resampled.squeeze()
+    #     print(f'Original dataset shape {np.unique(y_tr, return_counts=True)}')
+    #     print(f'Resampled dataset shape {np.unique(y_resampled, return_counts=True)}')
+    #     print(f'Resampled X shape {X_resampled.shape,}')
+    # eval_dangerous_dir = dataset_path / "eval" / "dangerous"
+    # eval_normal_dir = dataset_path / "eval" / "normal"
+    #
+    # eval_dangerous, eval_dangerous_tof_paths, eval_dangerous_rs_paths = load_samples_from_directory(eval_dangerous_dir,
+    #                                                                                                 return_paths=True)
+    # eval_normal, eval_normal_tof_paths, eval_normal_rs_paths = load_samples_from_directory(eval_normal_dir,
+    #                                                                                        return_paths=True)
+    #
+    # X_eval_dangerous = np.array([extract_raw_features(s) for s in eval_dangerous])
+    # X_eval_normal = np.array([extract_raw_features(s) for s in eval_normal])
+    # X_eval = np.vstack([X_eval_dangerous, X_eval_normal])
+    # y_eval = np.array([1] * len(eval_dangerous) + [0] * len(eval_normal))
+    #
+    # from local.baseline_rf_classifier import train_rf_classifier, evaluate_classifier
+    #
+    # clf = train_rf_classifier(
+    #     X_tr.squeeze(), y_tr,
+    #     n_estimators=100,
+    #     max_depth=None,
+    #     min_samples_split=2,
+    #     min_samples_leaf=1,
+    #     random_state=42
+    # )
+    # print("\n" + "=" * 60)
+    # print("EVALUATION RESULTS of ORIGINAL DATA")
+    # print("=" * 60)
+    # threshold = 0.4
+    #
+    # results = evaluate_classifier(clf, X_eval, y_eval, threshold=threshold)
+    #
+    # print(f"\nClassification threshold: {threshold}")
+    # print(f"Confusion Matrix:")
+    # print(results['confusion_matrix'])
+    # clf = train_rf_classifier(
+    #     X_resampled, y_resampled,
+    #     n_estimators=100,
+    #     max_depth=None,
+    #     min_samples_split=2,
+    #     min_samples_leaf=1,
+    #     random_state=42
+    # )
+    # print("EVALUATION RESULTS of RESAMPLED DATA")
+    # results = evaluate_classifier(clf, X_eval, y_eval, threshold=threshold)
+    #
+    # print(results['confusion_matrix'])

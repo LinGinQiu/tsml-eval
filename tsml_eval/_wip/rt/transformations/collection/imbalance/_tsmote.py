@@ -57,7 +57,7 @@ class TSMOTE(BaseCollectionTransformer):
 
         self._random_state = None
         self._distance_params = distance_params or {}
-
+        self._generated_samples = None
         super().__init__()
 
     def _fit(self, X, y=None):
@@ -100,7 +100,7 @@ class TSMOTE(BaseCollectionTransformer):
         # Initialize lists for resampled data
         X_resampled = [X.copy()]
         y_resampled = [y.copy()]
-
+        n_samples_ori = len(X)
         n_synthetic_needed = self.n_majority_ - self.n_minority_
 
         # Get majority samples to use as spies
@@ -198,8 +198,10 @@ class TSMOTE(BaseCollectionTransformer):
         for synthetic in synthetic_samples:
             X_resampled.append(synthetic.reshape(1, *synthetic.shape))
             y_resampled.append(self.minority_class_)
-
-        return (np.vstack(X_resampled), np.hstack(y_resampled))
+        X_resampled = np.vstack(X_resampled)
+        y_resampled = np.hstack(y_resampled)
+        self._generated_samples = X_resampled[n_samples_ori:, :, :]
+        return X_resampled, y_resampled
 
     def _generate_temporal_sample(self, x, leading_time):
         """Generate a temporal sample with given leading time."""

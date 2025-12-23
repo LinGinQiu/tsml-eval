@@ -96,6 +96,7 @@ class VOTE(BaseCollectionTransformer):
         self.n_generate_samples = None
         self._cls_maj = None
         self._cls_min = None
+        self._generated_samples = None
         self._init_model()
         super().__init__()
 
@@ -196,19 +197,19 @@ class VOTE(BaseCollectionTransformer):
             if self.visualize:
                 _plot_series_list(new_ts[num1:num1 + 10], title="generated from latent smote")
 
+
+        self._generated_samples = new_ts.copy()
         X_resampled.append(new_ts)
         y_resampled.append(new_ys)
         X_synthetic = np.vstack(X_resampled)
         y_synthetic = np.hstack(y_resampled)
-        print(np.isfinite(X).all())  # 整体是否存在异常值
-        print(np.isnan(X).any())  # 是否有 NaN
-        print(np.isinf(X).any())  # 是否有 Inf
+
         return X_synthetic, y_synthetic
 
 
 if __name__ == "__main__":
     dataset_name = 'AllGestureWiimoteX_eq'
-    smote = VOTE(mode='latent', random_state=0, visualize=True, dataset_name=dataset_name)
+    smote = VOTE(mode='latent', random_state=0, visualize=False, dataset_name=dataset_name)
     # Example usage
     from local.load_ts_data import load_ts_data
 
@@ -224,23 +225,23 @@ if __name__ == "__main__":
 
     # from aeon.classification.deep_learning import MLPClassifier
     # hc2 = MLPClassifier()
-    from aeon.classification.hybrid import HIVECOTEV2
-
-    hc2 = HIVECOTEV2()
-    hc2.fit(X_resampled, y_resampled)
-    y_pred = hc2.predict(X_test)
-    acc = np.mean(y_pred == y_test)
-    print(acc)
-    # stop = ""
-    # n_samples = 100  # Total number of labels
-    # majority_num = 90  # number of majority class
-    # minority_num = n_samples - majority_num  # number of minority class
-    # np.random.seed(42)
+    # from aeon.classification.hybrid import HIVECOTEV2
     #
-    # X = np.random.rand(n_samples, 1, 10)
-    # y = np.array([0] * majority_num + [1] * minority_num)
-    # print(np.unique(y, return_counts=True))
-    #
-    # X_resampled, y_resampled = smote.fit_transform(X, y)
-    # print(X_resampled.shape)
-    # print(np.unique(y_resampled, return_counts=True))
+    # hc2 = HIVECOTEV2()
+    # hc2.fit(X_resampled, y_resampled)
+    # y_pred = hc2.predict(X_test)
+    # acc = np.mean(y_pred == y_test)
+    # print(acc)
+    # # stop = ""
+    # # n_samples = 100  # Total number of labels
+    # # majority_num = 90  # number of majority class
+    # # minority_num = n_samples - majority_num  # number of minority class
+    # # np.random.seed(42)
+    # #
+    # # X = np.random.rand(n_samples, 1, 10)
+    # # y = np.array([0] * majority_num + [1] * minority_num)
+    # # print(np.unique(y, return_counts=True))
+    # #
+    # # X_resampled, y_resampled = smote.fit_transform(X, y)
+    # # print(X_resampled.shape)
+    # # print(np.unique(y_resampled, return_counts=True))

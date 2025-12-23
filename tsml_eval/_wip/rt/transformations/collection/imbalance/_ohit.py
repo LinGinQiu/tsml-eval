@@ -57,6 +57,7 @@ class OHIT(BaseCollectionTransformer):
         self.drT = drT
         self.distance = distance
         self.random_state = random_state
+        self._generated_samples = None
         super().__init__()
 
     def _fit(self, X, y=None):
@@ -84,6 +85,7 @@ class OHIT(BaseCollectionTransformer):
             pass
         else:
             raise ValueError("Input X must be 2D or 3D")
+        n_samples_ori = X.shape[0]
         X_resampled = [X.copy()]
         y_resampled = [y.copy()]
 
@@ -142,6 +144,7 @@ class OHIT(BaseCollectionTransformer):
         X_resampled = np.vstack(X_resampled)
         y_resampled = np.hstack(y_resampled)
         X_resampled = X_resampled[:, np.newaxis, :]
+        self._generated_samples = X_resampled[n_samples_ori:, :, :]
         return X_resampled, y_resampled
 
     def _cluster_minority(self, X):

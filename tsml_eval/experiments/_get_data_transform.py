@@ -33,6 +33,7 @@ unbalanced_transformers = [
     "soft_twe",
     "cfam",
     "cdsmote",
+    "eval",
 ]
 unequal_transformers = [
     ["padder", "zero-padder"],
@@ -431,5 +432,16 @@ def _set_unbalanced_transformer(t, dataset_name, random_state, n_jobs):
         return CDSMOTE(
             n_clusters=2,
             k_neighbors=5,
+            random_state=random_state,
+        )
+
+    elif t == "eval":
+        from tsml_eval._wip.rt.transformations.collection.imbalance._rebalance_eval import (
+            rebalance_eval,
+        )
+
+        return rebalance_eval(
+            dataset_name=dataset_name,
+            n_jobs=n_jobs,
             random_state=random_state,
         )

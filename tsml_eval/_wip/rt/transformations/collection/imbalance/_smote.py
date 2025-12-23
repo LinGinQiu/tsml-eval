@@ -83,6 +83,7 @@ class SMOTE(BaseCollectionTransformer):
 
         self.nn_ = None
         self.new_generated_samples_pair = None
+        self._generated_samples = None
         super().__init__()
 
     def _fit(self, X, y=None):
@@ -153,6 +154,7 @@ class SMOTE(BaseCollectionTransformer):
         # reshape back to (n_new, c, l)
         X_stacked = np.stack(X_resampled_channels, axis=1)
         self.new_generated_samples_pair = None  # reset for next call
+        self._generated_samples = X_stacked[n_samples:, :, :]
         return X_stacked, y_resampled_final
 
     def _make_samples(
@@ -281,7 +283,6 @@ class SMOTE(BaseCollectionTransformer):
 
 if __name__ == "__main__":
     global leng
-    leng = -1
     dataset_name = 'MedicalImages'
     # Example usage
     from local.load_ts_data import load_ts_data
