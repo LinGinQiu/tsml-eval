@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 from tsml_eval._wip.rt.transformations.collection.imbalance.LGD_VAE.lgd_pipline import LGDVAEPipeline
 plt.close('all')
 import glob
-from tsml_eval._wip.rt.transformations.collection.imbalance._utils import _plot_series_list
+#
 from tsml_eval._wip.rt.classification.distance_based import KNeighborsTimeSeriesClassifier
 from tsml_eval._wip.rt.clustering.averaging._ba_utils import _get_alignment_path
 from aeon.transformations.collection import BaseCollectionTransformer
@@ -208,6 +208,8 @@ class VOTE(BaseCollectionTransformer):
 
 
 if __name__ == "__main__":
+    from tsml_eval._wip.rt.transformations.collection.imbalance._utils import _plot_series_list
+
     dataset_name = 'AllGestureWiimoteX_eq'
     smote = VOTE(mode='latent', random_state=0, visualize=False, dataset_name=dataset_name)
     # Example usage
@@ -218,7 +220,6 @@ if __name__ == "__main__":
     arr = X_test
     # 检查是否有 NaN
     print(np.isnan(arr).any())  # True
-
     X_resampled, y_resampled = smote.fit_transform(X_train, y_train)
     print(X_resampled.shape)
     print(np.unique(y_resampled, return_counts=True))
