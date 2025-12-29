@@ -6,10 +6,10 @@ experiment:
 
 paths:
   data_root: "/scratch/cq2u24/Data/imbalanced_9_1"
-  work_root: "/scratch/cq2u24/LGD_VAE_Final_wo_align"
-  logs_dir: "/scratch/cq2u24/LGD_VAE_Final_wo_align/logs"          # 不用 ${} 插值
-  ckpt_dir: "/scratch/cq2u24/LGD_VAE_Final_wo_align/checkpoints"
-  outputs_dir: "/scratch/cq2u24/LGD_VAE_Final_wo_align/imputations"
+  work_root: "/scratch/cq2u24/LGD_VAE_Final_dtw_wo_align"
+  logs_dir: "/scratch/cq2u24/LGD_VAE_Final_dtw_wo_align/logs"          # 不用 ${} 插值
+  ckpt_dir: "/scratch/cq2u24/LGD_VAE_Final_dtw_wo_align/checkpoints"
+  outputs_dir: "/scratch/cq2u24/LGD_VAE_Final_dtw_wo_align/imputations"
 
 data:
   # 由 CLI 覆盖：--dataset_name <UCR_NAME>
@@ -72,11 +72,11 @@ model:
   # Other flags
   minority_class_id: 1      # 你的少数类 id（UCR 使用 np.unique 后得到的索引）
   cls_embed: true
-  recon_metric: "mse"   # 同loss recon_metric, works here soft_dtw, dilate, mse
+  recon_metric: "soft_dtw"   # 同loss recon_metric, works here soft_dtw, dilate, mse
 
 loss:
   type: "lgd_vae_default"
-  recon_metric: "dilate"
+  recon_metric: "soft_dtw"
   huber_delta: 1.0
 
 optim:
@@ -106,8 +106,8 @@ trainer:
 # —— 新增：配合 train.py 里 callbacks 的访问 ——
 callbacks:
   checkpointing:
-    dirpath: "/scratch/cq2u24/LGD_VAE_Final_wo_align/checkpoints"
-    filename: "LGD_VAE_Final_wo_align-{epoch:02d}"
+    dirpath: "/scratch/cq2u24/LGD_VAE_Final_dtw_wo_align/checkpoints"
+    filename: "LGD_VAE_Final_dtw_wo_align-{epoch:02d}"
     monitor: "train/recon_loss"
     mode: "min"
     save_top_k: 1
@@ -123,7 +123,7 @@ callbacks:
 
 logging:
   use_tensorboard: true
-  project: "LGD_VAE_Final_wo_align-ucr"
+  project: "LGD_VAE_Final_dtw_wo_align-ucr"
   run_name: null
 
 impute_infer:
