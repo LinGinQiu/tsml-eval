@@ -235,7 +235,8 @@ class MGVAE(BaseCollectionTransformer):
             input_dim=self.input_dim,
             ewc_lambda=self.ewc_lambda,
             epochs_pre=self.epochs_pre,
-            epochs_fine=self.epochs_fine
+            epochs_fine=self.epochs_fine,
+            device=self._device,
         )
         return self
 
