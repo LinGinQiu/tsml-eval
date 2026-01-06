@@ -219,6 +219,10 @@ class MGVAE(BaseCollectionTransformer):
         print(f"device in oversampler is {self._device}")
         X = X.reshape(X.shape[0], -1)  # 展平输入
         self.input_dim = X.shape[-1]
+        mean, std = X.mean(axis=0), X.std(axis=0) + 1e-6
+        X = (X - mean) / std  # 简单标准化
+        self.mean = mean
+        self.std = std
         self._random_state = check_random_state(self.random_state)
         classes, counts = np.unique(y, return_counts=True)
         label_majority = classes[np.argmax(counts)]
@@ -246,8 +250,11 @@ class MGVAE(BaseCollectionTransformer):
         C, L = X.shape[1], X.shape[2]
         if self.model is None:
             raise RuntimeError("The model has not been trained yet. Call 'fit' first.")
-        X_majority = torch.tensor(X.reshape(X.shape[0], -1)[y == self._cls_maj], dtype=torch.float32).to(self._device)
+        X_normized = (X.reshape(X.shape[0], -1) - self.mean) / self.std
+        X_majority = torch.tensor(X_normized[y == self._cls_maj], dtype=torch.float32).to(self._device)
         X_new = generate_samples(self.model, X_majority).cpu().detach().numpy()
+        # 反标准化
+        X_new = X_new * self.std + self.mean
         index = self._random_state.choice(X_new.shape[0], size=self.n_generate_samples, replace=False)
         X_new = X_new[index][:,np.newaxis, :]
         y_new = np.array([self._cls_min] * self.n_generate_samples)
@@ -262,7 +269,7 @@ class MGVAE(BaseCollectionTransformer):
 if __name__ == "__main__":
     from tsml_eval._wip.rt.transformations.collection.imbalance._utils import _plot_series_list
 
-    dataset_name = 'AllGestureWiimoteX_eq'
+    dataset_name = 'AconityMINIPrinterLarge_eq'
     smote = MGVAE(random_state=0)
     # Example usage
     from local.load_ts_data import load_ts_data
