@@ -25,6 +25,7 @@ unbalanced_transformers = [
     "lgd_l",
     "lgd_p",
     "lgd_lp",
+    "mgvae",
     "ibgan",
     "soft_msm",
     "adtw",
@@ -227,6 +228,17 @@ def _set_unbalanced_transformer(t, dataset_name, random_state, n_jobs):
             dataset_name=dataset_name,
             mode="lp",
             random_state=random_state,
+        )
+    elif t == "mgvae":
+        from tsml_eval._wip.rt.transformations.collection.imbalance._mgvae import (
+            MGVAE,
+        )
+
+        return MGVAE(
+            epochs_pre=100,
+            epochs_fine=100,
+            random_state=random_state,
+            n_jobs=n_jobs,
         )
     elif t == "esmote":
         from tsml_eval._wip.rt.transformations.collection.imbalance._esmote import (
