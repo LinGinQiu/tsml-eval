@@ -9,10 +9,6 @@ from torch.utils.data import DataLoader, TensorDataset
 import math
 # ---------------------------------------------------------
 class MGVAE_model(nn.Module):
-    """
-    标准的 VAE 架构，用于 MGVAE 的骨干网络 [cite: 523]
-    """
-
     def __init__(self, input_dim=784, hidden_dim=400, latent_dim=20):
         super().__init__()
         # Encoder
@@ -35,10 +31,15 @@ class MGVAE_model(nn.Module):
 
     def decode(self, z):
         h3 = F.relu(self.fc3(z))
-        return torch.sigmoid(self.fc4(h3))  # 假设数据归一化到 [0, 1]
+        return self.fc4(h3)
 
     def forward(self, x):
         mu, logvar = self.encode(x)
+
+        # === 关键修改：数值截断 ===
+        # 强制 logvar 在 [-10, 10] 之间，防止数值爆炸
+        logvar = torch.clamp(logvar, min=-10, max=10)
+
         z = self.reparameterize(mu, logvar)
         return self.decode(z), mu, logvar
 
@@ -50,9 +51,9 @@ def log_normal_diag(x, mu, logvar):
     """
     计算 x 在高斯分布 N(mu, exp(logvar)) 下的对数概率
     """
-    # const = -0.5 * math.log(2 * math.pi)
-    # 忽略常数项通常不影响优化，但为了精确复现最好加上
-    return -0.5 * (logvar + (x - mu).pow(2) / logvar.exp())
+    # 加上一个极小值 1e-8 防止除以 0
+    var = torch.exp(logvar) + 1e-8
+    return -0.5 * (logvar + (x - mu).pow(2) / var)
 
 
 def log_mean_exp(value, dim=0):
@@ -125,7 +126,7 @@ def loss_function_mgvae(model, x, x_majority_sample, mu, logvar, z, recon_x):
 # ---------------------------------------------------------
 # [cite_start]3. 修改后的训练循环 (Train Pipeline) [cite: 469]
 # ---------------------------------------------------------
-def train_mgvae_pipeline(majority_data, minority_data, input_dim, ewc_lambda=500, epochs_pre=50, epochs_fine=50,
+def train_mgvae_pipeline(majority_data, minority_data, input_dim, ewc_lambda=500, epochs_pre=200, epochs_fine=100,
                          device=None, S=100):
     """
     S: 每次计算先验时采样的多数类样本数量 (Algorithm 2 中的 S)
@@ -145,7 +146,7 @@ def train_mgvae_pipeline(majority_data, minority_data, input_dim, ewc_lambda=500
 
     model = MGVAE_model(input_dim=input_dim).to(device)
     optimizer = optim.Adam(model.parameters(), lr=1e-3)
-
+    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=50, gamma=0.5)
     # --- Helper: 随机采样 S 个多数类样本作为先验 ---
     def get_majority_prior_samples(n_samples):
         idx = torch.randperm(num_maj)[:n_samples]
@@ -176,7 +177,10 @@ def train_mgvae_pipeline(majority_data, minority_data, input_dim, ewc_lambda=500
 
             loss.backward()
             total_loss += loss.item()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=5.0)
+
             optimizer.step()
+            scheduler.step()
 
         if epoch % 10 == 0:
             print(f'Pre-train Epoch {epoch}: Loss: {total_loss / len(maj_loader):.4f}')
@@ -198,6 +202,8 @@ def train_mgvae_pipeline(majority_data, minority_data, input_dim, ewc_lambda=500
     # Stage 2: Fine-tuning
     # ==========================
     print(f"--- Stage 2: Fine-tuning on Minority Data ---")
+    optimizer = optim.Adam(model.parameters(), lr=1e-3)
+    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=50, gamma=0.5)
     for epoch in range(epochs_fine):
         total_loss = 0
         for batch_idx, (data,) in enumerate(min_loader):
@@ -218,11 +224,21 @@ def train_mgvae_pipeline(majority_data, minority_data, input_dim, ewc_lambda=500
             ewc_loss = ewc.penalty(model)
 
             loss = vae_loss + ewc_lambda * ewc_loss
+            # 检查 loss 是否已经是 nan
+            if torch.isnan(loss):
+                print(f"Warning: Loss is NaN at epoch {epoch}. Skipping step.")
+                optimizer.zero_grad()
+                continue
 
             loss.backward()
+
+            # === 关键修改：梯度裁剪 ===
+            # 防止梯度爆炸，阈值设为 5 或 10
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=5)
+
             total_loss += loss.item()
             optimizer.step()
-
+            scheduler.step()
         if epoch % 10 == 0:
             print(f'Fine-tune Epoch {epoch}: Loss: {total_loss / len(min_loader):.4f}')
 
@@ -336,7 +352,7 @@ class MGVAE(BaseCollectionTransformer):
     MGVAE 转换器封装
     """
 
-    def __init__(self, ewc_lambda=500, epochs_pre=50, epochs_fine=50, n_jobs: int = 1,
+    def __init__(self, ewc_lambda=500, epochs_pre=200, epochs_fine=100, n_jobs: int = 1,
             random_state=None,
     ):
 
