@@ -235,7 +235,7 @@ def _set_unbalanced_transformer(t, dataset_name, random_state, n_jobs):
         )
 
         return MGVAE(
-            epochs_pre=100,
+            epochs_pre=200,
             epochs_fine=100,
             random_state=random_state,
             n_jobs=n_jobs,

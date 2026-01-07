@@ -1,13 +1,12 @@
-import torch
-import torch.nn as nn
-import torch.optim as optim
-from torch.nn import functional as F
-from torch.utils.data import DataLoader, TensorDataset
-import copy
 import numpy as np
 from sklearn.utils import check_random_state
 from aeon.transformations.collection import BaseCollectionTransformer
-
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import torch.optim as optim
+from torch.utils.data import DataLoader, TensorDataset
+import math
 # ---------------------------------------------------------
 class MGVAE_model(nn.Module):
     """
@@ -45,113 +44,179 @@ class MGVAE_model(nn.Module):
 
 
 # ---------------------------------------------------------
-# 损失函数
+# 1. 辅助数学函数 (实现 Log-Sum-Exp Trick 防止数值溢出)
 # ---------------------------------------------------------
-def loss_function(recon_x, x, mu, logvar):
+def log_normal_diag(x, mu, logvar):
     """
-    标准 VAE Loss: Reconstruction + KL Divergence
-    注意：论文中使用了基于多数类的混合先验，但在快速实现中，
-    EWC 和 Pre-train 是防止坍塌的最关键因素 [cite: 304]。
+    计算 x 在高斯分布 N(mu, exp(logvar)) 下的对数概率
     """
-    MSE = F.mse_loss(recon_x, x, reduction='sum')
-    KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
-    return MSE + KLD
+    # const = -0.5 * math.log(2 * math.pi)
+    # 忽略常数项通常不影响优化，但为了精确复现最好加上
+    return -0.5 * (logvar + (x - mu).pow(2) / logvar.exp())
+
+
+def log_mean_exp(value, dim=0):
+    """
+    计算 log(mean(exp(value)))，使用 log-sum-exp 技巧
+    log(1/N * sum(exp(x))) = log(sum(exp(x))) - log(N)
+    """
+    return torch.logsumexp(value, dim=dim) - math.log(value.size(dim))
 
 
 # ---------------------------------------------------------
-# EWC (Elastic Weight Consolidation) 工具类 [cite: 147, 153]
+# [cite_start]2. 核心：Majority-Guided Loss Function [cite: 100, 446]
 # ---------------------------------------------------------
-class EWC:
-    def __init__(self, model, dataloader, device):
-        self.model = model
-        self.dataloader = dataloader
-        self.device = device
-        self.params = {n: p for n, p in self.model.named_parameters() if p.requires_grad}
-        self.mean = {}  # 存储旧参数 (Pre-trained weights)
-        self.fisher = {}  # 存储 Fisher 信息矩阵 (参数重要性)
+def loss_function_mgvae(model, x, x_majority_sample, mu, logvar, z, recon_x):
+    """
+    实现论文 Eq. (4) 和 Algorithm 2
+    x: 当前训练的 batch (可能是少数类，也可能是多数类)
+    x_majority_sample: 用于构建先验的多数类样本 (Batch size S)
+    """
+    batch_size = x.size(0)
 
-        self._compute_fisher()
+    # 1. Reconstruction Loss (重构误差)
+    # 论文中通常使用 SSE (Sum Squared Error) 或 BCE，这里保持与原代码一致
+    MSE = F.mse_loss(recon_x, x, reduction='sum') / batch_size
 
-    def _compute_fisher(self):
-        # 初始化 Fisher 矩阵
-        for n, p in self.params.items():
-            self.mean[n] = p.clone().detach()
-            self.fisher[n] = torch.zeros_like(p.data)
+    # 2. 计算 log q(z|x) (当前样本的后验概率)
+    # z: [batch_size, latent_dim]
+    # mu, logvar: [batch_size, latent_dim]
+    log_q_z = log_normal_diag(z, mu, logvar)
+    log_q_z = torch.sum(log_q_z, dim=1)  # [batch_size]
 
-        self.model.eval()
-        for batch_idx, (data,) in enumerate(self.dataloader):
-            data = data.to(self.device)
-            self.model.zero_grad()
+    # 3. 计算 log p(z) (基于多数类的混合先验概率)
+    # 我们需要计算 z 在 "S个多数类样本形成的高斯混合分布" 下的概率
+    # Prior p(z) = 1/S * sum_k N(z | mu_k, var_k)
 
-            # 使用 VAE loss 的梯度近似 Fisher 信息
-            recon_batch, mu, logvar = self.model(data)
-            loss = loss_function(recon_batch, data, mu, logvar)
-            loss.backward()
+    with torch.no_grad():
+        # 获取多数类样本的分布参数，作为先验的组件
+        # 这些参数在计算 Loss 时被视为常数 (detach)
+        mu_maj, logvar_maj = model.encode(x_majority_sample)
 
-            for n, p in self.model.named_parameters():
-                if p.grad is not None:
-                    # Fisher = Expectation of gradients squared
-                    self.fisher[n] += p.grad.data.pow(2) / len(self.dataloader)
+    # 扩展维度以便进行广播计算 (Pairwise distance)
+    # z_expand:      [batch_size, 1, latent_dim]
+    # mu_maj_expand: [1, S, latent_dim]
+    z_expand = z.unsqueeze(1)
+    mu_maj_expand = mu_maj.unsqueeze(0)
+    logvar_maj_expand = logvar_maj.unsqueeze(0)
 
-        self.model.train()  # 切回训练模式
+    # 计算 log N(z_i | mu_k, var_k)
+    # 结果 shape: [batch_size, S, latent_dim]
+    log_p_z_components = log_normal_diag(z_expand, mu_maj_expand, logvar_maj_expand)
 
-    def penalty(self, model):
-        """计算 EWC 惩罚项 """
-        loss = 0
-        for n, p in model.named_parameters():
-            _loss = self.fisher[n] * (p - self.mean[n]).pow(2)
-            loss += _loss.sum()
-        return loss
+    # 在 latent_dim 维度求和 -> log probability per component
+    # shape: [batch_size, S]
+    log_p_z_components = torch.sum(log_p_z_components, dim=2)
+
+    # 计算混合概率 log(1/S * sum(exp(...)))
+    # shape: [batch_size]
+    log_p_z = log_mean_exp(log_p_z_components, dim=1)
+
+    # 4. KL Divergence 近似: E[log q(z|x) - log p(z)]
+    # 注意：这里我们计算的是 batch 上的均值
+    KL = (log_q_z - log_p_z).mean()
+
+    # Total Loss
+    # 论文通常是 sum over batch，还是 mean?
+    # Algorithm 2 显示是 1/B * sum(...)，即 mean。
+    return MSE + KL
 
 
 # ---------------------------------------------------------
-# 训练与生成流程
+# [cite_start]3. 修改后的训练循环 (Train Pipeline) [cite: 469]
 # ---------------------------------------------------------
-def train_mgvae_pipeline(majority_data, minority_data, input_dim, ewc_lambda=500, epochs_pre=50, epochs_fine=50,device=None):
-    device = device
+def train_mgvae_pipeline(majority_data, minority_data, input_dim, ewc_lambda=500, epochs_pre=50, epochs_fine=50,
+                         device=None, S=100):
+    """
+    S: 每次计算先验时采样的多数类样本数量 (Algorithm 2 中的 S)
+    """
+    device = device if device else torch.device("cpu")
 
-    # 1. 数据准备
-    maj_loader = DataLoader(TensorDataset(majority_data), batch_size=100, shuffle=True)
-    min_loader = DataLoader(TensorDataset(minority_data), batch_size=10, shuffle=True)  # 少数类 Batch 较小
+    # 转换为 Dataset
+    maj_dataset = TensorDataset(majority_data)
+    min_dataset = TensorDataset(minority_data)
+
+    maj_loader = DataLoader(maj_dataset, batch_size=100, shuffle=True)
+    min_loader = DataLoader(min_dataset, batch_size=10, shuffle=True)
+
+    # 用于随机采样的完整多数类数据 (放在 GPU 上以便快速索引，如果显存够的话)
+    majority_data_full = majority_data.to(device)
+    num_maj = majority_data_full.size(0)
 
     model = MGVAE_model(input_dim=input_dim).to(device)
     optimizer = optim.Adam(model.parameters(), lr=1e-3)
 
-    print(f"--- Stage 1: Pre-training on Majority Data ({epochs_pre} epochs) [cite: 142] ---")
+    # --- Helper: 随机采样 S 个多数类样本作为先验 ---
+    def get_majority_prior_samples(n_samples):
+        idx = torch.randperm(num_maj)[:n_samples]
+        return majority_data_full[idx]
+
+    # ==========================
+    # Stage 1: Pre-training
+    # ==========================
+    print(f"--- Stage 1: Pre-training on Majority Data ---")
     model.train()
     for epoch in range(epochs_pre):
         total_loss = 0
         for batch_idx, (data,) in enumerate(maj_loader):
             data = data.to(device)
             optimizer.zero_grad()
+
+            # 1. Forward
             recon_batch, mu, logvar = model(data)
-            loss = loss_function(recon_batch, data, mu, logvar)
+            # 2. Reparameterize (为了计算 Loss 中的 z)
+            z = model.reparameterize(mu, logvar)
+
+            # 3. 采样 Prior 参考样本 (来自多数类)
+            # Algorithm 2 Line 3: Randomly down-sample S majority samples
+            x_maj_prior = get_majority_prior_samples(S)
+
+            # 4. 计算 MGVAE Loss
+            loss = loss_function_mgvae(model, data, x_maj_prior, mu, logvar, z, recon_batch)
+
             loss.backward()
             total_loss += loss.item()
             optimizer.step()
+
         if epoch % 10 == 0:
-            print(f'Pre-train Epoch {epoch}: Average Loss: {total_loss / len(maj_loader.dataset):.4f}')
+            print(f'Pre-train Epoch {epoch}: Loss: {total_loss / len(maj_loader):.4f}')
 
-    print("--- Calculating Fisher Information for EWC [cite: 152] ---")
-    # 在多数类数据上计算参数重要性
-    ewc = EWC(model, maj_loader, device)
+    # ==========================
+    # EWC Calculation
+    # ==========================
+    print("--- Calculating Fisher Information for EWC ---")
+    ewc = EWC(
+        model=model,
+        dataloader=maj_loader,
+        device=device,
+        loss_fn_ref=loss_function_mgvae,  # 传入刚才定义的函数
+        majority_data_tensor=majority_data_full,  # 传入完整 tensor
+        S=S
+    )
 
-    print(f"--- Stage 2: Fine-tuning on Minority Data ({epochs_fine} epochs) with EWC [cite: 143, 147] ---")
-    # 注意：此时我们是在微调同一个模型，目的是让它适应少数类，但不要忘记多数类的结构
+    # ==========================
+    # Stage 2: Fine-tuning
+    # ==========================
+    print(f"--- Stage 2: Fine-tuning on Minority Data ---")
     for epoch in range(epochs_fine):
         total_loss = 0
         for batch_idx, (data,) in enumerate(min_loader):
             data = data.to(device)
             optimizer.zero_grad()
+
             recon_batch, mu, logvar = model(data)
+            z = model.reparameterize(mu, logvar)
 
-            # 基础 VAE Loss
-            vae_loss = loss_function(recon_batch, data, mu, logvar)
+            # 同样需要采样多数类作为先验指导！
+            # 这是论文核心：即使在微调少数类时，Latent Space 也是由多数类定义的
+            x_maj_prior = get_majority_prior_samples(S)
 
-            # EWC 正则项: lambda * sum(F * (theta - theta_old)^2)
+            # MGVAE Loss
+            vae_loss = loss_function_mgvae(model, data, x_maj_prior, mu, logvar, z, recon_batch)
+
+            # EWC Regularization
             ewc_loss = ewc.penalty(model)
 
-            # 总损失
             loss = vae_loss + ewc_lambda * ewc_loss
 
             loss.backward()
@@ -159,10 +224,94 @@ def train_mgvae_pipeline(majority_data, minority_data, input_dim, ewc_lambda=500
             optimizer.step()
 
         if epoch % 10 == 0:
-            print(f'Fine-tune Epoch {epoch}: Average Loss: {total_loss / len(min_loader.dataset):.4f}')
+            print(f'Fine-tune Epoch {epoch}: Loss: {total_loss / len(min_loader):.4f}')
 
     return model
 
+
+# ---------------------------------------------------------
+# EWC (Elastic Weight Consolidation) 工具类 [cite: 147, 153]
+# ---------------------------------------------------------
+import torch
+
+
+class EWC:
+    def __init__(self, model, dataloader, device, loss_fn_ref, majority_data_tensor, S=100):
+        """
+        Args:
+            model: 预训练好的模型
+            dataloader: 多数类数据的 DataLoader (用于计算 Fisher)
+            device: 计算设备
+            loss_fn_ref: 引用外部定义的 loss_function_mgvae 函数
+            majority_data_tensor: 完整的多数类数据 Tensor (用于随机采样 Prior)
+            S: 每次计算 Loss 时采样的 Prior 数量
+        """
+        self.model = model
+        self.dataloader = dataloader
+        self.device = device
+        self.loss_fn = loss_fn_ref
+        self.majority_data_tensor = majority_data_tensor
+        self.S = S
+
+        # 获取需要计算重要性的参数
+        self.params = {n: p for n, p in self.model.named_parameters() if p.requires_grad}
+        self.mean = {}  # 旧参数 θ*
+        self.fisher = {}  # Fisher 信息矩阵 F
+
+        self._compute_fisher()
+
+    def _get_prior_samples(self):
+        """从多数类数据中随机采样 S 个样本用于构建先验"""
+        idx = torch.randperm(self.majority_data_tensor.size(0))[:self.S]
+        return self.majority_data_tensor[idx].to(self.device)
+
+    def _compute_fisher(self):
+        # 1. 保存旧参数 (Pre-trained weights)
+        for n, p in self.params.items():
+            self.mean[n] = p.clone().detach()
+            self.fisher[n] = torch.zeros_like(p.data)
+
+        self.model.eval()  # 评估模式，但这不影响梯度回传计算 Fisher
+
+        # 2. 遍历多数类数据计算梯度平方期望
+        # Fisher F = E[ (grad log p(x))^2 ]
+        for batch_idx, (data,) in enumerate(self.dataloader):
+            data = data.to(self.device)
+            self.model.zero_grad()
+
+            # Forward
+            recon_batch, mu, logvar = self.model(data)
+            z = self.model.reparameterize(mu, logvar)
+
+            # 关键修改：获取先验样本，并使用 MGVAE 的 Loss
+            x_maj_prior = self._get_prior_samples()
+
+            # 使用与训练时相同的 Loss 函数计算曲率 [cite: 153]
+            loss = self.loss_fn(self.model, data, x_maj_prior, mu, logvar, z, recon_batch)
+
+            loss.backward()
+
+            # 累积梯度的平方
+            for n, p in self.model.named_parameters():
+                if p.grad is not None:
+                    # 将梯度平方累加，最后取平均
+                    self.fisher[n] += p.grad.data.pow(2) / len(self.dataloader)
+
+        self.model.train()  # 切回训练模式
+
+    def penalty(self, model):
+        """计算 EWC 惩罚项: lambda * sum( F * (theta - theta_old)^2 ) [cite: 157]"""
+        loss = 0
+        for n, p in model.named_parameters():
+            if n in self.fisher:
+                _loss = self.fisher[n] * (p - self.mean[n]).pow(2)
+                loss += _loss.sum()
+        return loss
+
+
+# ---------------------------------------------------------
+# 训练与生成流程
+# ---------------------------------------------------------
 
 def generate_samples(model, majority_samples):
     """
