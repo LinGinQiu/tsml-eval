@@ -6,10 +6,10 @@ experiment:
 
 paths:
   data_root: "/scratch/cq2u24/Data/imbalanced_9_1"
-  work_root: "/scratch/cq2u24/LGD_VAE_dilate_loss"
-  logs_dir: "/scratch/cq2u24/LGD_VAE_dilate_loss/logs"          # 不用 ${} 插值
-  ckpt_dir: "/scratch/cq2u24/LGD_VAE_dilate_loss/checkpoints"
-  outputs_dir: "/scratch/cq2u24/LGD_VAE_dilate_loss/imputations"
+  work_root: "/scratch/cq2u24/LGD_VAE_dilate_loss0.3"
+  logs_dir: "/scratch/cq2u24/LGD_VAE_dilate_loss0.3/logs"          # 不用 ${} 插值
+  ckpt_dir: "/scratch/cq2u24/LGD_VAE_dilate_loss0.3/checkpoints"
+  outputs_dir: "/scratch/cq2u24/LGD_VAE_dilate_loss0.3/imputations"
 
 data:
   # 由 CLI 覆盖：--dataset_name <UCR_NAME>
@@ -62,7 +62,7 @@ model:
   # Initialization & extras
 
   # Loss weights（见 pl_model 中对应 log 键）
-  align_lambda: 0.10       # \lambda_align，用于 \mathcal{L}_{align} 0.10
+  align_lambda: 0.30       # \lambda_align，用于 \mathcal{L}_{align} 0.10
   cls_lambda: 1.0          # 若不开类别监督，这里为 0
   kl_g_lambda: 0.05         # 全局 KL 系数（beta-VAE 风格）
   kl_c_lambda: 0.05         # 类别 KL 系数
@@ -106,8 +106,8 @@ trainer:
 # —— 新增：配合 train.py 里 callbacks 的访问 ——
 callbacks:
   checkpointing:
-    dirpath: "/scratch/cq2u24/LGD_VAE_dilate_loss/checkpoints"
-    filename: "LGD_VAE_dilate_loss-{epoch:02d}"
+    dirpath: "/scratch/cq2u24/LGD_VAE_dilate_loss0.3/checkpoints"
+    filename: "LGD_VAE_dilate_loss0.3-{epoch:02d}"
     monitor: "train/recon_loss"
     mode: "min"
     save_top_k: 1
@@ -123,7 +123,7 @@ callbacks:
 
 logging:
   use_tensorboard: true
-  project: "LGD_VAE_dilate_loss-ucr"
+  project: "LGD_VAE_dilate_loss0.3-ucr"
   run_name: null
 
 impute_infer:
