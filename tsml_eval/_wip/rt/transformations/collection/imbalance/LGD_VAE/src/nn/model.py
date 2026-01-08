@@ -421,7 +421,7 @@ class LatentGatedDualVAE(nn.Module):
                     z_g_min = z_g[is_min]                  # [B_min, G]
                     gate = self.gate(z_g_min)              # [B_min, G], in [0,1]
                     z_g_mix = gate * z_g_min + (1.0 - gate) * z_g_maj_mean
-                    # z_g_final[is_min] = z_g_mix
+                    z_g_final[is_min] = z_g_mix
                     # 对齐损失: 让 minority 的 z_g 靠近 majority 的均值
                     align_loss = (z_g_mix - z_g_maj_mean.detach()).pow(2).mean()
                 else:
