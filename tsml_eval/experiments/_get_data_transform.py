@@ -28,7 +28,8 @@ unbalanced_transformers = [
     "lgd_lp",
     "mgvae",
     "ibgan",
-    "soft_msm",
+    "timevae",
+    "timegan" "soft_msm",
     "adtw",
     "soft_adtw",
     "twe",
@@ -240,6 +241,27 @@ def _set_unbalanced_transformer(t, dataset_name, random_state, n_jobs):
             epochs_fine=100,
             random_state=random_state,
             n_jobs=n_jobs,
+        )
+    elif t == "timevae":
+        from tsml_eval._wip.rt.transformations.collection.imbalance._timevae import (
+            TimeVAE,
+        )
+
+        return TimeVAE(
+            random_state=random_state,
+        )
+    elif t == "timegan":
+        from tsml_eval._wip.rt.transformations.collection.imbalance._timegan import (
+            TimeGAN,
+        )
+
+        return TimeGAN(
+            module="gru",
+            hidden_dim=24,
+            num_layer=3,
+            iteration=5000,
+            batch_size=32,
+            random_state=random_state,
         )
     elif t == "hssmote":
         from tsml_eval._wip.rt.transformations.collection.imbalance._hssmote import (
