@@ -16,6 +16,7 @@ unbalanced_transformers = [
     "ohit",
     "esmote",
     "fbsmote",
+    "hssmote",
     "hw",
     "state",
     "dtw",
@@ -239,6 +240,15 @@ def _set_unbalanced_transformer(t, dataset_name, random_state, n_jobs):
             epochs_fine=100,
             random_state=random_state,
             n_jobs=n_jobs,
+        )
+    elif t == "hssmote":
+        from tsml_eval._wip.rt.transformations.collection.imbalance._hssmote import (
+            HS_SMOTE,
+        )
+
+        return HS_SMOTE(
+            n_neighbors=5,
+            random_state=random_state,
         )
     elif t == "esmote":
         from tsml_eval._wip.rt.transformations.collection.imbalance._esmote import (
