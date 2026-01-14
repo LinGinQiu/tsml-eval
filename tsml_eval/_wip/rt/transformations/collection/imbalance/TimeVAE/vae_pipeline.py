@@ -1,7 +1,5 @@
 import os, warnings, socket
 
-from keras.src.backend.config import max_epochs
-
 from tsml_eval._wip.rt.transformations.collection.imbalance.TimeVAE.data_utils import (
     inverse_transform_data,
     scale_data,
