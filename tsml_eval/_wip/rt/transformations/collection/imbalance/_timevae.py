@@ -23,10 +23,11 @@ class TimeVAE(BaseCollectionTransformer):
 
     def __init__(
             self,
+            dataset_name=None,
             random_state=None,
     ):
         self.random_state = random_state
-
+        self.dataset_name = dataset_name
         self._random_state = None
         self.sampling_strategy_ = None
         super().__init__()
@@ -90,7 +91,8 @@ class TimeVAE(BaseCollectionTransformer):
             # transform to float 32
             X_minority = X_minority.astype(np.float32)
             from tsml_eval._wip.rt.transformations.collection.imbalance.TimeVAE.vae_pipeline import run_vae_pipeline
-            generated_samples = run_vae_pipeline(X_minority, vae_type='timeVAE', n_samples=n_samples_needed)
+            generated_samples = run_vae_pipeline(X_minority, vae_type='timeVAE', n_samples=n_samples_needed,
+                                                 dataset_name=self.dataset_name,random_state=self.random_state)
             generated_samples_final = np.transpose(generated_samples, (0, 2, 1))
 
             # Append to lists

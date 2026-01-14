@@ -24,6 +24,7 @@ class TimeGAN(BaseCollectionTransformer):
 
     def __init__(
             self,
+            dataset_name: str = None,
             module: str = 'gru',
             hidden_dim: int = 24,
             num_layer: int = 3,
@@ -46,7 +47,7 @@ class TimeGAN(BaseCollectionTransformer):
         self.iteration = iteration
         self.batch_size = batch_size
         self.random_state = random_state
-
+        self.dataset_name = dataset_name
         self._random_state = None
         self.sampling_strategy_ = None
         super().__init__()
@@ -122,7 +123,9 @@ class TimeGAN(BaseCollectionTransformer):
                 'num_layer': self.num_layer,
                 'iterations': self.iteration,
                 'batch_size': min(self.batch_size, len(X_minority)),  # 防止 batch_size 大于样本数
-                'n_samples_to_generate': n_samples_needed  # 这是一个传递给 timegan 的额外参数(见下文注意)
+                'n_samples_to_generate': n_samples_needed,  # 这是一个传递给 timegan 的额外参数(见下文注意)
+                'dataset_name': self.dataset_name,
+                'random_state': self.random_state,
             }
 
             # 4. 调用 TimeGAN
@@ -155,30 +158,68 @@ class TimeGAN(BaseCollectionTransformer):
 
 
 if __name__ == "__main__":
-    # 测试代码
-    dataset_name = 'MedicalImages'  # 请确保你有这个数据的加载函数
+    import shutil
+    import os
+    import numpy as np
+
+    # 1. 设置测试参数
+    test_dataset_name = 'MedicalImages_Test_01'  # 使用一个特定的名字以便观察
+
+    # 尝试加载真实数据，如果没有则使用随机数据
     try:
         from local.load_ts_data import load_ts_data
 
-        X_train, y_train, X_test, y_test = load_ts_data(dataset_name)
-
-        print("Original distribution:", np.unique(y_train, return_counts=True))
-
-        # 初始化 TimeGAN
-        # 建议测试时 iteration 设小一点，否则非常慢
-        smote = TimeGAN(
-            iteration=10,
-            batch_size=32,
-            hidden_dim=24,
-            random_state=42
-        )
-
-        X_resampled, y_resampled = smote.fit_transform(X_train, y_train)
-
-        print("Resampled shape:", X_resampled.shape)
-        print("Resampled distribution:", np.unique(y_resampled, return_counts=True))
-
+        print(f"Loading real dataset: {test_dataset_name}...")
+        X_train, y_train, X_test, y_test = load_ts_data('MedicalImages')  # 这里传给 load_ts_data 的可以是原始名字
+        # 为了快速测试，只取前 50 个样本
+        X_train = X_train[:50]
+        y_train = y_train[:50]
     except ImportError:
-        print("Required modules for data loading not found. Please check imports.")
-    except Exception as e:
-        print(f"An error occurred: {e}")
+        print("!! Local data loader not found. Using synthetic dummy data for testing.")
+        # 创建假数据: (50个样本, 1个通道, 99个时间步)
+        X_train = np.random.rand(50, 1, 99).astype(np.float32)
+        # 创建不平衡标签: 45个 0, 5个 1
+        y_train = np.array([0] * 45 + [1] * 5)
+
+    print("Original distribution:", np.unique(y_train, return_counts=True))
+
+    # ==========================================
+    # 第一轮：第一次运行 (预期：开始训练)
+    # ==========================================
+    print("\n" + "=" * 50)
+    print(">>> RUN 1: Should start TRAINING from scratch")
+    print("=" * 50)
+
+    smote_run1 = TimeGAN(
+        dataset_name=test_dataset_name,  # 传入数据集名称，用于生成保存路径
+        iteration=10,  # 设小一点以便快速验证
+        batch_size=32,
+        hidden_dim=24,
+        random_state=42
+    )
+
+    # 这步应该会打印 "Start Embedding Network Training..."
+    X_res1, y_res1 = smote_run1.fit_transform(X_train, y_train)
+    print(f"Run 1 Finished. Result shape: {X_res1.shape}")
+
+    # ==========================================
+    # 第二轮：使用相同参数运行 (预期：加载模型)
+    # ==========================================
+    print("\n" + "=" * 50)
+    print(">>> RUN 2: Should LOAD existing model (Skip Training)")
+    print("=" * 50)
+
+    smote_run2 = TimeGAN(
+        dataset_name=test_dataset_name,  # 名字必须相同
+        iteration=100,
+        batch_size=32,
+        hidden_dim=24,
+        random_state=42  # 种子必须相同
+    )
+
+    # 这步应该会打印 "Found existing trained model..." 和 "Weights loaded successfully"
+    X_res2, y_res2 = smote_run2.fit_transform(X_train, y_train)
+    print(f"Run 2 Finished. Result shape: {X_res2.shape}")
+
+    # 简单验证两次结果是否一致 (由于加载了权重，生成的分布应该类似，但由于生成时的随机噪声Z不同，具体数值不会完全一样)
+    print("\nTest finished successfully.")

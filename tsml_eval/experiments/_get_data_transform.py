@@ -249,6 +249,7 @@ def _set_unbalanced_transformer(t, dataset_name, random_state, n_jobs):
         )
 
         return TimeVAE(
+            dataset_name=dataset_name,
             random_state=random_state,
         )
     elif t == "timegan":
@@ -257,6 +258,7 @@ def _set_unbalanced_transformer(t, dataset_name, random_state, n_jobs):
         )
 
         return TimeGAN(
+            dataset_name=dataset_name,
             module="gru",
             hidden_dim=24,
             num_layer=3,
