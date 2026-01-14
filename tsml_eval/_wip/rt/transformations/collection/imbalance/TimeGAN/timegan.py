@@ -87,7 +87,7 @@ def timegan(ori_data, parameters):
 
     def make_rnn_model(input_dim, output_dim, num_layers, activation='tanh', output_activation=None, name='model'):
         model = tf.keras.Sequential(name=name)
-        model.add(tf.keras.layers.InputLayer(shape=(max_seq_len, input_dim))) # TF2.x use 'shape' instead of 'input_shape'
+        model.add(tf.keras.layers.InputLayer(input_shape=(max_seq_len, input_dim)))
         for i in range(num_layers):
             model.add(RNN_Layer(units=hidden_dim, return_sequences=True, activation=activation))
         model.add(tf.keras.layers.Dense(units=output_dim, activation=output_activation))
