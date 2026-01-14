@@ -55,13 +55,26 @@ class BaseVariationalAutoencoder(Model, ABC):
         # 1. 准备数据
         train_data = tf.cast(train_data, tf.float32)
         num_samples = train_data.shape[0]
-        steps_per_epoch = num_samples // self.batch_size
+
+        # 【修复核心】动态调整 batch_size
+        # 如果样本数比预设的 batch_size 还小，就用样本数作为 batch_size
+        # 至少为 1，防止空数据报错
+        current_batch_size = max(1, min(num_samples, self.batch_size))
+
+        # 计算每个 epoch 需要走多少步
+        # 既然 current_batch_size <= num_samples，这至少是 1
+        steps_per_epoch = max(1, num_samples // current_batch_size)
+
+        # 调试打印，方便以后排查
+        print(
+            f"DEBUG: Samples={num_samples}, Batch Size adjusted to={current_batch_size}, Steps per epoch={steps_per_epoch}")
 
         # 2. 初始化早停 (Early Stopping) 相关的变量
         best_loss = float('inf')
         patience = 50  # 容忍多少个 epoch 不下降
         wait = 0  # 当前计数器
         min_delta = 1e-2  # 最小下降幅度
+        best_weights = None  # 保存最佳权重
 
         # 3. 训练循环
         for epoch in range(max_epochs):
@@ -74,41 +87,50 @@ class BaseVariationalAutoencoder(Model, ABC):
 
             # --- Batch 循环 ---
             for step in range(steps_per_epoch):
-                start_idx = step * self.batch_size
-                end_idx = start_idx + self.batch_size
+                start_idx = step * current_batch_size
+                end_idx = start_idx + current_batch_size
+
+                # 最后的尾巴数据如果不满一个 batch，通常切片会自动处理，不会越界
                 x_batch = train_data_shuffled[start_idx:end_idx]
+
+                # 双重保险：如果切出来的 batch 是空的（极少数情况），跳过
+                if x_batch.shape[0] == 0:
+                    continue
 
                 # 训练一步
                 logs = self.train_step((x_batch, x_batch))
                 epoch_loss_sum += logs['loss']
 
             # --- 计算平均 Loss ---
+            # 这里的 steps_per_epoch 已经保证 >=1，不会除以零
             avg_loss = epoch_loss_sum / steps_per_epoch
 
-            # 打印进度 (类似 verbose=1)
-            print(f"Epoch {epoch + 1}/{max_epochs} - loss: {avg_loss:.4f} "
-                  f"- recon_loss: {logs['reconstruction_loss']:.4f} "
-                  f"- kl_loss: {logs['kl_loss']:.4f}")
+            # 打印进度
+            if verbose == 1 or epoch % 50 == 0:
+                print(f"Epoch {epoch + 1}/{max_epochs} - loss: {avg_loss:.4f} "
+                      f"- recon_loss: {logs['reconstruction_loss']:.4f} "
+                      f"- kl_loss: {logs['kl_loss']:.4f}")
 
             # --- 早停策略 (Early Stopping) & 保存最佳权重 ---
             if avg_loss < best_loss - min_delta:
                 best_loss = avg_loss
                 wait = 0
-                # 保存当前最好的权重到内存 (或者保存到文件)
                 best_weights = self.get_weights()
-                # print("  [New best loss, weights recorded]")
             else:
                 wait += 1
                 if wait >= patience:
                     print(f"\nEarly stopping triggered at epoch {epoch + 1}")
-                    # 【重要】恢复到之前最好的权重
-                    self.set_weights(best_weights)
+                    if best_weights is not None:
+                        self.set_weights(best_weights)
                     break
 
-            # (可选) 如果 Loss 变成 NaN，立即停止
             if np.isnan(avg_loss):
                 print("Loss is NaN, stopping training.")
                 break
+
+        # 训练结束，如果没触发早停，也要确保用的是最佳权重（可选，或者用最后一次的）
+        if best_weights is not None:
+            self.set_weights(best_weights)
 
         print("Training finished.")
 
