@@ -85,7 +85,7 @@ optim:
     warmup_epochs: 0
 
 trainer:
-  max_epochs: 2
+  max_epochs: 20
   accelerator: "cpu"        # 若 MPS 不可用就改成 "cpu"
   devices: 1
   strategy: "auto"

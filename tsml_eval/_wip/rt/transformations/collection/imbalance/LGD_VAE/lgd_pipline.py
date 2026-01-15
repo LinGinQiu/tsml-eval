@@ -61,6 +61,63 @@ class DotDict(dict):
             raise AttributeError(name)
 
 
+import torch
+from torch.utils.data import Sampler
+import random
+
+
+class SwitchableWeightedSampler(Sampler):
+    def __init__(self, full_weights, majority_indices, switch_epoch, num_samples=None, replacement=True):
+        """
+        Args:
+            full_weights: 对应 dataset 中每个样本的权重 (用于阶段二)
+            majority_indices: majority 样本的 index 列表 (用于阶段一)
+            switch_epoch: 第几个 epoch 开始切换到全样本加权采样
+            num_samples: 加权采样时的采样数量 (通常等于 dataset 长度)
+            replacement: 加权采样时是否放回 (通常为 True)
+        """
+        super().__init__()
+        self.full_weights = torch.as_tensor(full_weights, dtype=torch.double)
+        self.majority_indices = majority_indices
+        self.switch_epoch = switch_epoch
+        self.replacement = replacement
+
+        # 如果没有指定 num_samples，默认等于全量数据长度
+        self.num_samples = len(self.full_weights) if num_samples is None else num_samples
+
+        self.current_epoch = 0
+
+    def set_epoch(self, epoch):
+        self.current_epoch = epoch
+
+    def __iter__(self):
+        if self.current_epoch < self.switch_epoch:
+            # === 阶段一：只训练 Majority ===
+            # 这里通常不需要加权，只需要随机打乱 Majority 的数据
+            # 如果你希望 Majority 内部也加权，逻辑会更复杂，但通常不需要
+            indices = self.majority_indices[:]
+            random.shuffle(indices)
+
+            # 返回迭代器
+            return iter(indices)
+
+        else:
+            # === 阶段二：全样本加权采样 (模拟 WeightedRandomSampler) ===
+            # PyTorch WeightedRandomSampler 的底层核心就是 torch.multinomial
+            rand_tensor = torch.multinomial(
+                self.full_weights,
+                self.num_samples,
+                self.replacement
+            )
+            return iter(rand_tensor.tolist())
+
+    def __len__(self):
+        # 动态长度：根据阶段返回不同的长度
+        if self.current_epoch < self.switch_epoch:
+            return len(self.majority_indices)
+        else:
+            return self.num_samples
+
 # --------------------------------------------------------
 # 回调：打印各项 loss
 # --------------------------------------------------------
@@ -245,13 +302,18 @@ class LGDVAEPipeline:
             f"Series Channel and length: {C}, {L}"
         )
 
-        # DataLoader，支持 WeightedRandomSampler
         if getattr(train_dataset, "sample_weights", None) is not None:
-            sampler = WeightedRandomSampler(
-                weights=train_dataset.sample_weights,
-                num_samples=len(train_dataset.sample_weights),
-                replacement=True,
-            )
+            print("Use WeightedRandomSampler for training data.")
+            print("Use SwitchableWeightedSampler for latent distillation training.")
+            # sampler = WeightedRandomSampler(
+            #     weights=train_dataset.sample_weights,
+            #     num_samples=len(train_dataset.sample_weights),
+            #     replacement=True,
+            # )
+            sampler = SwitchableWeightedSampler(
+                full_weights=train_dataset.sample_weights,
+                majority_indices=train_dataset.majority_indices,
+                switch_epoch=5)
             train_loader = DataLoader(
                 train_dataset,
                 batch_size=cfg.data.train_batch_size,

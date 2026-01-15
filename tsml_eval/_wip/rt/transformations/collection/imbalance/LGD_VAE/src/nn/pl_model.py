@@ -75,6 +75,23 @@ class LitAutoEncoder(pl.LightningModule):
         self.fig = None
         self.save_hyperparameters()
 
+    def on_train_epoch_start(self):
+        print(f"Starting epoch {self.current_epoch}")
+        current_epoch = self.current_epoch
+
+        # 2. 获取 train_dataloader
+        # 注意：self.trainer.train_dataloader 通常是当前正在使用的 loader
+        loader = self.trainer.train_dataloader
+
+        # 3. 找到 sampler 并设置 epoch
+        # 有些情况下 loader 可能被 Lightning 包装过，所以最好加个 hasattr 判断
+        if hasattr(loader, "sampler") and hasattr(loader.sampler, "set_epoch"):
+            loader.sampler.set_epoch(current_epoch)
+
+            # (可选) 打印一下确认切换状态
+            if current_epoch == loader.sampler.switch_epoch:
+                print(f"\n[Info] Epoch {current_epoch}: Switching to FULL weighted sampling!")
+
     def training_step(self, batch, batch_idx):
         if len(batch) == 2:
             batch,y = batch

@@ -460,15 +460,15 @@ class LatentGatedDualVAE(nn.Module):
         cls_loss = torch.tensor(0.0, device=device)
         cls_logits = None
         if self.classifier is not None and y is not None:
-
-            logits_base = self.classifier(z_full)  # [B, num_classes]
-            # 默认先用 base 来算 loss
-            cls_loss = F.cross_entropy(logits_base, y)
-            cls_logits = logits_base  # 用于 pl 里算 F1 / Acc
-
             is_min = (y == self.minority_class_id)
             is_maj = ~is_min
+
             if is_min.any() and is_maj.any():
+                # 同时有少数类和多数类样本才算分类损失
+                logits_base = self.classifier(z_full)  # [B, num_classes]
+                # 默认先用 base 来算 loss
+                cls_loss = F.cross_entropy(logits_base, y)
+                cls_logits = logits_base  # 用于 pl 里算 F1 / Acc
                 z_c_min = z_c[is_min]  # [B_min, C]
 
                 # majority 的 global pool：优先用 batch 中的多数样本 global
@@ -673,59 +673,59 @@ class LatentGatedDualVAE(nn.Module):
 
             return torch.stack(xs, dim=0)  # [num_samples, B, C, T]
 
-    @torch.no_grad()
-    def generate_from_prototype(
-        self,
-        batch_size: int = 1,
-        z_g_ref: Optional[Tensor] = None,
-        sigma: float = 0.1,
-        device: Optional[torch.device] = None,
-    ) -> Tensor:
-        """
-        Prototype-aware minority sample generation.
-
-        Args:
-            batch_size: number of samples to generate
-            z_g_ref: optional reference global latent(s) [B,G]; if None, sample N(0,I)
-            sigma: std for Gaussian perturbation around prototype in z_c space
-            device: torch device
-
-        Returns:
-            x_gen: [B, C, T]
-        """
-        if device is None:
-            device = next(self.parameters()).device
-
-        G = self.global_head_p.fc_mu.out_features
-        C = self.class_head_p.fc_mu.out_features
-
-        if self.use_prototype:
-            if getattr(self, "n_prototypes", 1) <= 1:
-                proto = self.proto_minority.to(device).unsqueeze(0).expand(batch_size, -1)  # [B,C]
-            else:
-                # sample a prototype index uniformly
-                protos = self.proto_minority.to(device)
-                idx = torch.randint(low=0, high=protos.size(0), size=(batch_size,), device=device)
-                proto = protos[idx]  # [B,C]
-        else:
-            proto = torch.zeros(batch_size, C, device=device)
-
-        noise = torch.randn(batch_size, C, device=device) * float(sigma)
-        z_c_sample = proto + noise  # [B, C]
-
-        if z_g_ref is None:
-            z_g_sample = torch.randn(batch_size, G, device=device)
-        else:
-            if z_g_ref.dim() == 1:
-                z_g_ref = z_g_ref.unsqueeze(0)
-            if z_g_ref.size(0) == 1 and batch_size > 1:
-                z_g_ref = z_g_ref.expand(batch_size, -1)
-            z_g_sample = z_g_ref.to(device)
-
-        # optionally gate-mix with majority-like global using the same gating net
-        gate = self.gate(z_c_sample)  # [B, G] in [0,1]
-        z_g_mix = gate * z_g_sample + (1.0 - gate) * z_g_sample  # here identical; keep hook for future mixing
-
-        z_full = torch.cat([z_g_mix, z_c_sample], dim=1)  # [B, G+C]
-        x_gen = self.decoder(z_full)  # [B, C, T]
-        return x_gen
+    # @torch.no_grad()
+    # def generate_from_prototype(
+    #     self,
+    #     batch_size: int = 1,
+    #     z_g_ref: Optional[Tensor] = None,
+    #     sigma: float = 0.1,
+    #     device: Optional[torch.device] = None,
+    # ) -> Tensor:
+    #     """
+    #     Prototype-aware minority sample generation.
+    #
+    #     Args:
+    #         batch_size: number of samples to generate
+    #         z_g_ref: optional reference global latent(s) [B,G]; if None, sample N(0,I)
+    #         sigma: std for Gaussian perturbation around prototype in z_c space
+    #         device: torch device
+    #
+    #     Returns:
+    #         x_gen: [B, C, T]
+    #     """
+    #     if device is None:
+    #         device = next(self.parameters()).device
+    #
+    #     G = self.global_head_p.fc_mu.out_features
+    #     C = self.class_head_p.fc_mu.out_features
+    #
+    #     if self.use_prototype:
+    #         if getattr(self, "n_prototypes", 1) <= 1:
+    #             proto = self.proto_minority.to(device).unsqueeze(0).expand(batch_size, -1)  # [B,C]
+    #         else:
+    #             # sample a prototype index uniformly
+    #             protos = self.proto_minority.to(device)
+    #             idx = torch.randint(low=0, high=protos.size(0), size=(batch_size,), device=device)
+    #             proto = protos[idx]  # [B,C]
+    #     else:
+    #         proto = torch.zeros(batch_size, C, device=device)
+    #
+    #     noise = torch.randn(batch_size, C, device=device) * float(sigma)
+    #     z_c_sample = proto + noise  # [B, C]
+    #
+    #     if z_g_ref is None:
+    #         z_g_sample = torch.randn(batch_size, G, device=device)
+    #     else:
+    #         if z_g_ref.dim() == 1:
+    #             z_g_ref = z_g_ref.unsqueeze(0)
+    #         if z_g_ref.size(0) == 1 and batch_size > 1:
+    #             z_g_ref = z_g_ref.expand(batch_size, -1)
+    #         z_g_sample = z_g_ref.to(device)
+    #
+    #     # optionally gate-mix with majority-like global using the same gating net
+    #     gate = self.gate(z_c_sample)  # [B, G] in [0,1]
+    #     z_g_mix = gate * z_g_sample + (1.0 - gate) * z_g_sample  # here identical; keep hook for future mixing
+    #
+    #     z_full = torch.cat([z_g_mix, z_c_sample], dim=1)  # [B, G+C]
+    #     x_gen = self.decoder(z_full)  # [B, C, T]
+    #     return x_gen

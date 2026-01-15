@@ -413,7 +413,7 @@ class HS_SMOTE(BaseCollectionTransformer):
 
 if __name__ == "__main__":
     global leng
-    dataset_name = 'MedicalImages'
+    dataset_name = 'Covid3Month_disc'
     # Example usage
     from local.load_ts_data import load_ts_data
 

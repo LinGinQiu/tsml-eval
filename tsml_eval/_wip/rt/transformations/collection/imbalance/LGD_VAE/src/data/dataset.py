@@ -39,10 +39,20 @@ class UCRDataset(Dataset):
         self.class_freq = None
         self.class_inv_weights = None
         self.sample_weights = None
+        self.majority_indices = []
 
         if self.split == "train":
             classes, counts = np.unique(self.labels, return_counts=True)
+            # === 新增逻辑：计算 Majority Indices ===
+            # 1. 找到样本数最多的那个类的标签 (Majority Label)
+            # argmax 返回 counts 中最大值的索引
+            majority_label = classes[np.argmax(counts)]
 
+            # 2. 找到所有等于该标签的样本索引
+            # np.where 返回的是 tuple，取 [0] 获取索引数组
+            self.majority_indices = np.where(self.labels == majority_label)[0].tolist()
+
+            print(f"Dataset Info: Majority Class is {majority_label}, Count: {len(self.majority_indices)}")
             # 类频率 π_c（真正的 prior）
             freq = counts.astype(np.float32) / np.sum(counts)
             self.class_freq = freq           # 顺序与 classes 一致
