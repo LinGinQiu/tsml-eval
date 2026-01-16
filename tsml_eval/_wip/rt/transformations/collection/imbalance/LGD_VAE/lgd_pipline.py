@@ -188,9 +188,9 @@ class DelayedEarlyStopping(EarlyStopping):
 from lightning.pytorch.callbacks import ModelCheckpoint
 
 class DelayedModelCheckpoint(ModelCheckpoint):
-    def __init__(self, start_save_epoch: int = 10, *args, **kwargs):
+    def __init__(self, warmup_epochs: int = 10, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.start_save_epoch = start_save_epoch
+        self.start_save_epoch = warmup_epochs
 
     def on_validation_end(self, trainer, pl_module):
         # 如果当前 epoch 小于设定的起始 epoch，直接跳过保存逻辑
@@ -419,13 +419,13 @@ class LGDVAEPipeline:
         callbacks = []
         warmup = 10
         if "callbacks" in cfg and "checkpointing" in cfg.callbacks:
-            callbacks.append(DelayedModelCheckpoint(start_save_epoch=warmup, **cfg.callbacks.checkpointing))
+            callbacks.append(DelayedModelCheckpoint(**cfg.callbacks.checkpointing))
 
         if "callbacks" in cfg and "early_stopping" in cfg.callbacks:
             # allow an optional `warmup_epochs` key in the early_stopping config
             # so we can ignore early-stopping checks for the initial training epochs
             es_cfg = dict(cfg.callbacks.early_stopping)
-            callbacks.append(DelayedEarlyStopping(warmup_epochs=warmup, **es_cfg))
+            callbacks.append(DelayedEarlyStopping(**es_cfg))
         callbacks.append(PrintLossCallback())
         import time
         run_suffix = str(int(time.time()))
