@@ -185,6 +185,19 @@ class DelayedEarlyStopping(EarlyStopping):
             return
         return super().on_validation_end(trainer, pl_module)
 
+from lightning.pytorch.callbacks import ModelCheckpoint
+
+class DelayedModelCheckpoint(ModelCheckpoint):
+    def __init__(self, start_save_epoch: int = 10, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.start_save_epoch = start_save_epoch
+
+    def on_validation_end(self, trainer, pl_module):
+        # 如果当前 epoch 小于设定的起始 epoch，直接跳过保存逻辑
+        if trainer.current_epoch < self.start_save_epoch:
+            return
+        # 否则执行父类的正常保存逻辑
+        super().on_validation_end(trainer, pl_module)
 
 # ========================================================
 # LGD-VAE 端到端 Pipeline: __init__ + fit + transform
@@ -404,14 +417,14 @@ class LGDVAEPipeline:
 
         # callbacks
         callbacks = []
+        warmup = 10
         if "callbacks" in cfg and "checkpointing" in cfg.callbacks:
-            callbacks.append(ModelCheckpoint(**cfg.callbacks.checkpointing))
+            callbacks.append(DelayedModelCheckpoint(start_save_epoch=warmup, **cfg.callbacks.checkpointing))
 
         if "callbacks" in cfg and "early_stopping" in cfg.callbacks:
             # allow an optional `warmup_epochs` key in the early_stopping config
             # so we can ignore early-stopping checks for the initial training epochs
             es_cfg = dict(cfg.callbacks.early_stopping)
-            warmup = 10
             callbacks.append(DelayedEarlyStopping(warmup_epochs=warmup, **es_cfg))
         callbacks.append(PrintLossCallback())
         import time
