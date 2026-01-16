@@ -411,7 +411,7 @@ class LGDVAEPipeline:
             # allow an optional `warmup_epochs` key in the early_stopping config
             # so we can ignore early-stopping checks for the initial training epochs
             es_cfg = dict(cfg.callbacks.early_stopping)
-            warmup = int(es_cfg.pop("warmup_epochs", 10))
+            warmup = 10
             callbacks.append(DelayedEarlyStopping(warmup_epochs=warmup, **es_cfg))
         callbacks.append(PrintLossCallback())
         import time
