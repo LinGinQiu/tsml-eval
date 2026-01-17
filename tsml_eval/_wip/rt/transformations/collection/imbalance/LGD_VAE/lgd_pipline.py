@@ -326,7 +326,7 @@ class LGDVAEPipeline:
             sampler = SwitchableWeightedSampler(
                 full_weights=train_dataset.sample_weights,
                 majority_indices=train_dataset.majority_indices,
-                switch_epoch=5)
+                switch_epoch=1)
             train_loader = DataLoader(
                 train_dataset,
                 batch_size=cfg.data.train_batch_size,
@@ -417,7 +417,6 @@ class LGDVAEPipeline:
 
         # callbacks
         callbacks = []
-        warmup = 10
         if "callbacks" in cfg and "checkpointing" in cfg.callbacks:
             callbacks.append(DelayedModelCheckpoint(**cfg.callbacks.checkpointing))
 
