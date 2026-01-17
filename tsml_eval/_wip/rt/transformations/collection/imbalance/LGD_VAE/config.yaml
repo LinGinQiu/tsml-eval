@@ -6,10 +6,10 @@ experiment:
 
 paths:
   data_root: "/scratch/cq2u24/Data/imbalanced_9_1"
-  work_root: "/scratch/cq2u24/LGD_VAE_MLG_D_MSE"
-  logs_dir: "/scratch/cq2u24/LGD_VAE_MLG_D_MSE/logs"          # 不用 ${} 插值
-  ckpt_dir: "/scratch/cq2u24/LGD_VAE_MLG_D_MSE/checkpoints"
-  outputs_dir: "/scratch/cq2u24/LGD_VAE_MLG_D_MSE/imputations"
+  work_root: "/scratch/cq2u24/LGD_VAE_MLG_D"
+  logs_dir: "/scratch/cq2u24/LGD_VAE_MLG_D/logs"          # 不用 ${} 插值
+  ckpt_dir: "/scratch/cq2u24/LGD_VAE_MLG_D/checkpoints"
+  outputs_dir: "/scratch/cq2u24/LGD_VAE_MLG_D/imputations"
 
 data:
   # 由 CLI 覆盖：--dataset_name <UCR_NAME>
@@ -72,11 +72,11 @@ model:
   # Other flags
   minority_class_id: 1      # 你的少数类 id（UCR 使用 np.unique 后得到的索引）
   cls_embed: true
-  recon_metric: "mse"   # 同loss recon_metric, works here soft_dtw, dilate, mse
+  recon_metric: "dilate"   # 同loss recon_metric, works here soft_dtw, dilate, mse
 
 loss:
   type: "lgd_vae_default"
-  recon_metric: "mse"
+  recon_metric: "dilate"
   huber_delta: 1.0
 
 optim:
@@ -106,7 +106,7 @@ trainer:
 # —— 新增：配合 train.py 里 callbacks 的访问 ——
 callbacks:
   checkpointing:
-    dirpath: "/scratch/cq2u24/LGD_VAE_MLG_D_MSE/checkpoints"
+    dirpath: "/scratch/cq2u24/LGD_VAE_MLG_D/checkpoints"
     filename: "LGD_VAE_MLG_z_c_gate-{epoch:02d}"
     monitor: "eval/loss"
     mode: "min"
