@@ -14,7 +14,7 @@ queue="ecsstaff,ecsall"
 
 # Enter your username and email here
 username="cq2u24"
-mail="FAIL"
+mail="None"
 mailto="$username@soton.ac.uk"
 
 # MB for jobs, increase incrementally and try not to use more than you need. If you need hundreds of GB consider the huge memory queue

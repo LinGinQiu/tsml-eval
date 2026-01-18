@@ -1,11 +1,18 @@
 import argparse
 import os
 import random
+import sys
 
 import numpy as np
 import torch
 import torch.backends
 
+# 获取当前文件的目录 (TimesNet/)
+current_dir = os.path.dirname(os.path.abspath(__file__))
+# 获取上一级目录 (tsml-eval/)
+parent_dir = os.path.dirname(current_dir)
+# 将上一级目录加入系统路径
+sys.path.append(parent_dir)
 from TimesNet.exp.exp_classification import Exp_Classification
 from TimesNet.utils.print_args import print_args
 
