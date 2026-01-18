@@ -317,16 +317,16 @@ class LGDVAEPipeline:
 
         if getattr(train_dataset, "sample_weights", None) is not None:
             print("Use WeightedRandomSampler for training data.")
-            print("Use SwitchableWeightedSampler for latent distillation training.")
-            # sampler = WeightedRandomSampler(
-            #     weights=train_dataset.sample_weights,
-            #     num_samples=len(train_dataset.sample_weights),
-            #     replacement=True,
-            # )
-            sampler = SwitchableWeightedSampler(
-                full_weights=train_dataset.sample_weights,
-                majority_indices=train_dataset.majority_indices,
-                switch_epoch=1)
+            # print("Use SwitchableWeightedSampler for latent distillation training.")
+            sampler = WeightedRandomSampler(
+                weights=train_dataset.sample_weights,
+                num_samples=len(train_dataset.sample_weights),
+                replacement=True,
+            )
+            # sampler = SwitchableWeightedSampler(
+            #     full_weights=train_dataset.sample_weights,
+            #     majority_indices=train_dataset.majority_indices,
+            #     switch_epoch=1)
             train_loader = DataLoader(
                 train_dataset,
                 batch_size=cfg.data.train_batch_size,

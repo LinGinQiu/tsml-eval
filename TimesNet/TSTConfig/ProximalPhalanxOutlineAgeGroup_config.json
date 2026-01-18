@@ -1,0 +1,17 @@
+{
+    "dataset": "ProximalPhalanxOutlineAgeGroup",
+    "n_samples": 400,
+    "n_channels": 1,
+    "seq_length": 80,
+    "d_model": 16,
+    "e_layers": 2,
+    "batch_size": 8,
+    "d_ff": 32,
+    "top_k": 3,
+    "des": "Exp",
+    "itr": 1,
+    "learning_rate": 0.001,
+    "train_epochs": 20,
+    "patience": 5,
+    "gpus": 1
+}

@@ -1,0 +1,176 @@
+[build-system]
+requires = ["setuptools>=61", "wheel", "toml", "build"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tsml-eval"
+version = "0.5.0"
+description = "A package for benchmarking time series machine learning tools."
+authors = [
+    {name = "Matthew Middlehurst", email = "m.b.middlehurst@soton.ac.uk"},
+    {name = "Tony Bagnall", email = "a.j.bagnall@soton.ac.uk"},
+]
+maintainers = [
+    {name = "Matthew Middlehurst", email = "m.b.middlehurst@soton.ac.uk"},
+    {name = "Tony Bagnall", email = "a.j.bagnall@soton.ac.uk"},
+]
+readme = "README.md"
+keywords = [
+    "data-science",
+    "machine-learning",
+    "time-series",
+    "time-series-classification",
+    "time-series-regression",
+    "time-series-clustering",
+    "evaluation",
+    "benchmarking",
+]
+classifiers = [
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: BSD License",
+    "Topic :: Scientific/Engineering",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX",
+    "Operating System :: Unix",
+    "Operating System :: MacOS",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+requires-python = ">=3.9,<3.13"
+dependencies = [
+    "aeon>=1.0.0,<1.1.0",
+    "tsml>=0.6.1,<0.7.0",
+    "scikit-learn>=1.0.0,<1.7.0",
+    "matplotlib",
+    "seaborn",
+    "gpustat",
+    "psutil",
+]
+
+[project.optional-dependencies]
+all_extras = [
+    "aeon[all_extras]",
+    "tsml[all_extras]",
+    "xgboost",
+    # temp
+    "esig>=0.9.7,<1.0.0; platform_system != 'Darwin' and python_version < '3.11'",
+]
+unstable_extras = [
+    "aeon[unstable_extras]",
+    "tsml[unstable_extras]",
+]
+deep_learning = [
+    "aeon[dl]",
+]
+
+dev = [
+    "pre-commit",
+    "pytest",
+    "pytest-randomly",
+    "pytest-timeout",
+    "pytest-xdist[psutil]",
+    "pytest-cov",
+    "pytest-rerunfailures",
+]
+binder = [
+    "notebook",
+    "jupyterlab",
+]
+docs = [
+    "sphinx<8.3.0",
+    "sphinx-design",
+    "sphinx-version-warning",
+    "sphinx_issues",
+    "sphinx-copybutton",
+    "sphinx-remove-toctrees",
+    "sphinxext-opengraph",
+    "nbsphinx",
+    "numpydoc",
+    "myst-parser",
+    "jupyter",
+    "furo",
+]
+
+[project.urls]
+homepage = "https://www.timeseriesclassification.com/"
+repository = "https://github.com/time-series-machine-learning/tsml-eval/"
+
+[project.license]
+file = "LICENSE"
+
+[tool.setuptools.packages.find]
+include = ["tsml_eval"]
+
+[tool.check-manifest]
+ignore = [
+    # Ignore virtual environments in local builds
+    ".venv/**",
+    "venv/**",
+    # Ignore local files
+    "local/**",
+    "examples/generated_results/**",
+    # Ignore the publications symlinks and its contents
+    "tsml_eval/publications/2023",
+    "tsml_eval/publications/2023/**",
+    # Ignore the docs symlinks and its contents
+    "docs/examples",
+    "docs/examples/**",
+    "docs/publications",
+    "docs/publications/**",
+]
+
+[tool.ruff]
+extend-exclude = [
+    "tsml_eval/_wip/*",
+]
+
+[tool.ruff.lint]
+select = ["D"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "numpy"
+
+[tool.flake8]
+exclude = [
+    "tsml_eval/_wip/*",
+]
+per-file-ignores = [
+    "tsml_eval/experiments/classification_experiments.py:E402,T201",
+    "tsml_eval/experiments/threaded_classification_experiments.py:T201",
+    "tsml_eval/experiments/regression_experiments.py:E402,T201",
+    "tsml_eval/experiments/threaded_regression_experiments.py:T201",
+    "tsml_eval/experiments/clustering_experiments.py:E402,T201",
+    "tsml_eval/experiments/threaded_clustering_experiments.py:T201",
+    "tsml_eval/experiments/forecasting_experiments.py:E402,T201",
+    "tsml_eval/experiments/threaded_forecasting_experiments.py:T201",
+    "tsml_eval/publications/*:E402,T201",
+]
+
+[tool.mypy]
+mypy_path = "tsml_eval/"
+ignore_missing_imports = true
+follow_imports = "silent"
+exclude = [
+    "_wip/",
+    # Ignore the publications symlinks and its contents
+    "tsml_eval/publications/2023",
+]
+
+
+[tool.pytest.ini_options]
+testpaths = "tsml_eval"
+addopts = '''
+    --ignore tsml_eval/_wip
+    --ignore tsml_eval/publications/2023
+    --doctest-modules
+    --durations 20
+    --timeout 600
+    --showlocals
+    --dist worksteal
+    --reruns 2
+    --only-rerun "crashed while running"
+    --meminterval 0.1
+'''
