@@ -10,7 +10,7 @@ start_fold=1
 max_num_submitted=1000
 
 # Queue options are https://sotonac.sharepoint.com/teams/HPCCommunityWiki/SitePages/Iridis%205%20Job-submission-and-Limits-Quotas.aspx
-queue="a100,swarm_a100,swarm_h100"
+queue="a100,swarm_a100,swarm_h100,l4,swarm_l4"
 
 # Enter your username and email here
 username="cq2u24"
