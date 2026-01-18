@@ -3,7 +3,7 @@
 # While reading is fine, please dont write anything to the default directories in this script
 
 # Start and end for resamples
-max_folds=5
+max_folds=1
 start_fold=1
 
 # To avoid hitting the cluster queue limit we have a higher level queue
@@ -27,19 +27,20 @@ max_time="60:00:00"
 start_point=1
 
 # Put your home directory here
-local_path="/home/$username/"
+local_path="/scratch/cq2u24/Result/lgd_F"
 data_path="/scratch/$username/"
 # Datasets to use and directory of data files. Default is Tony's work space, all should be able to read these. Change if you want to use different data or lists
-data_dir="$data_path/Data/imbalanced_9_1"
-datasets="$data_path/DataSetLists/A_list.txt"
+data_dir="$data_path/Data/imbalanced_9_1/"
+datasets="$data_path/DataSetLists/DLset.txt"
 
 # Results and output file write location. Change these to reflect your own file structure
-results_dir="$local_path/Time-Series-Library-main/local/Results/results/"
-out_dir="$local_path/Time-Series-Library-main/local/Results/output/"
+results_dir="$local_path/ClassificationResultsTN/results/"
+out_dir="$local_path/ClassificationResultsTN/output/"
 
 
 # The python script we are running
-script_file_path="$local_path/Time-Series-Library-main/run.py"
+script_file_path="/home/cq2u24/tsml-eval/TimesNet/run.py"
+
 
 # Environment name, change accordingly, for set up, see https://github.com/time-series-machine-learning/tsml-eval/blob/main/_tsml_research_resources/soton/iridis/iridis_python.md
 # Separate environments for GPU and CPU are recommended
@@ -58,7 +59,16 @@ generate_train_files="false"
 
 # If set for true, looks for <problem><fold>_TRAIN.ts file. This is useful for running tsml-java resamples
 predefined_folds="false"
+# Normalise data before fit/predict
+normalise_data="false"
 
+# Data transformation options
+data_transform_name="timevae"
+transform_train_only="true"
+results_dir="${results_dir%/}_${data_transform_name}/"
+results_dir=$(echo "$results_dir" | sed 's#//*#/#g')
+out_dir="${out_dir%/}_${data_transform_name}/"
+out_dir=$(echo "$out_dir" | sed 's#//*#/#g')
 # ======================================================================================
 # 	Experiment configuration end
 # ======================================================================================
@@ -68,6 +78,15 @@ generate_train_files=$([ "${generate_train_files,,}" == "true" ] && echo "-tr" |
 
 # Set to -pr to use predefined folds
 predefined_folds=$([ "${predefined_folds,,}" == "true" ] && echo "-pr" || echo "")
+
+# Set to -rn to normalise data
+normalise_data=$([ "${normalise_data,,}" == "true" ] && echo "-rn" || echo "")
+
+# Set to -dtn to use data transformation name
+data_transform_name=$([ -n "${data_transform_name}" ] && echo "-dtn ${data_transform_name}" || echo "")
+
+# Set to -tto to use transform_train_only
+transform_train_only=$([ "${transform_train_only,,}" == "true" ] && echo "-tto" || echo "")
 
 count=0
 while read dataset; do
@@ -143,7 +162,7 @@ source activate $env_name
 
 # Input args to the default classification_experiments are in main method of
 # https://github.com/time-series-machine-learning/tsml-eval/blob/main/tsml_eval/experiments/classification_experiments.py
-python -u ${script_file_path} ${data_dir} ${results_dir} ${classifier} ${dataset} \$((\$SLURM_ARRAY_TASK_ID - 1)) ${generate_train_files} ${predefined_folds} ${extra_args}"  > generatedFile.sub
+python -u ${script_file_path} ${data_dir} ${results_dir} ${classifier} ${dataset} \$((\$SLURM_ARRAY_TASK_ID - 1)) ${generate_train_files} ${predefined_folds} ${normalise_data} ${data_transform_name} ${transform_train_only} ${extra_args}"  > generatedFile.sub
 
 echo "${count} ${classifier}/${dataset}"
 
