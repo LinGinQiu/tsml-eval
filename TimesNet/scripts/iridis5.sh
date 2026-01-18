@@ -123,7 +123,7 @@ done
 if [ "${array_jobs}" != "" ]; then
 
 # This creates the scrip to run the job based on the info above #module load conda/python3
-config_file="${local_path}/Time-Series-Library-main/TSTConfig/${dataset}_config.json"
+config_file="$/home/cq2u24/tsml-eval/TimesNet/TSTConfig/${dataset}_config.json"
 d_model=$(grep '"d_model"' "$config_file" | cut -d':' -f2 | tr -d ' ,')
 e_layers=$(grep '"e_layers"' "$config_file" | cut -d':' -f2 | tr -d ' ,')
 batch_size=$(grep '"batch_size"' "$config_file" | cut -d':' -f2 | tr -d ' ,')

@@ -50,7 +50,6 @@ env_name="/scratch/cq2u24/conda-envs/deeplearning_tf"
 classifiers_to_run="TimesNet"
 
 # Extra arguments to pass to run.py
-extra_args="--e_layers 2 --batch_size 16 --d_model 32 --d_ff 64 --top_k 3 --des 'Exp' --itr 1 --learning_rate 0.001 --train_epochs 30 --patience 10"
 
 # You can add extra arguments here. See tsml_eval/utils/arguments.py parse_args
 # You will have to add any variable to the python call close to the bottom of the script
@@ -124,6 +123,22 @@ do
 done
 
 if [ "${array_jobs}" != "" ]; then
+
+# This creates the scrip to run the job based on the info above #module load conda/python3
+config_file="/home/cq2u24/tsml-eval/TimesNet/TSTConfig/${dataset}_config.json"
+d_model=$(grep '"d_model"' "$config_file" | cut -d':' -f2 | tr -d ' ,')
+e_layers=$(grep '"e_layers"' "$config_file" | cut -d':' -f2 | tr -d ' ,')
+batch_size=$(grep '"batch_size"' "$config_file" | cut -d':' -f2 | tr -d ' ,')
+d_ff=$(grep '"d_ff"' "$config_file" | cut -d':' -f2 | tr -d ' ,')
+top_k=$(grep '"top_k"' "$config_file" | cut -d':' -f2 | tr -d ' ,')
+des=$(grep '"des"' "$config_file" | cut -d':' -f2 | tr -d ' ,"')
+itr=$(grep '"itr"' "$config_file" | cut -d':' -f2 | tr -d ' ,')
+learning_rate=$(grep '"learning_rate"' "$config_file" | cut -d':' -f2 | tr -d ' ,')
+train_epochs=$(grep '"train_epochs"' "$config_file" | cut -d':' -f2 | tr -d ' ,')
+patience=$(grep '"patience"' "$config_file" | cut -d':' -f2 | tr -d ' ,')
+gpus=$(grep '"gpus"' "$config_file" | cut -d':' -f2 | tr -d ' ,')
+
+extra_args="--e_layers ${e_layers} --batch_size ${batch_size} --d_model ${d_model} --d_ff ${d_ff} --top_k ${top_k} --des ${des} --itr ${itr} --learning_rate ${learning_rate} --train_epochs ${train_epochs} --patience ${patience}"
 
 # This creates the scrip to run the job based on the info above #module load conda/python3
 echo "#!/bin/bash
