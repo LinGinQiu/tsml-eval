@@ -66,7 +66,7 @@ predefined_folds="false"
 normalise_data="false"
 
 # Data transformation options
-data_transform_name="lgd_lp"
+data_transform_name="timevae"
 transform_train_only="true"
 results_dir="${results_dir%/}_${data_transform_name}/"
 results_dir=$(echo "$results_dir" | sed 's#//*#/#g')
