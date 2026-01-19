@@ -682,15 +682,13 @@ class LatentGatedDualVAE(nn.Module):
 
     @torch.no_grad()
     def generate_from_prototype(
-        self, x_min: Tensor, use_y: bool = True) -> Tensor:
+        self, x_min: Tensor) -> Tensor:
         """
         x_min [1, C, T]
         return: [1, C, T] generated
         """
-        if use_y:
-            y_min = torch.ones(x_min.shape[0], device=x_min.device).long()
-        else:
-            y_min = None
+        y_min = torch.ones(x_min.shape[0], device=x_min.device).long()
+
         _, mu_g_min, logvar_g_min, mu_c_min, logvar_c_min = self.encode(x_min, y=y_min)
 
         z_g_min = self.reparameterize(mu_g_min, logvar_g_min)
@@ -704,10 +702,7 @@ class LatentGatedDualVAE(nn.Module):
             z_full = torch.cat([z_g_mix, z_c_min], dim=1)
         else:
             z_full = torch.cat([z_g_min, z_c_min], dim=1)
-        if use_y:
-            y = y_min
-            y_onehot = F.one_hot(y, num_classes=self.num_classes).float()
-        else:
-            y_onehot = None
+        y = y_min
+        y_onehot = F.one_hot(y, num_classes=self.num_classes).float()
         x_gen = self.decoder(z_full, y_onehot=y_onehot)
         return x_gen

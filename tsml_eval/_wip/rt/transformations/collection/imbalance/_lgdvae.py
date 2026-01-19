@@ -172,7 +172,7 @@ class VOTE(BaseCollectionTransformer):
             for i in range(self.n_generate_samples):
                 index = self._random_state.choice(X_minority.shape[0])
                 x_min = torch.from_numpy(X_minority[index][np.newaxis, :]).float().to(self._device)
-                new_series = self.pipeline.transform(mode='prototype', x_min=x_min, use_y=True)
+                new_series = self.pipeline.transform(mode='prototype', x_min=x_min)
                 new_series = new_series.cpu().numpy()
                 assert new_series.shape == (1, C, L), f"VAE output shape {new_series.shape} != {(1, C, L)}"
                 new_ts[i] = new_series.squeeze(0)
@@ -220,7 +220,7 @@ if __name__ == "__main__":
     from tsml_eval._wip.rt.transformations.collection.imbalance._utils import _plot_series_list
 
     dataset_name = 'AllGestureWiimoteX_eq'
-    smote = VOTE(mode='latent', random_state=0, visualize=False, dataset_name=dataset_name)
+    smote = VOTE(mode='mjp', random_state=0, visualize=False, dataset_name=dataset_name)
     # Example usage
     from local.load_ts_data import load_ts_data
 

@@ -201,23 +201,17 @@ class Inference:
 
     def generate_from_prototype(
         self,
-        batch_size: int = 1,
-        z_g_ref: Optional[Tensor] = None,
-        sigma: float = 0.1,
-        device: Optional[torch.device] = None,
-    ) -> Tensor:
+            x_min: Tensor) -> Tensor:
         """
-        方式四：基于 minority 原型进行生成（如果 LGD-VAE 启用了 prototype）。
-        要求底层模型（或其 .model）实现 `generate_from_prototype` 方法。
+
         """
         lite_model = getattr(self.model, "model", self.model)
-        if device is None:
-            device = self.device
         if hasattr(lite_model, "generate_from_prototype"):
-            return lite_model.generate_from_prototype(
-                batch_size=batch_size,
-                z_g_ref=z_g_ref,
-                sigma=sigma,
-                device=device,
+            if self.mean_ and self.std_:
+                x_min = self.apply_zscore(x_min, self.mean_, self.std_)
+            return self.invert_zscore(
+                lite_model.generate_from_prototype(x_min.to(self.device)),
+                mean=self.mean_,
+                std=self.std_
             )
-        raise AttributeError("Underlying model does not implement `generate_from_prototype`.")
+        raise AttributeError("Underlying model does not implement `generate_from_pair`.")
