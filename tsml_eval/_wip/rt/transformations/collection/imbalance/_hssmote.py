@@ -89,7 +89,7 @@ class HS_SMOTE(BaseCollectionTransformer):
         for class_label, n_samples_needed in self.sampling_strategy_.items():
             if n_samples_needed <= 0:
                 continue
-
+            print(f"Oversampling class {class_label}: generating {n_samples_needed} samples using HS_SMOTE...")
             # --- HS-SMOTE Logic Starts Here ---
 
             # Identify indices

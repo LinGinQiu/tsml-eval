@@ -579,7 +579,7 @@ class LatentGatedDualVAE(nn.Module):
 
     # 一个简单的生成接口：给 minority 的一条 x，同时给一条 majority 的 x，当场生成“混合版”
     @torch.no_grad()
-    def generate_from_pair(self, x_min: Tensor, x_maj: Tensor, use_y:bool=False) -> Tensor:
+    def generate_from_pair(self, x_min: Tensor, x_maj: Tensor, use_y:bool=True) -> Tensor:
         """
         x_min, x_maj: [1, C, T]
         return: [1, C, T] generated
@@ -673,59 +673,36 @@ class LatentGatedDualVAE(nn.Module):
 
             return torch.stack(xs, dim=0)  # [num_samples, B, C, T]
 
-    # @torch.no_grad()
-    # def generate_from_prototype(
-    #     self,
-    #     batch_size: int = 1,
-    #     z_g_ref: Optional[Tensor] = None,
-    #     sigma: float = 0.1,
-    #     device: Optional[torch.device] = None,
-    # ) -> Tensor:
-    #     """
-    #     Prototype-aware minority sample generation.
-    #
-    #     Args:
-    #         batch_size: number of samples to generate
-    #         z_g_ref: optional reference global latent(s) [B,G]; if None, sample N(0,I)
-    #         sigma: std for Gaussian perturbation around prototype in z_c space
-    #         device: torch device
-    #
-    #     Returns:
-    #         x_gen: [B, C, T]
-    #     """
-    #     if device is None:
-    #         device = next(self.parameters()).device
-    #
-    #     G = self.global_head_p.fc_mu.out_features
-    #     C = self.class_head_p.fc_mu.out_features
-    #
-    #     if self.use_prototype:
-    #         if getattr(self, "n_prototypes", 1) <= 1:
-    #             proto = self.proto_minority.to(device).unsqueeze(0).expand(batch_size, -1)  # [B,C]
-    #         else:
-    #             # sample a prototype index uniformly
-    #             protos = self.proto_minority.to(device)
-    #             idx = torch.randint(low=0, high=protos.size(0), size=(batch_size,), device=device)
-    #             proto = protos[idx]  # [B,C]
-    #     else:
-    #         proto = torch.zeros(batch_size, C, device=device)
-    #
-    #     noise = torch.randn(batch_size, C, device=device) * float(sigma)
-    #     z_c_sample = proto + noise  # [B, C]
-    #
-    #     if z_g_ref is None:
-    #         z_g_sample = torch.randn(batch_size, G, device=device)
-    #     else:
-    #         if z_g_ref.dim() == 1:
-    #             z_g_ref = z_g_ref.unsqueeze(0)
-    #         if z_g_ref.size(0) == 1 and batch_size > 1:
-    #             z_g_ref = z_g_ref.expand(batch_size, -1)
-    #         z_g_sample = z_g_ref.to(device)
-    #
-    #     # optionally gate-mix with majority-like global using the same gating net
-    #     gate = self.gate(z_c_sample)  # [B, G] in [0,1]
-    #     z_g_mix = gate * z_g_sample + (1.0 - gate) * z_g_sample  # here identical; keep hook for future mixing
-    #
-    #     z_full = torch.cat([z_g_mix, z_c_sample], dim=1)  # [B, G+C]
-    #     x_gen = self.decoder(z_full)  # [B, C, T]
-    #     return x_gen
+    @torch.no_grad()
+    def generate_from_prototype(
+        self, x_min: Tensor, use_y: bool = True) -> Tensor:
+        """
+        x_min [1, C, T]
+        return: [1, C, T] generated
+        """
+        if use_y:
+            y_min = torch.ones(x_min.shape[0], device=x_min.device).long()
+        else:
+            y_min = None
+        _, mu_g_min, logvar_g_min, mu_c_min, logvar_c_min = self.encode(x_min, y=y_min)
+        if self.z_g_maj_ema_inited:
+            z_g_maj = self.z_g_maj_mean  # [1, G], trainable
+            print('Using majority prototype for generation.')
+        else:
+            z_g_maj = None
+        z_g_min = self.reparameterize(mu_g_min, logvar_g_min)
+        z_c_min = self.reparameterize(mu_c_min, logvar_c_min)
+        if z_g_maj:
+            gate = self.gate(z_c_min)  # [1, G]
+            z_g_mix = gate * z_g_min + (1.0 - gate) * z_g_maj
+
+            z_full = torch.cat([z_g_mix, z_c_min], dim=1)
+        else:
+            z_full = torch.cat([z_g_min, z_c_min], dim=1)
+        if use_y:
+            y = y_min
+            y_onehot = F.one_hot(y, num_classes=self.num_classes).float()
+        else:
+            y_onehot = None
+        x_gen = self.decoder(z_full, y_onehot=y_onehot)
+        return x_gen
