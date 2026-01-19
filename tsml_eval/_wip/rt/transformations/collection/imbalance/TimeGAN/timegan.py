@@ -11,7 +11,7 @@ Code author: Jinsung Yoon (jsyoon0823@gmail.com)
 
 -----------------------------
 
-timegan.py (Upgraded to TensorFlow 2.x with Auto-Save/Load)
+timegan.py (Upgraded to TensorFlow 2.x with Auto-Save/Load and Memory Optimization)
 
 Note: Use original data as training set to generater synthetic data (time-series)
 """
@@ -21,6 +21,8 @@ import numpy as np
 from tsml_eval._wip.rt.transformations.collection.imbalance.TimeGAN.utils import extract_time, random_generator, batch_generator
 import os
 import socket
+import gc
+import torch  # 用来清理 PyTorch 侧的缓存
 
 # ----------------------------------------------------------------
 # Environment Setup
@@ -28,7 +30,7 @@ import socket
 hostname = socket.gethostname()
 is_mac = "mac" in hostname.lower() or "CH-Qiu" in hostname
 if is_mac:
-    # Mac 上强制使用 CPU 防止死锁
+    # Mac 上强制使用 CPU 防止死锁，或者你可以根据情况开启 Metal
     os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 
 def timegan(ori_data, parameters):
@@ -43,6 +45,19 @@ def timegan(ori_data, parameters):
     Returns:
       - generated_data: generated time-series data
     """
+    # ================= [步骤 1：限制显存] =================
+    # 防止 TensorFlow 启动时直接占满所有显存，给 PyTorch 留活路
+    gpus = tf.config.list_physical_devices('GPU')
+    if gpus:
+        try:
+            for gpu in gpus:
+                tf.config.experimental.set_memory_growth(gpu, True)
+            print("[TimeGAN] TensorFlow memory growth set to True")
+        except RuntimeError as e:
+            # 如果显存设置已经由其他进程或之前的调用设置过，这里会报错，忽略即可
+            pass
+    # =======================================================
+
     # 1. Data processing
     no, seq_len, dim = np.asarray(ori_data).shape
     ori_time, max_seq_len = extract_time(ori_data)
@@ -67,7 +82,6 @@ def timegan(ori_data, parameters):
     module_name = parameters['module']
 
     # 获取数据集名称和随机种子用于生成保存路径
-    # 注意：请确保 _timegan.py 调用时传入了这两个参数
     dataset_name = parameters.get('dataset_name', 'default_dataset')
     random_state = parameters.get('random_state', 0)
 
@@ -112,9 +126,8 @@ def timegan(ori_data, parameters):
     bce_logits = tf.keras.losses.BinaryCrossentropy(from_logits=True)
 
     # 5. Training Steps (Defined as closures)
-    # 注意：在 Mac 上如果遇到死锁，请保持 @tf.function 注释状态；在 Linux Server 上可以打开以加速
 
-    # @tf.function
+    # @tf.function # 如果遇到 Graph/Session 冲突报错，可以注释掉 @tf.function
     def train_embedder(x):
         with tf.GradientTape() as tape:
             h = embedder(x)
@@ -217,8 +230,6 @@ def timegan(ori_data, parameters):
     }
 
     # 检查是否所有模型权重都已存在
-    # [修改前] ... f"{name}.h5" ...
-    # [修改后] 改为 .weights.h5
     all_weights_exist = all(os.path.exists(os.path.join(save_dir, f"{name}.weights.h5")) for name in networks)
 
     do_training = True
@@ -229,8 +240,6 @@ def timegan(ori_data, parameters):
             # 尝试加载权重
             print("[TimeGAN] Loading weights...")
             for name, net in networks.items():
-                # [修改前] ... f"{name}.h5"
-                # [修改后] 改为 .weights.h5
                 net.load_weights(os.path.join(save_dir, f"{name}.weights.h5"))
             print("[TimeGAN] Weights loaded successfully. Skipping training.")
             do_training = False
@@ -274,15 +283,12 @@ def timegan(ori_data, parameters):
             step_d_loss = train_discriminator(np.array(X_mb).astype(np.float32), np.array(Z_mb).astype(np.float32))
 
             if itt % 100 == 0:
-                # 为了日志简洁，这里只打印 d_loss，如果需要其他 loss 可自行添加
                 print(f'step: {itt}/{iterations}, d_loss: {step_d_loss:.4f}')
         print('Finish Joint Training')
 
         # 训练完成后保存
         print(f"[TimeGAN] Saving model weights to: {save_dir}")
         for name, net in networks.items():
-            # [修改前] net.save_weights(os.path.join(save_dir, f"{name}.h5"))
-            # [修改后] 必须是 .weights.h5
             net.save_weights(os.path.join(save_dir, f"{name}.weights.h5"))
 
     # ----------------------------------------------------------------
@@ -301,8 +307,7 @@ def timegan(ori_data, parameters):
         T_mb = [ori_time[i] for i in temp_idx]
         Z_mb = random_generator(batch_size, z_dim, T_mb, max_seq_len)
 
-        # 前向传播生成数据 (Native TF2 call)
-        # Z -> Generator -> E -> Supervisor -> H_hat -> Recovery -> X_hat
+        # 前向传播生成数据
         e_hat = generator(np.array(Z_mb).astype(np.float32))
         h_hat = supervisor(e_hat)
         x_hat = recovery(h_hat)
@@ -321,5 +326,26 @@ def timegan(ori_data, parameters):
     # Renormalization
     generated_data = generated_data * max_val
     generated_data = generated_data + min_val
+
+    # ================= [步骤 2：暴力清理] =================
+    print("[TimeGAN] Cleaning up TensorFlow session and models...")
+
+    # 1. 删除模型引用
+    del embedder, recovery, generator, supervisor, discriminator
+    del networks
+    del embedder0_optimizer, embedder_optimizer, gen_optimizer, disc_optimizer, gs_optimizer
+
+    # 2. 清理 Keras 后端 (销毁 Graph 和 Session)
+    tf.keras.backend.clear_session()
+
+    # 3. 垃圾回收
+    gc.collect()
+
+    # 4. 强制 PyTorch 释放显存 (防止后续 PyTorch 模型无显存可用)
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+
+    print("[TimeGAN] Memory released.")
+    # =======================================================
 
     return generated_data
