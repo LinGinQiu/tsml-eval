@@ -657,9 +657,6 @@ class LatentGatedDualVAE(nn.Module):
             if self.z_g_maj_ema_inited:
                 z_g_maj = self.z_g_maj_mean  # [1, G], trainable
                 print('Using majority prototype for generation.')
-            else:
-                z_g_maj = None
-            if z_g_maj:
                 gate = self.gate(z_c_mix)  # [1, G]
                 z_g_mix = gate * z_g_mix + (1.0 - gate) * z_g_maj
 
@@ -695,14 +692,12 @@ class LatentGatedDualVAE(nn.Module):
         else:
             y_min = None
         _, mu_g_min, logvar_g_min, mu_c_min, logvar_c_min = self.encode(x_min, y=y_min)
+
+        z_g_min = self.reparameterize(mu_g_min, logvar_g_min)
+        z_c_min = self.reparameterize(mu_c_min, logvar_c_min)
         if self.z_g_maj_ema_inited:
             z_g_maj = self.z_g_maj_mean  # [1, G], trainable
             print('Using majority prototype for generation.')
-        else:
-            z_g_maj = None
-        z_g_min = self.reparameterize(mu_g_min, logvar_g_min)
-        z_c_min = self.reparameterize(mu_c_min, logvar_c_min)
-        if z_g_maj:
             gate = self.gate(z_c_min)  # [1, G]
             z_g_mix = gate * z_g_min + (1.0 - gate) * z_g_maj
 
