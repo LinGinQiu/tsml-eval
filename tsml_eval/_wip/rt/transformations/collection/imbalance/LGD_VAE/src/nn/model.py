@@ -654,24 +654,34 @@ class LatentGatedDualVAE(nn.Module):
             a = torch.full((B, 1), alpha_val, device=device)
             z_g_mix = (1.0 - a) * z_g1 + a * z_g2
             z_c_mix = (1.0 - a) * z_c1 + a * z_c2
+            if self.z_g_maj_ema_inited:
+                z_g_maj = self.z_g_maj_mean  # [1, G], trainable
+                print('Using majority prototype for generation.')
+            else:
+                z_g_maj = None
+            if z_g_maj:
+                gate = self.gate(z_c_mix)  # [1, G]
+                z_g_mix = gate * z_g_mix + (1.0 - gate) * z_g_maj
 
             z_full = torch.cat([z_g_mix, z_c_mix], dim=1)   # [B, G+C]
-            x_gen = self.decoder(z_full)                    # [B, C, T]
+            y_onehot = F.one_hot(y_min1, num_classes=self.num_classes).float()
+            x_gen = self.decoder(z_full, y_onehot=y_onehot)
             return x_gen
         else:
-            xs = []
-            for _ in range(num_samples):
-                if alpha is None:
-                    a = torch.rand(B, 1, device=device)
-                else:
-                    a = torch.full((B, 1), float(alpha), device=device)
-                z_g_mix = (1.0 - a) * z_g1 + a * z_g2
-                z_c_mix = (1.0 - a) * z_c1 + a * z_c2
-                z_full = torch.cat([z_g_mix, z_c_mix], dim=1)
-                x_gen_k = self.decoder(z_full)  # [B, C, T]
-                xs.append(x_gen_k)
+            raise NotImplementedError("num_samples > 1 is not implemented yet.")
+            # xs = []
+            # for _ in range(num_samples):
+            #     if alpha is None:
+            #         a = torch.rand(B, 1, device=device)
+            #     else:
+            #         a = torch.full((B, 1), float(alpha), device=device)
+            #     z_g_mix = (1.0 - a) * z_g1 + a * z_g2
+            #     z_c_mix = (1.0 - a) * z_c1 + a * z_c2
+            #     z_full = torch.cat([z_g_mix, z_c_mix], dim=1)
+            #     x_gen_k = self.decoder(z_full)  # [B, C, T]
+            #     xs.append(x_gen_k)
 
-            return torch.stack(xs, dim=0)  # [num_samples, B, C, T]
+            # return torch.stack(xs, dim=0)  # [num_samples, B, C, T]
 
     @torch.no_grad()
     def generate_from_prototype(

@@ -168,7 +168,16 @@ class VOTE(BaseCollectionTransformer):
                 new_ts[i] = new_series.squeeze(0)
             if self.visualize:
                 _plot_series_list(new_ts[:10], title="generated from pair")
-
+        elif self.mode == "mjp":
+            for i in range(self.n_generate_samples):
+                index = self._random_state.choice(X_minority.shape[0])
+                x_min = torch.from_numpy(X_minority[index][np.newaxis, :]).float().to(self._device)
+                new_series = self.pipeline.transform(mode='prototype', x_min=x_min, use_y=True)
+                new_series = new_series.cpu().numpy()
+                assert new_series.shape == (1, C, L), f"VAE output shape {new_series.shape} != {(1, C, L)}"
+                new_ts[i] = new_series.squeeze(0)
+            if self.visualize:
+                _plot_series_list(new_ts[:10], title="generated from pair")
         elif self.mode == "lp":
             num1 = self.n_generate_samples // 2
             num2 = self.n_generate_samples - num1
