@@ -26,8 +26,11 @@ unbalanced_transformers = [
     "lgd_l",
     "lgd_p",
     "lgd_m",
+    "lgd_ml",
     "lgd_lp",
     "lgd_mlp",
+    "lgd_mp",
+    "lgd_mlp3",
     "mgvae",
     "ibgan",
     "timevae",
@@ -234,6 +237,28 @@ def _set_unbalanced_transformer(t, dataset_name, random_state, n_jobs):
             mode="mjp",
             random_state=random_state,
         )
+    elif t == "lgd_ml":
+        from tsml_eval._wip.rt.transformations.collection.imbalance._lgdvae import (
+            VOTE,
+        )
+
+        return VOTE(
+            n_jobs=n_jobs,
+            dataset_name=dataset_name,
+            mode="ml",
+            random_state=random_state,
+        )
+    elif t == "lgd_mp":
+        from tsml_eval._wip.rt.transformations.collection.imbalance._lgdvae import (
+            VOTE,
+        )
+
+        return VOTE(
+            n_jobs=n_jobs,
+            dataset_name=dataset_name,
+            mode="mp",
+            random_state=random_state,
+        )
     elif t == "lgd_lp":
         from tsml_eval._wip.rt.transformations.collection.imbalance._lgdvae import (
             VOTE,
@@ -254,6 +279,17 @@ def _set_unbalanced_transformer(t, dataset_name, random_state, n_jobs):
             n_jobs=n_jobs,
             dataset_name=dataset_name,
             mode="mlp",
+            random_state=random_state,
+        )
+    elif t == "lgd_mlp3":
+        from tsml_eval._wip.rt.transformations.collection.imbalance._lgdvae import (
+            VOTE,
+        )
+
+        return VOTE(
+            n_jobs=n_jobs,
+            dataset_name=dataset_name,
+            mode="mlp3",
             random_state=random_state,
         )
     elif t == "mgvae":
