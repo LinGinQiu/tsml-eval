@@ -241,7 +241,7 @@ def train_mgvae_pipeline(majority_data, minority_data, input_dim, ewc_lambda=500
             scheduler.step()
         if epoch % 10 == 0:
             print(f'Fine-tune Epoch {epoch}: Loss: {total_loss / len(min_loader):.4f}')
-
+    del ewc
     return model
 
 
@@ -410,6 +410,7 @@ class MGVAE(BaseCollectionTransformer):
         return self
 
     def _transform(self, X, y=None):
+        import gc  # 确保引入 gc
         X_resampled = [X.copy()]
         y_resampled = [y.copy()]
         C, L = X.shape[1], X.shape[2]
@@ -417,7 +418,28 @@ class MGVAE(BaseCollectionTransformer):
             raise RuntimeError("The model has not been trained yet. Call 'fit' first.")
         X_normized = (X.reshape(X.shape[0], -1) - self.mean) / self.std
         X_majority = torch.tensor(X_normized[y == self._cls_maj], dtype=torch.float32).to(self._device)
-        X_new = generate_samples(self.model, X_majority).cpu().detach().numpy()
+        generated_tensor = generate_samples(self.model, X_majority)
+        X_new = generated_tensor.cpu().detach().numpy()
+        # ================= [关键修改：强制释放 PyTorch 显存] =================
+        print(f"[MGVAE] Cleaning up PyTorch model and cache on {self._device}...")
+
+        # 1. 删除输入数据的 GPU 引用
+        del X_majority
+        del generated_tensor
+        # 2. 删除模型本身
+        # 因为 model 是绑定在 self 上的，如果不删，它会一直活到整个脚本结束
+        del self.model
+        self.model = None
+
+        # 3. 强制 Python 垃圾回收 (清理 Python 层的引用)
+        gc.collect()
+
+        # 4. 强制 PyTorch 释放缓存 (把显存还给操作系统，给 TimesNet 用)
+        if self._device.type == 'cuda':
+            torch.cuda.empty_cache()
+
+        print("[MGVAE] GPU memory released.")
+
         # 反标准化
         X_new = X_new * self.std + self.mean
         index = self._random_state.choice(X_new.shape[0], size=self.n_generate_samples, replace=False)
