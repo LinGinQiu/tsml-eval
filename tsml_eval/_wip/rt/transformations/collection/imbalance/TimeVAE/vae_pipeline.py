@@ -15,7 +15,7 @@ from tsml_eval._wip.rt.transformations.collection.imbalance.TimeVAE.vae.vae_util
 )
 
 
-def run_vae_pipeline(train_data, valid_data=None, vae_type: str = 'timeVAE', n_samples=100, dataset_name=None,
+def run_vae_pipeline(train_data, valid_data=None, vae_type: str = 'TimeVAE', n_samples=100, dataset_name=None,
                      random_state=None,max_epoch=1000,):
     # ----------------------------------------------------------------------------------
     # 1. Prepare Data
@@ -60,7 +60,7 @@ def run_vae_pipeline(train_data, valid_data=None, vae_type: str = 'timeVAE', n_s
         vae_model = load_vae_model(vae_type=vae_type ,dir_path=save_vae_model_path)
 
     else:
-        print(f"No existing model found at: {save_vae_model_path}")
+        print(f"No existing model found at: {params_file}")
         print("Starting training from scratch...")
 
         # 确保目录存在

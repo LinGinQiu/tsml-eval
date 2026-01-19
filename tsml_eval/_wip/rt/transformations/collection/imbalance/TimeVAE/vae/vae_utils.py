@@ -52,7 +52,7 @@ def instantiate_vae_model(
         ValueError: If an unrecognized VAE type is provided.
     """
     set_seeds(seed=123)
-
+    vae_type = vae_type.lower()
     if vae_type == "vae_dense":
         vae = VAE_Dense(
             seq_len=sequence_length,
@@ -67,7 +67,7 @@ def instantiate_vae_model(
             batch_size=batch_size,
             **kwargs,
         )
-    elif vae_type == "timeVAE":
+    elif vae_type == "timevae":
         vae = TimeVAE(
             seq_len=sequence_length,
             feat_dim=feature_dim,
@@ -77,7 +77,7 @@ def instantiate_vae_model(
     else:
         raise ValueError(
             f"Unrecognized model type [{vae_type}]. "
-            "Please choose from vae_dense, vae_conv, timeVAE."
+            "Please choose from vae_dense, vae_conv, timevae."
         )
 
     return vae
@@ -122,11 +122,12 @@ def load_vae_model(vae_type: str, dir_path: str) -> Union[VAE_Dense, VAE_Conv, T
     Returns:
         Union[VAE_Dense, VAE_Conv, TimeVAE]: The loaded VAE model.
     """
+    vae_type = vae_type.lower()
     if vae_type == "vae_dense":
         vae = VAE_Dense.load(dir_path)
     elif vae_type == "vae_conv":
         vae = VAE_Conv.load(dir_path)
-    elif vae_type == "timeVAE":
+    elif vae_type == "timevae":
         vae = TimeVAE.load(dir_path)
     else:
         raise ValueError(
