@@ -27,7 +27,7 @@ unbalanced_transformers = [
     "lgd_p",
     "lgd_m",
     "lgd_lp",
-    "mgvae",
+    "lgd_mlp" "mgvae",
     "ibgan",
     "timevae",
     "timegan",
@@ -242,6 +242,17 @@ def _set_unbalanced_transformer(t, dataset_name, random_state, n_jobs):
             n_jobs=n_jobs,
             dataset_name=dataset_name,
             mode="lp",
+            random_state=random_state,
+        )
+    elif t == "lgd_mlp":
+        from tsml_eval._wip.rt.transformations.collection.imbalance._lgdvae import (
+            VOTE,
+        )
+
+        return VOTE(
+            n_jobs=n_jobs,
+            dataset_name=dataset_name,
+            mode="mlp",
             random_state=random_state,
         )
     elif t == "mgvae":
