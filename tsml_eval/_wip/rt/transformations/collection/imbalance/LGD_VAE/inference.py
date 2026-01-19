@@ -136,24 +136,20 @@ class Inference:
     # Generation helpers for LGD-VAE
     # -----------------------------
     def generate_vae_prior(
-        self,
-        batch_size: int = 1,
-        device: Optional[torch.device] = None,
-    ) -> Tensor:
+        self,x_min: Tensor) -> Tensor:
         """
-        方式一：调用底层 LGD-VAE 的 VAE 先验采样生成接口。
-        要求底层模型（或其 .model）实现 `generate_vae_prior` 方法。
-        default generate minority samples
+        use vae prior to interpret the latent embedding to generate new samples
         """
         lite_model = getattr(self.model, "model", self.model)
-        if device is None:
-            device = self.device
         if hasattr(lite_model, "generate_vae_prior"):
-
-            return self.invert_zscore(lite_model.generate_vae_prior(num_samples=batch_size, device=device),
-                                      mean=self.mean_, std=self.std_)
-
-        raise AttributeError("Underlying model does not implement `generate_vae_prior`.")
+            if self.mean_ and self.std_:
+                x_min = self.apply_zscore(x_min, self.mean_, self.std_)
+            return self.invert_zscore(
+                lite_model.generate_vae_prior(x_min.to(self.device)),
+                mean=self.mean_,
+                std=self.std_
+            )
+        raise AttributeError("Underlying model does not implement `generate_from_pair`.")
 
     def generate_mix_pair(self, x_min: Tensor, x_maj: Tensor, use_y:bool=False,) -> Tensor:
         """

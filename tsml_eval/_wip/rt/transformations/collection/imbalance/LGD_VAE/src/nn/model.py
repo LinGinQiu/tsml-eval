@@ -4,6 +4,7 @@ import math
 from typing import Dict, Optional, Tuple
 from matplotlib.animation import FuncAnimation
 import torch
+from sympy.abc import alpha
 from torch import nn, Tensor
 import torch.nn.functional as F
 
@@ -545,34 +546,36 @@ class LatentGatedDualVAE(nn.Module):
         return out
     # ---- generation
     @torch.no_grad()
-    def generate_vae_prior(self, num_samples:int, device=None) -> Tensor:
+    def generate_vae_prior(self, x_min: Tensor, alpha: Optional[float] = None,) -> Tensor:
         """
-        y: [B] int labels
-        return: x_gen [B, C, T]
+        x_min [1, C, T]
+        return: [1, C, T] generated
         """
-        if device is None:
-            device = next(self.parameters()).device
+        y_min = torch.ones(x_min.shape[0], device=x_min.device).long()
 
-        y = torch.ones(num_samples, device=device).long()
-        B = num_samples
+        _, mu_g_min, logvar_g_min, mu_c_min, logvar_c_min = self.encode(x_min, y=y_min)
 
-        G = self.global_head_p.fc_mu.out_features
-        C = self.class_head_p.fc_mu.out_features
-
-        z_g_sample = torch.randn(B, G, device=device)
-        z_c_sample = torch.randn(B, C, device=device)
-
-        # optional: 用 gate 做一些 minority-aware 的混合逻辑
-        gate = self.gate(z_c_sample)
-        z_g_mix = gate * z_g_sample + (1.0 - gate) * z_g_sample  # 暂时等价
-
-        z_full = torch.cat([z_g_mix, z_c_sample], dim=1)
-
-        if self.num_classes is not None:
-            y_onehot = F.one_hot(y, num_classes=self.num_classes).float()
+        z_g_min = self.reparameterize(mu_g_min, logvar_g_min)
+        z_c_min = self.reparameterize(mu_c_min, logvar_c_min)
+        z_g_min_prior = torch.randn_like(z_g_min)
+        z_c_min_prior = torch.randn_like(z_c_min)
+        if alpha is None:
+            alpha_val = 0.3
         else:
-            y_onehot = None
+            alpha_val = float(alpha)
+        z_g_min = (1.0 - alpha_val) * z_g_min + alpha_val * z_g_min_prior
+        z_c_min = (1.0 - alpha_val) * z_c_min + alpha_val * z_c_min_prior
+        if self.z_g_maj_ema_inited:
+            z_g_maj = self.z_g_maj_mean  # [1, G], trainable
+            # print('Using majority prototype for generation.')
+            gate = self.gate(z_c_min)  # [1, G]
+            z_g_mix = gate * z_g_min + (1.0 - gate) * z_g_maj
 
+            z_full = torch.cat([z_g_mix, z_c_min], dim=1)
+        else:
+            z_full = torch.cat([z_g_min, z_c_min], dim=1)
+        y = y_min
+        y_onehot = F.one_hot(y, num_classes=self.num_classes).float()
         x_gen = self.decoder(z_full, y_onehot=y_onehot)
         return x_gen
 
