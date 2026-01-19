@@ -136,7 +136,7 @@ class Inference:
     # Generation helpers for LGD-VAE
     # -----------------------------
     def generate_vae_prior(
-        self,x_min: Tensor) -> Tensor:
+        self,x_min: Tensor,alpha: Optional[float] = None,) -> Tensor:
         """
         use vae prior to interpret the latent embedding to generate new samples
         """
@@ -145,7 +145,7 @@ class Inference:
             if self.mean_ and self.std_:
                 x_min = self.apply_zscore(x_min, self.mean_, self.std_)
             return self.invert_zscore(
-                lite_model.generate_vae_prior(x_min.to(self.device)),
+                lite_model.generate_vae_prior(x_min.to(self.device),alpha),
                 mean=self.mean_,
                 std=self.std_
             )

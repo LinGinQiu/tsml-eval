@@ -291,42 +291,17 @@ class VOTE(BaseCollectionTransformer):
                 new_ts[i + num1+num2] = new_series.squeeze(0)
             if self.visualize:
                 _plot_series_list(new_ts[num1:num1 + 10], title="generated from latent smote")
-        elif self.mode == "mlp3":
-            num1 = int(self.n_generate_samples// 3)
-            num2 = int(self.n_generate_samples // 3)
-            num3 = self.n_generate_samples - num1 - num2
-            for i in range(num1):
-                index = self._random_state.choice(X_minority.shape[0])
-                x_min = torch.from_numpy(X_minority[index][np.newaxis, :]).float().to(self._device)
-                new_series = self.pipeline.transform(mode='prototype', x_min=x_min)
+        elif self.mode == "prior":
+            for i in range(self.n_generate_samples):
+                index1 = self._random_state.choice(X_minority.shape[0])
+                x_min = torch.from_numpy(X_minority[index1][np.newaxis, :]).float().to(self._device)
+                step = self._random_state.uniform(0, 0.3)
+                new_series = self.pipeline.transform(mode="prior", x_min=x_min, alpha=step)
                 new_series = new_series.cpu().numpy()
                 assert new_series.shape == (1, C, L), f"VAE output shape {new_series.shape} != {(1, C, L)}"
                 new_ts[i] = new_series.squeeze(0)
             if self.visualize:
-                _plot_series_list(new_ts[:10], title="generated from pair")
-            for i in range(num2):
-                index = self._random_state.choice(X_minority.shape[0])
-                x_min = torch.from_numpy(X_minority[index][np.newaxis, :]).float().to(self._device)
-                index = self._random_state.choice(X_majority.shape[0])
-                x_maj = torch.from_numpy(X_majority[index][np.newaxis, :]).float().to(self._device)
-                new_series = self.pipeline.transform(mode='pair', x_min=x_min, x_maj=x_maj, use_y=True)
-                new_series = new_series.cpu().numpy()
-                assert new_series.shape == (1, C, L), f"VAE output shape {new_series.shape} != {(1, C, L)}"
-                new_ts[num1+i] = new_series.squeeze(0)
-            if self.visualize:
-                _plot_series_list(new_ts[:10], title="generated from pair")
-            for i in range(num3):
-                index1, index2 = self._random_state.choice(X_minority.shape[0], size=2, replace=False)
-                x_min_1 = torch.from_numpy(X_minority[index1][np.newaxis, :]).float().to(self._device)
-                x_min_2 = torch.from_numpy(X_minority[index2][np.newaxis, :]).float().to(self._device)
-                step = self._random_state.uniform()
-                new_series = self.pipeline.transform(mode='latent', x_min1=x_min_1, x_min2=x_min_2, alpha=step)
-
-                new_series = new_series.cpu().numpy()
-                assert new_series.shape == (1, C, L), f"VAE output shape {new_series.shape} != {(1, C, L)}"
-                new_ts[i + num1+num2] = new_series.squeeze(0)
-            if self.visualize:
-                _plot_series_list(new_ts[num1:num1 + 10], title="generated from latent smote")
+                _plot_series_list(new_ts[:10], title="generated from latent smote")
 
         self._generated_samples = new_ts.copy()
         X_resampled.append(new_ts)
@@ -341,7 +316,7 @@ if __name__ == "__main__":
     from tsml_eval._wip.rt.transformations.collection.imbalance._utils import _plot_series_list
 
     dataset_name = 'AllGestureWiimoteX_eq'
-    smote = VOTE(mode='mlp', random_state=0, visualize=False, dataset_name=dataset_name)
+    smote = VOTE(mode='prior', random_state=0, visualize=False, dataset_name=dataset_name)
     # Example usage
     from local.load_ts_data import load_ts_data
 
