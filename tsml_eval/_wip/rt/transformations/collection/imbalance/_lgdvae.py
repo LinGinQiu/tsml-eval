@@ -304,6 +304,25 @@ class VOTE(BaseCollectionTransformer):
                 _plot_series_list(new_ts[:10], title="generated from latent smote")
 
         self._generated_samples = new_ts.copy()
+        # ================= [ CLEANUP BLOCK ] =================
+        # Clean up GPU memory immediately after generation loops
+        print(f"[VOTE] Cleaning up pipeline model on {self._device}...")
+
+        # 1. Delete the pipeline object which contains the PyTorch model
+        if hasattr(self, 'pipeline'):
+            del self.pipeline
+            self.pipeline = None
+
+        # 2. Force Python Garbage Collection
+        import gc
+        gc.collect()
+
+        # 3. Force PyTorch to release cached memory to OS
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
+        print("[VOTE] GPU memory released.")
+        # =====================================================
         X_resampled.append(new_ts)
         y_resampled.append(new_ys)
         X_synthetic = np.vstack(X_resampled)
