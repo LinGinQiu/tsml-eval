@@ -9,7 +9,10 @@ import matplotlib.pyplot as plt
 from tsml_eval._wip.rt.transformations.collection.imbalance.LGD_VAE.lgd_pipline import LGDVAEPipeline
 plt.close('all')
 import glob
-#
+import os
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+
+import torch
 from tsml_eval._wip.rt.classification.distance_based import KNeighborsTimeSeriesClassifier
 from tsml_eval._wip.rt.clustering.averaging._ba_utils import _get_alignment_path
 from aeon.transformations.collection import BaseCollectionTransformer
@@ -296,8 +299,11 @@ class VOTE(BaseCollectionTransformer):
                 index1 = self._random_state.choice(X_minority.shape[0])
                 x_min = torch.from_numpy(X_minority[index1][np.newaxis, :]).float().to(self._device)
                 step = self._random_state.uniform(0, 0.3)
-                new_series = self.pipeline.transform(mode="prior", x_min=x_min, alpha=step)
-                new_series = new_series.cpu().numpy()
+                new_series_torch = self.pipeline.transform(mode="prior", x_min=x_min, alpha=step)
+                new_series = new_series_torch.cpu().detach().numpy()
+                del new_series_torch
+                # 6. (可选) 如果显存真的很紧，每一步都清空
+                torch.cuda.empty_cache()
                 assert new_series.shape == (1, C, L), f"VAE output shape {new_series.shape} != {(1, C, L)}"
                 new_ts[i] = new_series.squeeze(0)
             if self.visualize:
