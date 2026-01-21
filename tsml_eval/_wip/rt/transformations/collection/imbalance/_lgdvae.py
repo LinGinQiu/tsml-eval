@@ -92,7 +92,8 @@ class VOTE(BaseCollectionTransformer):
         self.n_jobs = n_jobs
         self.dataset_name = dataset_name
         self._random_state = None
-
+        import torch
+        torch.manual_seed(self.random_state)
         self.visualize = visualize
         self._root = None
         self._device = None
