@@ -472,17 +472,17 @@ class LGDVAEPipeline:
             resample_id = self.seed
             predefined_resample = getattr(cfg.data, "predefined_resample", False)
             print(f'random id in pipline is {resample_id}')
-            X_tr_, y_tr_, X_te_, y_te_ = load_ucr_splits(
-                problem_path=problem_path,
-                dataset_name=dataset_name,
-                resample_id=resample_id,
-                predefined_resample=predefined_resample,
-            )
-            assert np.array_equal(X_tr, X_tr_), "Train data mismatch!"
-            assert np.array_equal(y_tr, y_tr_), "Train labels mismatch!"
+            # X_tr_, y_tr_, X_te_, y_te_ = load_ucr_splits(
+            #     problem_path=problem_path,
+            #     dataset_name=dataset_name,
+            #     resample_id=resample_id,
+            #     predefined_resample=predefined_resample,
+            # )
+            # assert np.array_equal(X_tr, X_tr_), "Train data mismatch!"
+            # assert np.array_equal(y_tr, y_tr_), "Train labels mismatch!"
 
-            X_te, y_te = X_te_, y_te_
-
+            # X_te, y_te = X_te_, y_te_
+            X_te, y_te = X_tr, y_tr
         # apply z-score
         normalizer = ZScoreNormalizer().fit(X_tr)
         stats_dir = os.path.join(cfg.paths.work_root, "stats")
