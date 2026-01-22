@@ -91,7 +91,7 @@ optim:
     warmup_epochs: 10
 
 trainer:
-  max_epochs: 200
+  max_epochs: 100
   accelerator: "auto"
   devices: 1
   strategy: "auto"
