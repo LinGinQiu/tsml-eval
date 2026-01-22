@@ -543,6 +543,7 @@ class LGDVAEPipeline:
                     if self.mean_ and self.std_:
                         print(f"[LGDVAEPipeline] Loading mean and std: mean: {self.mean_}, std: {self.std_}")
                         self.infer.load_zscore_values(mean=self.mean_, std=self.std_)
+                    return self
                 except Exception as e:
                     print(f"[LGDVAEPipeline] Failed to load checkpoint ({e}), fallback to training from scratch.")
                     ckpt_path = None  # 回退到正常训练
