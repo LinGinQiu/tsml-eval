@@ -1,4 +1,4 @@
-timeVAE:
+TimeVAE:
   latent_dim: 8
   hidden_layer_sizes:
     - 50
