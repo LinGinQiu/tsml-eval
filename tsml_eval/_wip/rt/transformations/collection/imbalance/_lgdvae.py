@@ -13,6 +13,8 @@ import os
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 
 import torch
+# 允许加载 checkpoint 中的 numpy 数据
+torch.serialization.add_safe_globals([np.core.multiarray._reconstruct])
 from tsml_eval._wip.rt.classification.distance_based import KNeighborsTimeSeriesClassifier
 from tsml_eval._wip.rt.clustering.averaging._ba_utils import _get_alignment_path
 from aeon.transformations.collection import BaseCollectionTransformer
