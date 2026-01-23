@@ -301,7 +301,7 @@ class VOTE(BaseCollectionTransformer):
             for i in range(self.n_generate_samples):
                 index1 = self._random_state.choice(X_minority.shape[0])
                 x_min = torch.from_numpy(X_minority[index1][np.newaxis, :]).float().to(self._device)
-                step = self._random_state.uniform(0, 1.0)
+                step = self._random_state.uniform(0, 0.3)
                 new_series_torch = self.pipeline.transform(mode="prior", x_min=x_min, alpha=step)
                 new_series = new_series_torch.cpu().detach().numpy()
                 del new_series_torch
