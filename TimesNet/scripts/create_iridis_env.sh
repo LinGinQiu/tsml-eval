@@ -5,7 +5,7 @@
 
 set -e
 
-ENV_PATH="/scratch/cq2u24/conda-envs/deeplearning_pytorch"
+ENV_PATH="/scratch/yx1g22/conda-envs/deeplearning_pytorch"
 PYTHON_VERSION="3.10"
 
 # Remove existing environment if present

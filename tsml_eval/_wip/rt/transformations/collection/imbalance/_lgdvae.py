@@ -343,7 +343,7 @@ class VOTE(BaseCollectionTransformer):
 if __name__ == "__main__":
     from tsml_eval._wip.rt.transformations.collection.imbalance._utils import _plot_series_list
 
-    dataset_name = 'AllGestureWiimoteX_eq'
+    dataset_name = 'ACSF1'
     smote = VOTE(mode='prior', random_state=0, visualize=False, dataset_name=dataset_name)
     # Example usage
     from local.load_ts_data import load_ts_data
