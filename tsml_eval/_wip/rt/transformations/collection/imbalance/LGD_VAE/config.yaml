@@ -37,10 +37,10 @@ data:
 model:
   # Encoder
   in_chans: 1
-  embed_dim: 128          # 原 d_model
-  depth: 4               # 原 enc_depth
-  num_heads: 8           # 原 n_heads
-  d_hid: 128
+  embed_dim: 64          # 原 d_model
+#  depth: 4               # 原 enc_depth
+#  num_heads: 8           # 原 n_heads
+#  d_hid: 64
   # Latents
   latent_dim_global: 32
   latent_dim_class: 32
