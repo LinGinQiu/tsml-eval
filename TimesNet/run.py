@@ -27,11 +27,10 @@ if __name__ == "__main__":
         sys.argv += [
             "/Users/qiuchuanhang/Desktop/Exp_tsml/AALTD2025imbalance-main/UCR_Imbalanced_9_1",
             "/Users/qiuchuanhang/PycharmProjects/Time-Series-Library-main/local/results",
-            "TimesNet",
+            "Nonstationary_Transformer",
             "DistalPhalanxOutlineAgeGroup",
             "0",
-            "-dtn",
-            "lgd_lp",
+            # "-dtn", 'smote'
             "--transform_train_only",
             "--task_name",
             "classification",
