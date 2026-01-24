@@ -570,7 +570,7 @@ class LatentGatedDualVAE(nn.Module):
             z_full = torch.cat([z_g_min, z_c_min], dim=1)
         y = y_min
         y_onehot = F.one_hot(y, num_classes=self.num_classes).float()
-        x_gen = self.decoder(z_full, y_onehot=y_onehot)
+        x_gen = self.cdecoder(z_full, y_onehot=y_onehot)
         return x_gen
 
 
@@ -603,7 +603,7 @@ class LatentGatedDualVAE(nn.Module):
             y_onehot = F.one_hot(y, num_classes=self.num_classes).float()
         else:
             y_onehot = None
-        x_gen = self.decoder(z_full, y_onehot=y_onehot)
+        x_gen = self.cdecoder(z_full, y_onehot=y_onehot)
         return x_gen
 
     @torch.no_grad()
@@ -659,7 +659,7 @@ class LatentGatedDualVAE(nn.Module):
 
             z_full = torch.cat([z_g_mix, z_c_mix], dim=1)   # [B, G+C]
             y_onehot = F.one_hot(y_min1, num_classes=self.num_classes).float()
-            x_gen = self.decoder(z_full, y_onehot=y_onehot)
+            x_gen = self.cdecoder(z_full, y_onehot=y_onehot)
             return x_gen
         else:
             raise NotImplementedError("num_samples > 1 is not implemented yet.")
@@ -672,7 +672,7 @@ class LatentGatedDualVAE(nn.Module):
             #     z_g_mix = (1.0 - a) * z_g1 + a * z_g2
             #     z_c_mix = (1.0 - a) * z_c1 + a * z_c2
             #     z_full = torch.cat([z_g_mix, z_c_mix], dim=1)
-            #     x_gen_k = self.decoder(z_full)  # [B, C, T]
+            #     x_gen_k = self.cdecoder(z_full)  # [B, C, T]
             #     xs.append(x_gen_k)
 
             # return torch.stack(xs, dim=0)  # [num_samples, B, C, T]
@@ -701,7 +701,7 @@ class LatentGatedDualVAE(nn.Module):
             z_full = torch.cat([z_g_min, z_c_min], dim=1)
         y = y_min
         y_onehot = F.one_hot(y, num_classes=self.num_classes).float()
-        x_gen = self.decoder(z_full, y_onehot=y_onehot)
+        x_gen = self.cdecoder(z_full, y_onehot=y_onehot)
         return x_gen
 
 
