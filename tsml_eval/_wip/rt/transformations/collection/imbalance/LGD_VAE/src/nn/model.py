@@ -257,7 +257,7 @@ class LatentGatedDualVAE(nn.Module):
         if num_classes is not None:
             # 用 class latent 做分类
             self.classifier = nn.Sequential(
-                nn.Linear(total_latent, num_classes),
+                nn.Linear(latent_dim_global, num_classes),
                 nn.ReLU(),
                 nn.Softmax(dim=1))
             self.y_embed_latent = nn.Linear(num_classes, 16)  # 给 encoder latent 用
@@ -460,7 +460,7 @@ class LatentGatedDualVAE(nn.Module):
 
             if is_min.any() and is_maj.any():
                 # 同时有少数类和多数类样本才算分类损失
-                logits_base = self.classifier(z_full)  # [B, num_classes]
+                logits_base = self.classifier(z_g_final)  # [B, num_classes]
                 # 默认先用 base 来算 loss
                 cls_loss = F.cross_entropy(logits_base, y)
                 cls_logits = logits_base  # 用于 pl 里算 F1 / Acc
@@ -472,46 +472,6 @@ class LatentGatedDualVAE(nn.Module):
                 B_min = int(z_c_min.size(0))
                 B_maj = int(z_g_maj_pool.size(0))
 
-                # 目标：生成合成 minority，使 minority 总数接近 majority
-                # 计算需要生成的合成样本数量（可以用 B_maj - B_min）
-                needed = max(0, B_maj - B_min)
-
-                synth_z_full = None
-                synth_y = None
-
-                if needed > 0:
-                    # 从 majority global 池和 minority class 池中随机采样（可重复采样）
-                    # 索引
-                    idx_g = torch.randint(0, B_maj, (needed,), device=device)
-                    idx_c = torch.randint(0, B_min, (needed,), device=device)
-
-                    z_g_samples = z_g_maj_pool[idx_g]  # [needed, G]
-                    z_c_samples = z_c_min[idx_c]       # [needed, C]
-
-                    synth_z_full = torch.cat([z_g_samples, z_c_samples], dim=1)  # [needed, G+C]
-                    synth_y = torch.full((needed,), fill_value=self.minority_class_id, dtype=y.dtype, device=device)
-
-                else:
-                    # 不需要合成，则保持为空
-                    synth_z_full = torch.empty((0, z_full.size(1)), device=device)
-                    synth_y = torch.empty((0,), dtype=y.dtype, device=device)
-
-                # 将合成样本与原始 batch 的 logits 拼接后计算更强的 CE
-                if synth_z_full.size(0) > 0:
-                    logits_synth = self.classifier(synth_z_full)  # [needed, num_classes]
-                    logits_all = torch.cat([logits_base, logits_synth], dim=0)  # [B + needed, num_classes]
-                    y_all = torch.cat([y, synth_y], dim=0)  # [B + needed]
-                    cls_loss = F.cross_entropy(logits_all, y_all)
-                    # 注意：cls_logits 仍然保留原 batch logits，用于度量
-                    cls_logits = logits_base
-
-                # 另外，如果你想用可学习的多数中心替代 batch pool（更稳定），
-                # 可以把 z_g_maj_pool 替换为重复的 self.z_g_maj_mean + 小噪声。
-                # 示例（可选，用于未来开关）：
-                # if self.z_g_maj_ema_inited:
-                #     z_g_center = self.z_g_maj_mean.expand(needed, -1)
-                #     noise = torch.randn_like(z_g_center) * 0.01
-                #     synth_z_full = torch.cat([z_g_center + noise, z_c_samples], dim=1)
 
         if not self.z_g_maj_ema_inited:
             loss_maj_center = torch.tensor(0.0, device=device)
