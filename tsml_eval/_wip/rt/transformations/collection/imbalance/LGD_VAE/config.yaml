@@ -6,10 +6,10 @@ experiment:
 
 paths:
   data_root: "/scratch/cq2u24/Data/imbalanced_9_1"
-  work_root: "/scratch/cq2u24/MGD_CVAE_Final"
-  logs_dir: "/scratch/cq2u24/MGD_CVAE_Final/logs"          # 不用 ${} 插值
-  ckpt_dir: "/scratch/cq2u24/MGD_CVAE_Final/checkpoints"
-  outputs_dir: "/scratch/cq2u24/MGD_CVAE_Final/imputations"
+  work_root: "/scratch/cq2u24/models/MGD_CVAE"
+  logs_dir: "/scratch/cq2u24/models/MGD_CVAE/logs"          # 不用 ${} 插值
+  ckpt_dir: "/scratch/cq2u24/models/MGD_CVAE/checkpoints"
+  outputs_dir: "/scratch/cq2u24/models/MGD_CVAE/imputations"
 
 data:
   # 由 CLI 覆盖：--dataset_name <UCR_NAME>
@@ -106,7 +106,7 @@ trainer:
 # —— 新增：配合 train.py 里 callbacks 的访问 ——
 callbacks:
   checkpointing:
-    dirpath: "/scratch/cq2u24/MGD_CVAE_Final/checkpoints"
+    dirpath: "/scratch/cq2u24/models/MGD_CVAE/checkpoints"
     filename: "MGD_CVAE-{epoch:02d}"
     monitor: "train/recon_loss"
     mode: "min"
@@ -124,7 +124,7 @@ callbacks:
 
 logging:
   use_tensorboard: true
-  project: "MGD_CVAE_Final-ucr"
+  project: "MGD_CVAE-ucr"
   run_name: null
 
 impute_infer:
