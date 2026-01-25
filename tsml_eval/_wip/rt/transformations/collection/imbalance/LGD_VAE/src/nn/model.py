@@ -192,7 +192,7 @@ class LatentGatedDualVAE(nn.Module):
         self.minority_class_id = minority_class_id
         self.align_lambda = align_lambda
         self.recon_metric = recon_metric
-        hidden_dim = [32, 64, d_model*2]
+        hidden_dim = [32, 64, d_model]
         dropout_list = [0.1, 0.1, 0.2]
         latent_dim = d_model
 
@@ -222,9 +222,9 @@ class LatentGatedDualVAE(nn.Module):
 
         # 2) two latent heads
         if num_classes is not None:
-            feature_dim = d_model*2 + 16  # for y embedding
+            feature_dim = d_model + 16  # for y embedding
         else:
-            feature_dim = d_model*2
+            feature_dim = d_model
         self.global_head_p = LatentHead(feature_dim, latent_dim_global)
         self.class_head_p = LatentHead(feature_dim, latent_dim_class)
 
@@ -294,12 +294,12 @@ class LatentGatedDualVAE(nn.Module):
     def encode_feat(self, x: Tensor) -> Tensor:
         # x: [B, C, T]
         x = x.view(x.size(0), -1)
-        x = self.embed(x)  # [B, d_model*2]
+        x = self.embed(x)  # [B, d_model]
         return x
 
     def encode_latent_branches(self, feat: Tensor, y: Optional[Tensor] = None) \
             -> tuple[Tensor, Tensor, Tensor, Tensor]:
-        B = feat.size(0) # B, d_model*2
+        B = feat.size(0) # B, d_model
         device = feat.device
         if y is None:
             # 没标签时退化用“positive 分支”或随便一个（建议统一用 min 分支）
@@ -342,7 +342,7 @@ class LatentGatedDualVAE(nn.Module):
 
     def encode(self,x: Tensor, y: Optional[Tensor] = None) \
             -> tuple[Tensor, Tensor, Tensor, Tensor, Tensor]:
-        feat = self.encode_feat(x)  # [B, d_modek*2]
+        feat = self.encode_feat(x)  # [B, d_model]
         if y is not None and self.num_classes is not None and self.y_embed_latent is not None:
             y_onehot = F.one_hot(y, num_classes=self.num_classes).float()
             y_cond = self.y_embed_latent(y_onehot)  # [B, D]
