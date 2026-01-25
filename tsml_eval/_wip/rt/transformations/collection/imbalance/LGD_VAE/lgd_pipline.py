@@ -298,6 +298,7 @@ class LGDVAEPipeline:
             split="train",
             normalizer=None,
             augmentation_ratio=0.0,
+            rebalance=True,
         )
         if X_te is not None:
             eval_dataset = UCRDataset(
@@ -318,11 +319,11 @@ class LGDVAEPipeline:
         if getattr(train_dataset, "sample_weights", None) is not None:
             print("Use WeightedRandomSampler for training data.")
             # print("Use SwitchableWeightedSampler for latent distillation training.")
-            sampler = WeightedRandomSampler(
-                weights=train_dataset.sample_weights,
-                num_samples=len(train_dataset.sample_weights),
-                replacement=True,
-            )
+            # sampler = WeightedRandomSampler(
+            #     weights=train_dataset.sample_weights,
+            #     num_samples=len(train_dataset.sample_weights),
+            #     replacement=True,
+            # )
             # sampler = SwitchableWeightedSampler(
             #     full_weights=train_dataset.sample_weights,
             #     majority_indices=train_dataset.majority_indices,
@@ -330,7 +331,6 @@ class LGDVAEPipeline:
             train_loader = DataLoader(
                 train_dataset,
                 batch_size=cfg.data.train_batch_size,
-                sampler=sampler,
                 shuffle=False,
                 num_workers=cfg.data.loader_workers,
             )
@@ -464,26 +464,7 @@ class LGDVAEPipeline:
         dataset_name = cfg.data.dataset_name
         # 1) 准备数据
         if  X_te is None or y_te is None:
-            # 只支持 UCR 格式（保持和你的原脚本一致）
-            if getattr(cfg.data, "format", "ucr") != "ucr":
-                raise NotImplementedError("Only UCR format is implemented yet.")
-
-            problem_path = cfg.paths.data_root
-            resample_id = self.seed
-            predefined_resample = getattr(cfg.data, "predefined_resample", False)
-            print(f'random id in pipline is {resample_id}')
             X_te, y_te = X_tr, y_tr
-            # X_tr_, y_tr_, X_te_, y_te_ = load_ucr_splits(
-            #     problem_path=problem_path,
-            #     dataset_name=dataset_name,
-            #     resample_id=resample_id,
-            #     predefined_resample=predefined_resample,
-            # )
-            # assert np.array_equal(X_tr, X_tr_), "Train data mismatch!"
-            # assert np.array_equal(y_tr, y_tr_), "Train labels mismatch!"
-
-            # X_te, y_te = X_te_, y_te_
-            # X_te, y_te = X_tr, y_tr
         # apply z-score
         normalizer = ZScoreNormalizer().fit(X_tr)
         stats_dir = os.path.join(cfg.paths.work_root, "stats")
@@ -495,6 +476,8 @@ class LGDVAEPipeline:
         print(f"dataset mean: {normalizer.mean_} and std: {normalizer.std_}")
         X_tr = normalizer.transform(X_tr)
         X_te = normalizer.transform(X_te)
+        # prerebalance use smote
+
         # 2) DataLoader + Dataset
         train_dataset, eval_dataset, train_loader, eval_loader = self._build_dataloaders(
             X_tr, y_tr, X_te, y_te

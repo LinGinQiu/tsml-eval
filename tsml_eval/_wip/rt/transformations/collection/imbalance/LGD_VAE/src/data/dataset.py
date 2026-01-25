@@ -1,4 +1,6 @@
 # src/data/ucr_dataset.py
+from os import minor
+
 import numpy as np
 import torch
 from torch.utils.data import Dataset
@@ -27,11 +29,23 @@ class ZScoreNormalizer:
         return self.fit(x).transform(x)
 
 class UCRDataset(Dataset):
-    def __init__(self, data, labels, split, normalizer=None, augmentation_ratio=0.0):
+    def __init__(self, data, labels, split, normalizer=None, augmentation_ratio=0.0,rebalance=False):
+        """
+        if rebalance:
+        we will change the batch to make each X and y is combined both majority class and minority class samples.
+        Parameters
+        ----------
+        data
+        labels
+        split
+        normalizer
+        augmentation_ratio
+        rebalance
+        """
         self.split = split.lower()
         self.labels = labels.astype(np.int64)
         self.augmentation_ratio = augmentation_ratio
-
+        self.rebalance = rebalance
         if normalizer is not None:
             data = normalizer.transform(data)
         self.data = data.astype(np.float32)  # (N, C, T)
@@ -40,7 +54,7 @@ class UCRDataset(Dataset):
         self.class_inv_weights = None
         self.sample_weights = None
         self.majority_indices = []
-
+        self.minority_indices = []
         if self.split == "train":
             classes, counts = np.unique(self.labels, return_counts=True)
             # === 新增逻辑：计算 Majority Indices ===
@@ -51,7 +65,7 @@ class UCRDataset(Dataset):
             # 2. 找到所有等于该标签的样本索引
             # np.where 返回的是 tuple，取 [0] 获取索引数组
             self.majority_indices = np.where(self.labels == majority_label)[0].tolist()
-
+            self.minority_indices = np.where(self.labels != majority_label)[0].tolist()
             print(f"Dataset Info: Majority Class is {majority_label}, Count: {len(self.majority_indices)}")
             # 类频率 π_c（真正的 prior）
             freq = counts.astype(np.float32) / np.sum(counts)
@@ -75,12 +89,33 @@ class UCRDataset(Dataset):
             self.sample_weights = None
 
     def __len__(self):
+        if self.split == "train" and self.rebalance:
+            return len(2*self.majority_indices)
         return self.data.shape[0]
 
     def __getitem__(self, ind):
+        if self.rebalance:
+            if self.split == "train":
+                if ind%2 ==0:
+                    # majority class
+                    real_ind = self.majority_indices[ind//2]
+                    x = self.data[real_ind]       # (C, T)
+                    y = self.labels[real_ind]
+                    return (torch.from_numpy(x).float(),torch.from_numpy(x).float()), torch.tensor(y).long()
+                else:
+                    # minority class
+                    real_ind = self.minority_indices[ind//2 % len(self.minority_indices)]
+                    mix_ind = np.random.choice(self.minority_indices)
+                    x_minority = self.data[mix_ind]
+                    recon_x = self.data[real_ind]     # (C, T)
+                    # ====== 数据增强部分，可选 ======
+                    x = 0.9*recon_x+0.1*x_minority
+                    y = self.labels[real_ind]
+                    return (torch.from_numpy(x).float(),torch.from_numpy(recon_x).float()), torch.tensor(y).long()
+
         x = self.data[ind]       # (C, T)
         y = self.labels[ind]
-        return torch.from_numpy(x).float(), torch.tensor(y).long()
+        return (torch.from_numpy(x).float(),torch.from_numpy(x).float()), torch.tensor(y).long()
 
 def load_ucr_splits(problem_path, dataset_name, resample_id=0, predefined_resample=False):
     """

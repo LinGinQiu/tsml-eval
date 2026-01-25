@@ -360,11 +360,17 @@ class LatentGatedDualVAE(nn.Module):
     def forward(
             self,
             x: Tensor,
-            y: Optional[Tensor] = None,
+            y: Optional = None,
     ) -> dict[str, Tensor]:
         """
         训练/推理统一入口
         """
+        recon_x = None
+
+        if isinstance(x, list):
+            recon_x = x[1]
+            x = x[0]
+
         device = x.device
         feat, mu_g, logvar_g, mu_c, logvar_c = self.encode(x, y)
         z_g = self.reparameterize(mu_g, logvar_g)   # [B, G]
@@ -438,14 +444,17 @@ class LatentGatedDualVAE(nn.Module):
         # reconstruction loss
         # 如果你的数据有 NaN，可以加 nan_to_num
         recon_loss = 0
+        if recon_x is None:
+            recon_x = x
+        recon_x.to(device)
         if self.recon_metric == 'soft_dtw':
             from tsml_eval._wip.rt.transformations.collection.imbalance.LGD_VAE.loss.dilate_loss import dilate_loss
-            recon_loss, _, _ = dilate_loss(outputs=recon, targets=x, device=x.device, alpha=1)
+            recon_loss, _, _ = dilate_loss(outputs=recon, targets=recon_x, device=x.device, alpha=1)
         elif self.recon_metric == 'dilate':
             from tsml_eval._wip.rt.transformations.collection.imbalance.LGD_VAE.loss.dilate_loss import dilate_loss
-            recon_loss, _, _ = dilate_loss(outputs=recon, targets=x, device=x.device, alpha=0.5)
+            recon_loss, _, _ = dilate_loss(outputs=recon, targets=recon_x, device=x.device, alpha=0.5)
         elif self.recon_metric == 'mse':
-            recon_loss = ((recon - x) ** 2).mean()
+            recon_loss = ((recon - recon_x) ** 2).mean()
         else:
             raise NotImplementedError
 
@@ -517,7 +526,7 @@ class LatentGatedDualVAE(nn.Module):
             alpha_val = 0.15
         else:
             alpha_val = float(alpha)
-        z_g_min = (1.0 - alpha_val) * z_g_min + alpha_val * z_g_min_prior
+        z_g_min = z_g_min + z_g_min_prior
         z_c_min = (1.0 - alpha_val) * z_c_min + alpha_val * z_c_min_prior
         if self.z_g_maj_ema_inited:
             z_g_maj = self.z_g_maj_mean  # [1, G], trainable
