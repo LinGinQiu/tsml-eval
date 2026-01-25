@@ -520,13 +520,12 @@ class LatentGatedDualVAE(nn.Module):
 
         z_g_min = self.reparameterize(mu_g_min, logvar_g_min)
         z_c_min = self.reparameterize(mu_c_min, logvar_c_min)
-        z_g_min_prior = torch.randn_like(z_g_min)
         z_c_min_prior = torch.randn_like(z_c_min)
         if alpha is None:
             alpha_val = 0.15
         else:
             alpha_val = float(alpha)
-        z_g_min = z_g_min + z_g_min_prior
+        z_g_min = z_g_min
         z_c_min = (1.0 - alpha_val) * z_c_min + alpha_val * z_c_min_prior
         if self.z_g_maj_ema_inited:
             z_g_maj = self.z_g_maj_mean  # [1, G], trainable
