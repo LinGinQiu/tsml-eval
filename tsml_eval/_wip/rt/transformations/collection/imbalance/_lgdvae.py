@@ -296,17 +296,17 @@ class VOTE(BaseCollectionTransformer):
             if self.visualize:
                 _plot_series_list(new_ts[num1:num1 + 10], title="generated from latent smote")
         elif self.mode == "prior":
-            for i in range(self.n_generate_samples):
-                index1 = self._random_state.choice(X_minority.shape[0])
-                x_min = torch.from_numpy(X_minority[index1][np.newaxis, :]).float().to(self._device)
-                step = self._random_state.uniform(0, 1.0)
-                new_series_torch = self.pipeline.transform(mode="prior", x_min=x_min, alpha=step)
-                new_series = new_series_torch.cpu().detach().numpy()
-                del new_series_torch
-                # 6. (可选) 如果显存真的很紧，每一步都清空
-                torch.cuda.empty_cache()
-                assert new_series.shape == (1, C, L), f"VAE output shape {new_series.shape} != {(1, C, L)}"
-                new_ts[i] = new_series.squeeze(0)
+            indexes = self._random_state.choice(X_minority.shape[0], size=self.n_generate_samples, replace=True)
+            x_mins = torch.from_numpy(X_minority[indexes]).float().to(self._device)
+            steps = self._random_state.uniform(size=self.n_generate_samples)
+
+            new_series_torch = self.pipeline.transform(mode="prior", x_min=x_mins, alpha=steps)
+            new_series = new_series_torch.cpu().detach().numpy()
+            del new_series_torch
+            # 6. (可选) 如果显存真的很紧，每一步都清空
+            torch.cuda.empty_cache()
+            assert new_series.shape == (self.n_generate_samples, C, L), f"VAE output shape {new_series.shape} != {(self.n_generate_samples, C, L)}"
+            new_ts = new_series
             if self.visualize:
                 _plot_series_list(new_ts[:10], title="generated from latent smote")
 

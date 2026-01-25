@@ -509,10 +509,10 @@ class LatentGatedDualVAE(nn.Module):
         return out
     # ---- generation
     @torch.no_grad()
-    def generate_vae_prior(self, x_min: Tensor, alpha: Optional[float] = None,) -> Tensor:
+    def generate_vae_prior(self, x_min: Tensor, alpha: Optional = None,) -> Tensor:
         """
-        x_min [1, C, T]
-        return: [1, C, T] generated
+        x_min [B, C, T]
+        return: [B, C, T] generated
         """
         y_min = torch.ones(x_min.shape[0], device=x_min.device).long()
 
@@ -521,18 +521,18 @@ class LatentGatedDualVAE(nn.Module):
         z_g_min = self.reparameterize(mu_g_min, logvar_g_min)
         z_c_min = self.reparameterize(mu_c_min, logvar_c_min)
         z_c_min_prior = torch.randn_like(z_c_min)
+        dim_c = z_c_min.size(1)
         if alpha is None:
-            alpha_val = 0.15
+            alpha = 0.15
+            alpha = torch.full((x_min.size(0), dim_c), alpha, device=x_min.device)
         else:
-            alpha_val = float(alpha)
+            alpha = torch.tensor(alpha, device=x_min.device) # [B]
+            alpha = alpha.unsqueeze(1).expand(-1, dim_c)
         z_g_min = z_g_min
-        z_c_min = (1.0 - alpha_val) * z_c_min + alpha_val * z_c_min_prior
+        z_c_min = (1.0 - alpha) * z_c_min + alpha * z_c_min_prior
         if self.z_g_maj_ema_inited:
             z_g_maj = self.z_g_maj_mean  # [1, G], trainable
-            # print('Using majority prototype for generation.')
-            gate = self.gate(z_c_min)  # [1, G]
-            z_g_mix = gate * z_g_min + (1.0 - gate) * z_g_maj
-
+            z_g_mix = z_g_maj.expand(x_min.size(0), -1)
             z_full = torch.cat([z_g_mix, z_c_min], dim=1)
         else:
             z_full = torch.cat([z_g_min, z_c_min], dim=1)
