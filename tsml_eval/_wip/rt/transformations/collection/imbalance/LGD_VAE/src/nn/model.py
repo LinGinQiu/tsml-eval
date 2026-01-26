@@ -514,7 +514,7 @@ class LatentGatedDualVAE(nn.Module):
         x_min [B, C, T]
         return: [B, C, T] generated
         """
-        y_min = torch.ones(x_min.shape[0], device=x_min.device).long()
+        y_min = torch.ones(x_min.shape[0], device=x_min.device).float()
 
         _, mu_g_min, logvar_g_min, mu_c_min, logvar_c_min = self.encode(x_min, y=y_min)
 
