@@ -38,17 +38,16 @@ model:
   # Encoder
   in_chans: 1
   embed_dim: 64          # 原 d_model
-#  depth: 4               # 原 enc_depth
-#  num_heads: 8           # 原 n_heads
-#  d_hid: 64
-  # Latents
+  depth: 3               # 原 enc_depth
+  num_heads: 4           # 原 n_heads
+  d_hid: 256             # Latents
   latent_dim_global: 32
   latent_dim_class: 32
   # Gating head
   gate_hidden: 64
   # Decoder
   decoder_embed_dim: 64  # 原 dec_dim
-  decoder_depth: 4       # 原 dec_depth
+  decoder_depth: 3       # 原 dec_depth
   decoder_num_heads: 4   # 若无单独 dec_heads 就与 num_heads 一致
 
   # Conv1d embedder (由我们在 Embedder 中实现)
@@ -64,8 +63,8 @@ model:
   # Loss weights（见 pl_model 中对应 log 键）
   align_lambda: 0.10       # \lambda_align，用于 \mathcal{L}_{align} 0.10 /0.05
   cls_lambda: 1.0          # 若不开类别监督，这里为 0
-  kl_g_lambda: 0.05         # 全局 KL 系数（beta-VAE 风格） 0.05/0.01
-  kl_c_lambda: 0.05         # 类别 KL 系数
+  kl_g_lambda: 0.5         # 全局 KL 系数（beta-VAE 风格） 0.05/0.01
+  kl_c_lambda: 0.5         # 类别 KL 系数
   recon_lambda: 1.00        # 重构项系数
   disentangle_lambda: 0.10  # 0.10
   center_lambda: 0.01       # 0.01
@@ -81,12 +80,12 @@ loss:
 
 optim:
   optimizer: "adamw"
-  lr: 0.0001
+  lr: 0.001
   weight_decay: 0.01
   betas: [0.9, 0.999]
   scheduler: "cosine"
   cosine:
-    T_max: 200              # 对齐本地 epochs
+    T_max: 100              # 对齐本地 epochs
     eta_min: 1e-5
     warmup_epochs: 10
 
@@ -108,17 +107,17 @@ callbacks:
   checkpointing:
     dirpath: "/scratch/cq2u24/models/MGD_CVAE/checkpoints"
     filename: "MGD_CVAE-{epoch:02d}"
-    monitor: "train/recon_loss"
-    mode: "min"
+    monitor: "eval/f1"
+    mode: "max"
     save_top_k: 1
     save_last: true
     every_n_epochs: 1
     warmup_epochs: 10
 
   early_stopping:
-    monitor: "train/recon_loss"
+    monitor: "eval/loss"
     mode: "min"
-    patience: 10
+    patience: 20
     min_delta: 0.0
     warmup_epochs: 10
 

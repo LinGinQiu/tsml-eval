@@ -130,7 +130,19 @@ class Inference:
         """Invert z-score normalization: x_norm * std + mean. Shapes must be broadcastable."""
         return x_norm * std + mean
 
-
+    def feature_extract(
+        self,
+        x: Tensor,
+    ) -> Tensor:
+        """
+        extract latent features from input time series
+        """
+        lite_model = getattr(self.model, "model", self.model)
+        if hasattr(lite_model, "feature_extract"):
+            if self.mean_ and self.std_:
+                x = self.apply_zscore(x, self.mean_, self.std_)
+            return lite_model.feature_extract(x.to(self.device))
+        raise AttributeError("Underlying model does not implement `feature_extract`.")
     # -----------------------------
     # Generation helpers for LGD-VAE
     # -----------------------------

@@ -94,28 +94,23 @@ class UCRDataset(Dataset):
         return self.data.shape[0]
 
     def __getitem__(self, ind):
-        if self.rebalance:
-            if self.split == "train":
-                if ind%2 ==0:
-                    # majority class
-                    real_ind = self.majority_indices[ind//2]
-                    x = self.data[real_ind]       # (C, T)
-                    y = self.labels[real_ind]
-                    return (torch.from_numpy(x).float(),torch.from_numpy(x).float()), torch.tensor(y).long()
-                else:
-                    # minority class
-                    real_ind = self.minority_indices[ind//2 % len(self.minority_indices)]
-                    mix_ind = np.random.choice(self.minority_indices)
-                    x_minority = self.data[mix_ind]
-                    recon_x = self.data[real_ind]     # (C, T)
-                    # ====== 数据增强部分，可选 ======
-                    x = 0.9*recon_x+0.1*x_minority
-                    y = self.labels[real_ind]
-                    return (torch.from_numpy(x).float(),torch.from_numpy(recon_x).float()), torch.tensor(y).long()
+        if self.rebalance and self.split == "train":
+            if ind%2 ==0:
+                # majority class
+                real_ind = self.majority_indices[ind//2]
+                x = self.data[real_ind]       # (C, T)
+                y = self.labels[real_ind]
+                return torch.from_numpy(x).float(), torch.tensor(y).long()
+            else:
+                # minority class
+                real_ind = self.minority_indices[ind//2 % len(self.minority_indices)]
+                x = self.data[real_ind]       # (C, T)
+                y = self.labels[real_ind]
+                return torch.from_numpy(x).float(), torch.tensor(y).long()
 
         x = self.data[ind]       # (C, T)
         y = self.labels[ind]
-        return (torch.from_numpy(x).float(),torch.from_numpy(x).float()), torch.tensor(y).long()
+        return torch.from_numpy(x).float(), torch.tensor(y).long()
 
 def load_ucr_splits(problem_path, dataset_name, resample_id=0, predefined_resample=False):
     """

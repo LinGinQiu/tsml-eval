@@ -14,7 +14,7 @@ class LitAutoEncoder(pl.LightningModule):
         depth=2,
         num_heads=4,
         latent_dim_global=32,
-        latent_dim_class=16,
+        latent_dim_class=32,
         minority_class_id=1,
         dropout = 0.1,
         decoder_depth=2,
@@ -63,13 +63,17 @@ class LitAutoEncoder(pl.LightningModule):
         self.kl_g_lambda = float(kl_g_lambda)
         self.kl_c_lambda = float(kl_c_lambda)
         self.recon_lambda = float(recon_lambda)
+        self.warmup_epochs = 5.0
 
         if cls_embed and weights is not None:
-            self.train_f1 = torchmetrics.F1Score(task="multiclass", num_classes=len(weights), average="macro")
-            self.valid_acc = torchmetrics.Accuracy(task="multiclass", num_classes=len(weights))
+            num_c = len(weights)
+            self.train_f1 = torchmetrics.F1Score(task="multiclass", num_classes=num_c, average="macro")
+            self.valid_acc = torchmetrics.Accuracy(task="multiclass", num_classes=num_c)
+            self.valid_f1 = torchmetrics.F1Score(task="multiclass", num_classes=num_c, average="macro")
         else:
             self.train_f1 = None
             self.valid_acc = None
+            self.valid_f1 = None
 
         self.lr = lr
         self.fig = None
@@ -164,14 +168,7 @@ class LitAutoEncoder(pl.LightningModule):
         else:
             x, y = batch, None
 
-        # use fix weights for validation
-        recon_w = self.recon_lambda
-        kl_g_w = self.kl_g_lambda
-        kl_c_w = self.kl_c_lambda
-        align_w = self.align_lambda
-        center_w = self.center_lambda
-        cls_w = self.cls_lambda  # 现在不 warmup 分类
-        disentangle_w = self.disentangle_lambda
+        recon_w, kl_g_w, kl_c_w, align_w, disentangle_w, center_w, cls_w = self._current_loss_weights()
         out = self.model(x, y)
 
         recon_loss = out.get("recon_loss", 0.0)
@@ -198,28 +195,23 @@ class LitAutoEncoder(pl.LightningModule):
         self.log("eval/loss_center", loss_center, on_step=False, on_epoch=True, sync_dist=True)
         if cls_loss is not None:
             self.log("eval/cls_loss", cls_loss, on_step=False, on_epoch=True, sync_dist=True)
-            if (
-                    self.valid_acc is not None
-                    and out.get("cls_logits") is not None
-                    and y is not None
-            ):
-                self.valid_acc.update(out["cls_logits"], y)
+            if out.get("cls_logits") is not None and y is not None:
+                # [修改点 2] 更新 valid_f1
+                if self.valid_acc is not None:
+                    self.valid_acc.update(out["cls_logits"], y)
+                if self.valid_f1 is not None:
+                    self.valid_f1.update(out["cls_logits"], y)
 
-        self.log(
-            "eval/loss",
-            loss,
-            on_step=False,
-            on_epoch=True,
-            prog_bar=True,
-            sync_dist=True,
-        )
-
+        self.log("eval/loss", loss, on_step=False, on_epoch=True, prog_bar=True, sync_dist=True)
         return loss
 
     def on_validation_epoch_end(self,):
         if self.valid_acc:
             self.log("eval/acc", self.valid_acc.compute())
             self.valid_acc.reset()
+        if self.valid_f1:
+            self.log("eval/f1", self.valid_f1.compute())
+            self.valid_f1.reset()
 
     def configure_optimizers(self):
         # 统一从 self.cfg 读取（由 train.py 赋值为 DotDict/ dict）
@@ -255,25 +247,18 @@ class LitAutoEncoder(pl.LightningModule):
     def _current_loss_weights(self):
         """Compute effective loss weights with epoch-based warmup."""
         epoch = float(self.current_epoch)
-
-        # 可以以后丢到 config 里
-        align_warmup_epochs = 5.0
-        kl_warmup_epochs = 5.0
-        center_warmup_epochs = 5.0
-
-        # 线性 0 → 1
-        align_factor = min(1.0, max(0.0, epoch / align_warmup_epochs))
-        kl_factor = min(1.0, max(0.0, epoch / kl_warmup_epochs))
-        center_factor = min(1.0, max(0.0, epoch / center_warmup_epochs))
+        factor = min(1.0, max(0.0, epoch / self.warmup_epochs))
 
         recon_weight = self.recon_lambda
-        kl_g_weight = self.kl_g_lambda * kl_factor
-        kl_c_weight = self.kl_c_lambda * kl_factor
-        align_weight = self.align_lambda * align_factor
-        center_weight = self.center_lambda * center_factor
-        cls_weight = self.cls_lambda  # 现在不 warmup 分类
-        disentangle_weight = self.disentangle_lambda * align_factor
 
+        # 只有正则化项需要 Warmup
+        kl_g_weight = self.kl_g_lambda * factor
+        kl_c_weight = self.kl_c_lambda * factor
+        align_weight = self.align_lambda * factor
+        center_weight = self.center_lambda * factor
+        disentangle_weight = self.disentangle_lambda * factor
 
+        # 分类损失始终保持满额，提供强监督信号
+        cls_weight = self.cls_lambda
 
         return recon_weight, kl_g_weight, kl_c_weight, align_weight, disentangle_weight, center_weight, cls_weight

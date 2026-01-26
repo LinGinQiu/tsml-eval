@@ -215,11 +215,13 @@ class LGDVAEPipeline:
         dataset_name: str = "FiftyWords",
         seed: int | None = None,
         device: torch.device | None = None,
+        task: str = "generation",  # generation / classification
     ):
         """
         dataset_name: 覆盖 YAML 里的 data.dataset_name
         seed: 覆盖 YAML 中 experiment.seed
-        device: 手动指定训练/推断设备（不指定就交给 Lightning 和 Inference 自己处理）
+        device: 手动指定训练/推断设备（不指定就交给 Lightning 和 Inference 自己处理
+        mode: 运行模式，classification / generation if is classification will load pretrained model for feature extraction
         """
         # 1) 读 YAML
         import socket
@@ -277,6 +279,7 @@ class LGDVAEPipeline:
         self.trainer: pl.Trainer | None = None
         self.model: LitAutoEncoder | None = None
         self.infer: Inference | None = None
+        self.task = task.lower()
 
     # -------------------------
     # 内部工具：构建 DataLoader
@@ -363,30 +366,6 @@ class LGDVAEPipeline:
         cfg_model = dict(cfg.model)  # 拷一份，避免修改原配置
 
         # 简单按样本数调一调模型尺寸（跟你原来的逻辑一致）
-        if self.is_iridis:
-            if train_size <= 120:
-                cfg_model.setdefault("embed_dim", 64)
-                cfg_model.setdefault("enc_depth", 2)
-                cfg_model.setdefault("dec_depth", 2)
-                cfg_model.setdefault("n_heads", 4)
-                cfg.trainer["max_epochs"] = max(int(cfg.trainer.get("max_epochs", 0)), 50)
-            elif train_size > 520 and seq_len > 1000:
-                cfg_model.setdefault("embed_dim", 96)
-                cfg_model.setdefault("enc_depth", 4)
-                cfg_model.setdefault("dec_depth", 4)
-                cfg_model.setdefault("n_heads", 6)
-                cfg_model.setdefault("latent_dim_global", 48)
-                cfg_model.setdefault("latent_dim_class", 48)
-                cfg.trainer["max_epochs"] = max(int(cfg.trainer.get("max_epochs", 0)), 100)
-            else:
-                cfg_model.setdefault("embed_dim", 64)
-                cfg_model.setdefault("enc_depth", 4)
-                cfg_model.setdefault("dec_depth", 4)
-                cfg_model.setdefault("n_heads", 6)
-                cfg_model.setdefault("latent_dim_global", 32)
-                cfg_model.setdefault("latent_dim_class", 32)
-                cfg.trainer["max_epochs"] = max(int(cfg.trainer.get("max_epochs", 0)), 100)
-
         # LightningModule 的 __init__ 参数过滤（防止多余键报错）
         sig = inspect.signature(LitAutoEncoder.__init__)
         valid_keys = {
@@ -464,7 +443,23 @@ class LGDVAEPipeline:
         dataset_name = cfg.data.dataset_name
         # 1) 准备数据
         if  X_te is None or y_te is None:
-            X_te, y_te = X_tr, y_tr
+
+            if getattr(cfg.data, "format", "ucr") != "ucr":
+                raise NotImplementedError("Only UCR format is implemented yet.")
+
+            problem_path = cfg.paths.data_root
+            resample_id = self.seed
+            predefined_resample = getattr(cfg.data, "predefined_resample", False)
+            print(f'random id in pipline is {resample_id}')
+            X_tr_, y_tr_, X_te_, y_te_ = load_ucr_splits(
+                problem_path=problem_path,
+                dataset_name=dataset_name,
+                resample_id=resample_id,
+                predefined_resample=predefined_resample,
+            )
+            assert np.array_equal(X_tr, X_tr_), "Train data mismatch!"
+            assert np.array_equal(y_tr, y_tr_), "Train labels mismatch!"
+            X_te, y_te = X_te_, y_te_
         # apply z-score
         normalizer = ZScoreNormalizer().fit(X_tr)
         stats_dir = os.path.join(cfg.paths.work_root, "stats")
@@ -482,7 +477,6 @@ class LGDVAEPipeline:
         train_dataset, eval_dataset, train_loader, eval_loader = self._build_dataloaders(
             X_tr, y_tr, X_te, y_te
         )
-
 
         # 3) 构建模型 & Trainer
         autoencoder, trainer = self._build_model_and_trainer(train_dataset)
@@ -578,7 +572,9 @@ class LGDVAEPipeline:
             raise RuntimeError("Pipeline is not fitted yet. Call `fit()` first.")
 
         mode = mode.lower()
-
+        if mode == "classification" and self.task=="classification":
+            # kwargs: x=...
+            synthetics = self.infer.feature_extract(**kwargs)
         if mode == "prior":
             # kwargs: batch_size=..., device=...
             synthetics = self.infer.generate_vae_prior(**kwargs)
