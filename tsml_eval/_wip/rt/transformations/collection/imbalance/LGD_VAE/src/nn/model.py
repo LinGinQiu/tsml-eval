@@ -354,6 +354,7 @@ class LatentGatedDualVAE(nn.Module):
         if y_onehot is not None and self.num_classes is not None and self.y_embed_dec is not None:
             y_cond = self.y_embed_dec(y_onehot)  # [B, D]
             z_full = torch.cat((z_full, y_cond), dim=1)
+        z_full = z_full.float()
         recon = self.decoder(z_full)  # [B, C, T]
         recon = recon.view(recon.size(0), self.in_chans, self.seq_len)
         return recon
@@ -514,7 +515,7 @@ class LatentGatedDualVAE(nn.Module):
         x_min [B, C, T]
         return: [B, C, T] generated
         """
-        y_min = torch.ones(x_min.shape[0], device=x_min.device).float()
+        y_min = torch.ones(x_min.shape[0], device=x_min.device).long()
 
         _, mu_g_min, logvar_g_min, mu_c_min, logvar_c_min = self.encode(x_min, y=y_min)
 
