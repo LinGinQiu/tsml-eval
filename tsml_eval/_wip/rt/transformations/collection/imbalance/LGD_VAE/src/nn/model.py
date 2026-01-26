@@ -799,7 +799,7 @@ class LatentGatedDualVAE(nn.Module):
             in_channels=in_chans,
             d_model=d_model,
         )
-        self.pos = PositionalEncoding(d_model, dropout, max_len=seq_len)
+        self.pos = PositionalEncoding(d_model, dropout, max_len=seq_len+1)
 
         self.encoder_blocks = nn.ModuleList(
             [
