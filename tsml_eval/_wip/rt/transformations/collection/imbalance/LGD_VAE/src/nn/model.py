@@ -957,7 +957,7 @@ class LatentGatedDualVAE(nn.Module):
 
     def encode(self, x: Tensor, y: Optional[Tensor] = None) \
             -> tuple[Tensor, Tensor, Tensor, Tensor, Tensor]:
-        feat = self.encode_feat(x)  # [B, d_model]
+        feat_pure = self.encode_feat(x)  # [B, d_model]
 
         if y is not None and self.num_classes is not None and self.y_embed_latent is not None:
             y_onehot = F.one_hot(y, num_classes=self.num_classes).float()
@@ -967,10 +967,10 @@ class LatentGatedDualVAE(nn.Module):
             # [MODIFIED] Concatenation instead of Addition
             # -----------------------------------------------------------
             # feat = feat + y_cond  <-- OLD
-            feat = torch.cat([feat, y_cond], dim=1)  # [B, d_model * 2]
+            feat = torch.cat([feat_pure, y_cond], dim=1)  # [B, d_model * 2]
 
         mu_g, logvar_g, mu_c, logvar_c = self.encode_latent_branches(feat, y)
-        return feat, mu_g, logvar_g, mu_c, logvar_c
+        return feat_pure, mu_g, logvar_g, mu_c, logvar_c
 
     # ... forward, cdecoder, generate_* methods 保持不变 (只要调用 encode 即可) ...
     # 为了完整性，这里保留 forward 方法，因为它依赖 encode
@@ -983,7 +983,7 @@ class LatentGatedDualVAE(nn.Module):
         训练/推理统一入口
         """
         device = x.device
-        feat, mu_g, logvar_g, mu_c, logvar_c = self.encode(x, y)
+        feat_pure, mu_g, logvar_g, mu_c, logvar_c = self.encode(x, y)
         z_g = self.reparameterize(mu_g, logvar_g)  # [B, G]
         z_c = self.reparameterize(mu_c, logvar_c)  # [B, C]
 
@@ -1067,7 +1067,7 @@ class LatentGatedDualVAE(nn.Module):
         cls_logits = None
         if self.classifier is not None and y is not None:
             # 1. 基础分类 Loss (对原始样本)
-            logits_base = self.classifier(z_full)
+            logits_base = self.classifier(feat_pure)
             cls_loss_base = F.cross_entropy(logits_base, y)
 
             # 2. [关键修改] 针对 Batch 内样本做 Latent Mixup 增强
