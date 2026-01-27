@@ -112,14 +112,14 @@ callbacks:
     save_top_k: 1
     save_last: true
     every_n_epochs: 1
-    warmup_epochs: 20
+#    warmup_epochs: 20
 
   early_stopping:
     monitor: "eval/loss"
     mode: "min"
     patience: 10
     min_delta: 0.0
-    warmup_epochs: 20
+    warmup_epochs: 10
 
 logging:
   use_tensorboard: true

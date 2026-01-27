@@ -192,6 +192,7 @@ from lightning.pytorch.callbacks import ModelCheckpoint
 class DelayedModelCheckpoint(ModelCheckpoint):
     def __init__(self, warmup_epochs: int = 10, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        print("[DelayedModelCheckpoint] Using warmup_epochs =", warmup_epochs)
         self.start_save_epoch = warmup_epochs
 
     def on_train_epoch_end(self, trainer, pl_module):
@@ -409,7 +410,7 @@ class LGDVAEPipeline:
             monitor="eval/f1_min",  # 只看少数类 F1
             mode="max",
             save_top_k=3,
-            warmup_epochs=20  # [核心] 必须跳过 KL Annealing 阶段！
+            warmup_epochs=10  # [核心] 必须跳过 KL Annealing 阶段！
         ))
 
         # 策略 B: 保存“重构质量最高”的模型 (Fidelity Best)
@@ -420,15 +421,19 @@ class LGDVAEPipeline:
             monitor="eval/recon_loss",
             mode="min",
             save_top_k=3,
-            warmup_epochs=20  # 同样跳过前期作弊阶段
+            warmup_epochs=10  # 同样跳过前期作弊阶段
         ))
 
         # 策略 C: 保存“最后”的模型 (Last)
         # 用于查看过拟合情况
         callbacks.append(ModelCheckpoint(
             dirpath=cfg.paths.ckpt_dir,
-            filename="last",
-            save_last=True
+            # [修改] 改个名字，别叫 last，叫 "latest-epoch" 之类的
+            filename="latest-run",
+            monitor=None,  # 不监控指标，只保存最新的
+            save_top_k=1,  # 只保留 1 个
+            save_last=True,  # [关键] 这会自动生成一个 'last.ckpt'
+            every_n_epochs=1  # 每个 epoch 都保存
         ))
         if "callbacks" in cfg and "early_stopping" in cfg.callbacks:
             # allow an optional `warmup_epochs` key in the early_stopping config
