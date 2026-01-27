@@ -107,7 +107,7 @@ callbacks:
   checkpointing:
     dirpath: "/scratch/cq2u24/models/MGD_CVAE/checkpoints"
     filename: "MGD_CVAE-{epoch:02d}"
-    monitor: "eval/f1"
+    monitor: "eval/f1_min"
     mode: "max"
     save_top_k: 1
     save_last: true
