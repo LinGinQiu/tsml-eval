@@ -110,6 +110,7 @@ callbacks:
     mode: "min"
     patience: 10
     min_delta: 0.0
+    warmup_epochs: 5
 
 logging:
   use_tensorboard: true

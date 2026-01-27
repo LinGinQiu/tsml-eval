@@ -173,6 +173,7 @@ class DelayedEarlyStopping(EarlyStopping):
     """
     def __init__(self, warmup_epochs: int = 10, *args, **kwargs):
         self.warmup_epochs = int(warmup_epochs)
+        print("[DelayedEarlyStopping] Using warmup_epochs =", self.warmup_epochs)
         super().__init__(*args, **kwargs)
 
     def on_validation_epoch_end(self, trainer, pl_module):
@@ -407,7 +408,7 @@ class LGDVAEPipeline:
             filename="best-utility-{epoch:02d}-{eval/f1_min:.4f}",
             monitor="eval/f1_min",  # 只看少数类 F1
             mode="max",
-            save_top_k=1,
+            save_top_k=3,
             warmup_epochs=20  # [核心] 必须跳过 KL Annealing 阶段！
         ))
 
@@ -418,7 +419,7 @@ class LGDVAEPipeline:
             filename="best-fidelity-{epoch:02d}-{eval/recon_loss:.4f}",
             monitor="eval/recon_loss",
             mode="min",
-            save_top_k=1,
+            save_top_k=3,
             warmup_epochs=20  # 同样跳过前期作弊阶段
         ))
 
@@ -429,14 +430,10 @@ class LGDVAEPipeline:
             filename="last",
             save_last=True
         ))
-        if "callbacks" in cfg and "checkpointing" in cfg.callbacks:
-            callbacks.append(DelayedModelCheckpoint(**cfg.callbacks.checkpointing))
-
         if "callbacks" in cfg and "early_stopping" in cfg.callbacks:
             # allow an optional `warmup_epochs` key in the early_stopping config
             # so we can ignore early-stopping checks for the initial training epochs
-            es_cfg = dict(cfg.callbacks.early_stopping)
-            callbacks.append(DelayedEarlyStopping(**es_cfg))
+            callbacks.append(DelayedEarlyStopping(**cfg.callbacks.early_stopping))
         callbacks.append(PrintLossCallback())
         import time
         run_suffix = str(int(time.time()))
