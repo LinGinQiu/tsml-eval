@@ -156,7 +156,8 @@ class PrintLossCallback(Callback):
         recon_loss = metrics.get("eval/recon_loss")
         if val_loss is not None:
             print(f"[Epoch {epoch}] Val Loss={float(val_loss):.4f}"
-                  f", Recon={float(recon_loss):.4f}")
+                  f", Recon={float(recon_loss):.4f}"
+                  )
 
 
 # --------------------------------------------------------
@@ -192,11 +193,16 @@ class DelayedModelCheckpoint(ModelCheckpoint):
         super().__init__(*args, **kwargs)
         self.start_save_epoch = warmup_epochs
 
-    def on_validation_end(self, trainer, pl_module):
-        # 如果当前 epoch 小于设定的起始 epoch，直接跳过保存逻辑
+    def on_train_epoch_end(self, trainer, pl_module):
+        # 拦截 save_last=True 的逻辑，以及 monitor="train/..." 的逻辑
         if trainer.current_epoch < self.start_save_epoch:
             return
-        # 否则执行父类的正常保存逻辑
+        super().on_train_epoch_end(trainer, pl_module)
+
+    def on_validation_end(self, trainer, pl_module):
+        # 拦截 monitor="eval/..." 的逻辑
+        if trainer.current_epoch < self.start_save_epoch:
+            return
         super().on_validation_end(trainer, pl_module)
 
 # ========================================================
@@ -396,6 +402,33 @@ class LGDVAEPipeline:
 
         # callbacks
         callbacks = []
+        callbacks.append(DelayedModelCheckpoint(
+            dirpath=cfg.paths.ckpt_dir,
+            filename="best-utility-{epoch:02d}-{eval/f1_min:.4f}",
+            monitor="eval/f1_min",  # 只看少数类 F1
+            mode="max",
+            save_top_k=1,
+            warmup_epochs=20  # [核心] 必须跳过 KL Annealing 阶段！
+        ))
+
+        # 策略 B: 保存“重构质量最高”的模型 (Fidelity Best)
+        # 这个模型生成的波形最平滑，最像真实数据
+        callbacks.append(DelayedModelCheckpoint(
+            dirpath=cfg.paths.ckpt_dir,
+            filename="best-fidelity-{epoch:02d}-{eval/recon_loss:.4f}",
+            monitor="eval/recon_loss",
+            mode="min",
+            save_top_k=1,
+            warmup_epochs=20  # 同样跳过前期作弊阶段
+        ))
+
+        # 策略 C: 保存“最后”的模型 (Last)
+        # 用于查看过拟合情况
+        callbacks.append(ModelCheckpoint(
+            dirpath=cfg.paths.ckpt_dir,
+            filename="last",
+            save_last=True
+        ))
         if "callbacks" in cfg and "checkpointing" in cfg.callbacks:
             callbacks.append(DelayedModelCheckpoint(**cfg.callbacks.checkpointing))
 

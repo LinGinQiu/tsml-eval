@@ -67,9 +67,11 @@ class LitAutoEncoder(pl.LightningModule):
 
         if cls_embed and weights is not None:
             num_c = len(weights)
+            print(weights)
             self.train_f1 = torchmetrics.F1Score(task="multiclass", num_classes=num_c, average="macro")
             self.valid_acc = torchmetrics.Accuracy(task="multiclass", num_classes=num_c)
-            self.valid_f1 = torchmetrics.F1Score(task="multiclass", num_classes=num_c, average="macro")
+            # self.valid_f1 = torchmetrics.F1Score(task="multiclass", num_classes=num_c, average="macro")
+            self.valid_f1 = torchmetrics.F1Score(task="multiclass", num_classes=num_c, average=None)
         else:
             self.train_f1 = None
             self.valid_acc = None
@@ -205,13 +207,23 @@ class LitAutoEncoder(pl.LightningModule):
         self.log("eval/loss", loss, on_step=False, on_epoch=True, prog_bar=True, sync_dist=True)
         return loss
 
-    def on_validation_epoch_end(self,):
-        if self.valid_acc:
-            self.log("eval/acc", self.valid_acc.compute())
-            self.valid_acc.reset()
-        if self.valid_f1:
-            self.log("eval/f1", self.valid_f1.compute())
-            self.valid_f1.reset()
+    def on_validation_epoch_end(self):
+        # 1. 计算所有类别的 F1 (返回一个向量，例如 [0.98, 0.45])
+        all_f1_scores = self.valid_f1.compute()
+        # 2. 提取少数类 F1
+        # self.hparams.minority_class_id 是你在 __init__ 里存下来的那个 ID
+        min_id = self.hparams.minority_class_id
+        # 即使你只有两个类，all_f1_scores[min_id] 也能精准拿到少数类的分数
+        f1_min = all_f1_scores[min_id]
+        # 3. 记录日志 (这个名字 'eval/f1_min' 要跟你的 Monitor 对应)
+        self.log("eval/f1_min", f1_min, prog_bar=True)
+
+        # 4. (可选) 如果你想看多数类 F1，也可以记下来对比
+        f1_maj = all_f1_scores[0]
+        self.log("eval/f1_maj", f1_maj)
+        print("On validation epoch end f1_min", f1_min)
+        print("On validation epoch end f1_maj", f1_maj)
+        self.valid_f1.reset()
 
     def configure_optimizers(self):
         # 统一从 self.cfg 读取（由 train.py 赋值为 DotDict/ dict）
