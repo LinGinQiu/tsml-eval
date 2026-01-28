@@ -875,10 +875,7 @@ class LatentGatedDualVAE(nn.Module):
 
         if num_classes is not None:
             # 用 class latent 做分类
-            self.classifier = nn.Sequential(
-            nn.Linear(total_latent, num_classes),
-            nn.ReLU(),
-            nn.Softmax(dim=1))
+            self.classifier = nn.Linear(d_model, num_classes)
             # 给 encoder latent 用，输出维度保持 d_model
             self.y_embed_latent = nn.Linear(num_classes, d_model)
             # 给 decoder 用
