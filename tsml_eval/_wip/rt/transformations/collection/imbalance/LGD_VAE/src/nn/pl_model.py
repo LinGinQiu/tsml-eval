@@ -189,7 +189,7 @@ class LitAutoEncoder(pl.LightningModule):
             loss = loss + cls_w * cls_loss
 
         # log 各项
-        self.log("eval/recon_loss", recon_loss, on_step=False, on_epoch=True, sync_dist=True)
+        self.log("eval_recon_loss", recon_loss, on_step=False, on_epoch=True, sync_dist=True)
         self.log("eval/kl_g", kl_g, on_step=False, on_epoch=True, sync_dist=True)
         self.log("eval/kl_c", kl_c, on_step=False, on_epoch=True, sync_dist=True)
         self.log("eval/align_loss", align_loss, on_step=False, on_epoch=True, sync_dist=True)
@@ -204,7 +204,7 @@ class LitAutoEncoder(pl.LightningModule):
                 if self.valid_f1 is not None:
                     self.valid_f1.update(out["cls_logits"], y)
 
-        self.log("eval/loss", loss, on_step=False, on_epoch=True, prog_bar=True, sync_dist=True)
+        self.log("eval_loss", loss, on_step=False, on_epoch=True, prog_bar=True, sync_dist=True)
         return loss
 
     def on_validation_epoch_end(self):
@@ -215,12 +215,12 @@ class LitAutoEncoder(pl.LightningModule):
         min_id = self.hparams.minority_class_id
         # 即使你只有两个类，all_f1_scores[min_id] 也能精准拿到少数类的分数
         f1_min = all_f1_scores[min_id]
-        # 3. 记录日志 (这个名字 'eval/f1_min' 要跟你的 Monitor 对应)
-        self.log("eval/f1_min", f1_min, prog_bar=True)
+        # 3. 记录日志 (这个名字 'eval_f1_min' 要跟你的 Monitor 对应)
+        self.log("eval_f1_min", f1_min, prog_bar=True)
 
         # 4. (可选) 如果你想看多数类 F1，也可以记下来对比
         f1_maj = all_f1_scores[0]
-        self.log("eval/f1_maj", f1_maj)
+        self.log("eval_f1_maj", f1_maj)
         print("On validation epoch end f1_min", f1_min)
         print("On validation epoch end f1_maj", f1_maj)
         self.valid_f1.reset()

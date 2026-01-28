@@ -155,7 +155,7 @@ class LatentHead(nn.Module):
     def __init__(self, in_dim: int, latent_dim: int, hidden_dim: int=None):
         super().__init__()
         if hidden_dim is None:
-            hidden_dim = in_dim//2
+            hidden_dim = latent_dim
         self.shared = nn.Sequential(
             nn.Linear(in_dim, hidden_dim),
             nn.ReLU(),
@@ -834,9 +834,9 @@ class LatentGatedDualVAE(nn.Module):
         # 原始逻辑是 add，所以维度是 d_model
         # 修改为 cat，维度变为 d_model + embedding_dim (此处假设 embedding 维度也是 d_model)
         head_in_dim = d_model
-        if num_classes is not None:
-            # 因为下面 y_embed_latent 输出维度设为了 d_model，所以拼接后是 2 * d_model
-            head_in_dim = d_model + d_model
+        # if num_classes is not None:
+        #     # 因为下面 y_embed_latent 输出维度设为了 d_model，所以拼接后是 2 * d_model
+        #     head_in_dim = d_model + d_model
 
         self.global_head_p = LatentHead(head_in_dim, latent_dim_global)
         self.class_head_p = LatentHead(head_in_dim, latent_dim_class)
@@ -875,7 +875,10 @@ class LatentGatedDualVAE(nn.Module):
 
         if num_classes is not None:
             # 用 class latent 做分类
-            self.classifier = nn.Linear(total_latent, num_classes)
+            self.classifier = nn.Sequential(
+            nn.Linear(total_latent, num_classes),
+            nn.ReLU(),
+            nn.Softmax(dim=1))
             # 给 encoder latent 用，输出维度保持 d_model
             self.y_embed_latent = nn.Linear(num_classes, d_model)
             # 给 decoder 用
@@ -957,20 +960,20 @@ class LatentGatedDualVAE(nn.Module):
 
     def encode(self, x: Tensor, y: Optional[Tensor] = None) \
             -> tuple[Tensor, Tensor, Tensor, Tensor, Tensor]:
-        feat_pure = self.encode_feat(x)  # [B, d_model]
-
-        if y is not None and self.num_classes is not None and self.y_embed_latent is not None:
-            y_onehot = F.one_hot(y, num_classes=self.num_classes).float()
-            y_cond = self.y_embed_latent(y_onehot)  # [B, d_model]
-
-            # -----------------------------------------------------------
-            # [MODIFIED] Concatenation instead of Addition
-            # -----------------------------------------------------------
-            # feat = feat + y_cond  <-- OLD
-            feat = torch.cat([feat_pure, y_cond], dim=1)  # [B, d_model * 2]
+        feat = self.encode_feat(x)  # [B, d_model]
+        #  stop conditional
+        # if y is not None and self.num_classes is not None and self.y_embed_latent is not None:
+        #     y_onehot = F.one_hot(y, num_classes=self.num_classes).float()
+        #     y_cond = self.y_embed_latent(y_onehot)  # [B, d_model]
+        #
+        #     # -----------------------------------------------------------
+        #     # [MODIFIED] Concatenation instead of Addition
+        #     # -----------------------------------------------------------
+        #     # feat = feat + y_cond  <-- OLD
+        #     feat = torch.cat([feat_pure, y_cond], dim=1)  # [B, d_model * 2]
 
         mu_g, logvar_g, mu_c, logvar_c = self.encode_latent_branches(feat, y)
-        return feat_pure, mu_g, logvar_g, mu_c, logvar_c
+        return feat, mu_g, logvar_g, mu_c, logvar_c
 
     # ... forward, cdecoder, generate_* methods 保持不变 (只要调用 encode 即可) ...
     # 为了完整性，这里保留 forward 方法，因为它依赖 encode
@@ -983,7 +986,7 @@ class LatentGatedDualVAE(nn.Module):
         训练/推理统一入口
         """
         device = x.device
-        feat_pure, mu_g, logvar_g, mu_c, logvar_c = self.encode(x, y)
+        feat_x, mu_g, logvar_g, mu_c, logvar_c = self.encode(x, y)
         z_g = self.reparameterize(mu_g, logvar_g)  # [B, G]
         z_c = self.reparameterize(mu_c, logvar_c)  # [B, C]
 
@@ -1067,33 +1070,23 @@ class LatentGatedDualVAE(nn.Module):
         cls_logits = None
         if self.classifier is not None and y is not None:
             # 1. 基础分类 Loss (对原始样本)
-            logits_base = self.classifier(feat_pure)
+            logits_base = self.classifier(feat_x)
             cls_loss_base = F.cross_entropy(logits_base, y)
 
             # 2. [关键修改] 针对 Batch 内样本做 Latent Mixup 增强
             # 目的：防止模型死记硬背重复的样本，强迫它理解样本之间的连续性
 
             # 生成随机排列索引
-            perm = torch.randperm(z_full.size(0), device=device)
+            lam = torch.distributions.Beta(0.5, 0.5).sample((feat_x.size(0), 1)).to(device)
+            perm = torch.randperm(feat_x.size(0), device=device)
 
-            # 采样插值系数 lambda ~ Beta(alpha, alpha)
-            # alpha 取 0.2 到 1.0 都可以，推荐 0.5
-            lam = torch.distributions.Beta(0.5, 0.5).sample((z_full.size(0), 1)).to(device)
-
-            # 混合 Latent
-            z_mix = lam * z_full + (1 - lam) * z_full[perm]
-
-            # 混合 Label (软标签)
-            # y_onehot: [B, n_classes]
+            feat_mix = lam * feat_x + (1 - lam) * feat_x[perm]
             y_onehot = F.one_hot(y, num_classes=self.num_classes).float()
             y_mix = lam * y_onehot + (1 - lam) * y_onehot[perm]
 
-            # 混合样本的分类 Loss
-            logits_mix = self.classifier(z_mix)
-            # 使用 Soft Target Cross Entropy
+            logits_mix = self.classifier(feat_mix)
             cls_loss_mix = -torch.sum(y_mix * F.log_softmax(logits_mix, dim=1), dim=1).mean()
 
-            # 总分类 Loss
             cls_loss = cls_loss_base + cls_loss_mix
 
             # 用于显示的 logits 依然是 base

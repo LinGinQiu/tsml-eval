@@ -99,14 +99,14 @@ callbacks:
   checkpointing:
     dirpath: "/Users/qiuchuanhang/PycharmProjects/tsml-eval/local/LGD_VAE/checkpoints"
     filename: "lgd-vae-{epoch:02d}"
-    monitor: "eval/loss"
+    monitor: "eval_loss"
     mode: "min"
     save_top_k: 1
     save_last: true
     every_n_epochs: 1
 
   early_stopping:
-    monitor: "eval/loss"
+    monitor: "eval_loss"
     mode: "min"
     patience: 10
     min_delta: 0.0

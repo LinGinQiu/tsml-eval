@@ -152,8 +152,8 @@ class PrintLossCallback(Callback):
     def on_validation_epoch_end(self, trainer, pl_module):
         metrics = trainer.callback_metrics
         epoch = trainer.current_epoch
-        val_loss = metrics.get("eval/loss")
-        recon_loss = metrics.get("eval/recon_loss")
+        val_loss = metrics.get("eval_loss")
+        recon_loss = metrics.get("eval_recon_loss")
         if val_loss is not None:
             print(f"[Epoch {epoch}] Val Loss={float(val_loss):.4f}"
                   f", Recon={float(recon_loss):.4f}"
@@ -406,8 +406,8 @@ class LGDVAEPipeline:
         callbacks = []
         callbacks.append(DelayedModelCheckpoint(
             dirpath=cfg.paths.ckpt_dir,
-            filename="best-utility-{epoch:02d}-{eval/f1_min:.4f}",
-            monitor="eval/f1_min",  # 只看少数类 F1
+            filename="best-utility-{epoch:02d}-{eval_f1_min:.4f}",
+            monitor="eval_f1_min",  # 只看少数类 F1
             mode="max",
             save_top_k=3,
             warmup_epochs=10  # [核心] 必须跳过 KL Annealing 阶段！
@@ -417,8 +417,16 @@ class LGDVAEPipeline:
         # 这个模型生成的波形最平滑，最像真实数据
         callbacks.append(DelayedModelCheckpoint(
             dirpath=cfg.paths.ckpt_dir,
-            filename="best-fidelity-{epoch:02d}-{eval/recon_loss:.4f}",
-            monitor="eval/recon_loss",
+            filename="best-fidelity-{epoch:02d}-{eval_recon_loss:.4f}",
+            monitor="eval_recon_loss",
+            mode="min",
+            save_top_k=3,
+            warmup_epochs=10  # 同样跳过前期作弊阶段
+        ))
+        callbacks.append(DelayedModelCheckpoint(
+            dirpath=cfg.paths.ckpt_dir,
+            filename="best-loss-{epoch:02d}-{eval_loss:.4f}",
+            monitor="eval_loss",
             mode="min",
             save_top_k=3,
             warmup_epochs=10  # 同样跳过前期作弊阶段
