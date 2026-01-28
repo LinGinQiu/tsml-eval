@@ -404,14 +404,6 @@ class LGDVAEPipeline:
 
         # callbacks
         callbacks = []
-        callbacks.append(DelayedModelCheckpoint(
-            dirpath=cfg.paths.ckpt_dir,
-            filename="best-utility-{epoch:02d}-{eval_f1_min:.4f}",
-            monitor="eval_f1_min",  # 只看少数类 F1
-            mode="max",
-            save_top_k=3,
-            warmup_epochs=10  # [核心] 必须跳过 KL Annealing 阶段！
-        ))
 
         # 策略 B: 保存“重构质量最高”的模型 (Fidelity Best)
         # 这个模型生成的波形最平滑，最像真实数据

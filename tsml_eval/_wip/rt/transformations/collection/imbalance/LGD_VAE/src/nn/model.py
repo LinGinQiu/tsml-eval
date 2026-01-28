@@ -834,9 +834,9 @@ class LatentGatedDualVAE(nn.Module):
         # 原始逻辑是 add，所以维度是 d_model
         # 修改为 cat，维度变为 d_model + embedding_dim (此处假设 embedding 维度也是 d_model)
         head_in_dim = d_model
-        # if num_classes is not None:
-        #     # 因为下面 y_embed_latent 输出维度设为了 d_model，所以拼接后是 2 * d_model
-        #     head_in_dim = d_model + d_model
+        if num_classes is not None:
+            # 因为下面 y_embed_latent 输出维度设为了 d_model，所以拼接后是 2 * d_model
+            head_in_dim = d_model + d_model
 
         self.global_head_p = LatentHead(head_in_dim, latent_dim_global)
         self.class_head_p = LatentHead(head_in_dim, latent_dim_class)
@@ -875,7 +875,7 @@ class LatentGatedDualVAE(nn.Module):
 
         if num_classes is not None:
             # 用 class latent 做分类
-            self.classifier = nn.Linear(d_model, num_classes)
+            self.classifier = None #nn.Linear(d_model, num_classes)
             # 给 encoder latent 用，输出维度保持 d_model
             self.y_embed_latent = nn.Linear(num_classes, d_model)
             # 给 decoder 用
@@ -960,15 +960,15 @@ class LatentGatedDualVAE(nn.Module):
             -> tuple[Tensor, Tensor, Tensor, Tensor, Tensor]:
         feat = self.encode_feat(x)  # [B, d_model]
         #  stop conditional
-        # if y is not None and self.num_classes is not None and self.y_embed_latent is not None:
-        #     y_onehot = F.one_hot(y, num_classes=self.num_classes).float()
-        #     y_cond = self.y_embed_latent(y_onehot)  # [B, d_model]
-        #
-        #     # -----------------------------------------------------------
-        #     # [MODIFIED] Concatenation instead of Addition
-        #     # -----------------------------------------------------------
-        #     # feat = feat + y_cond  <-- OLD
-        #     feat = torch.cat([feat_pure, y_cond], dim=1)  # [B, d_model * 2]
+        if y is not None and self.num_classes is not None and self.y_embed_latent is not None:
+            y_onehot = F.one_hot(y, num_classes=self.num_classes).float()
+            y_cond = self.y_embed_latent(y_onehot)  # [B, d_model]
+
+            # -----------------------------------------------------------
+            # [MODIFIED] Concatenation instead of Addition
+            # -----------------------------------------------------------
+            # feat = feat + y_cond  <-- OLD
+            feat = torch.cat([feat, y_cond], dim=1)  # [B, d_model * 2]
 
         mu_g, logvar_g, mu_c, logvar_c = self.encode_latent_branches(feat, y)
         return feat, mu_g, logvar_g, mu_c, logvar_c

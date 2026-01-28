@@ -221,8 +221,6 @@ class LitAutoEncoder(pl.LightningModule):
         # 4. (可选) 如果你想看多数类 F1，也可以记下来对比
         f1_maj = all_f1_scores[0]
         self.log("eval_f1_maj", f1_maj)
-        print("On validation epoch end f1_min", f1_min)
-        print("On validation epoch end f1_maj", f1_maj)
         self.valid_f1.reset()
 
     def configure_optimizers(self):
