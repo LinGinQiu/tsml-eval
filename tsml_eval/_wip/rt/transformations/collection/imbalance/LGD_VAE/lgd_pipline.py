@@ -533,18 +533,25 @@ class LGDVAEPipeline:
                     match = re.search(r"epoch=(\d+)", name)
                     return int(match.group(1)) if match else -1
 
-                epoch_ckpts = [f for f in ckpt_candidates if "epoch=" in f]
-                if epoch_ckpts:
-                    ckpt_file = max(epoch_ckpts, key=extract_epoch)
-                    ckpt_path = os.path.join(ckpt_dir, ckpt_file)
+                env_ckpt_path = os.environ.get("LGD_VAE_CHECKPOINT_PATH")
+
+                if env_ckpt_path and os.path.exists(env_ckpt_path):
+                    print(f"[Experiment] Loading specific checkpoint from env: {env_ckpt_path}")
+                    ckpt_path = env_ckpt_path
                 else:
-                    # 其次：fallback 用 last.ckpt（如果存在）
-                    last_ckpts = [f for f in ckpt_candidates if "last" in f]
-                    if last_ckpts:
-                        ckpt_path = os.path.join(ckpt_dir, last_ckpts[0])
+                    print(f"[Experiment] No env var found, auto-loading best model...")
+                    epoch_ckpts = [f for f in ckpt_candidates if "epoch=" in f]
+                    if epoch_ckpts:
+                        ckpt_file = max(epoch_ckpts, key=extract_epoch)
+                        ckpt_path = os.path.join(ckpt_dir, ckpt_file)
                     else:
-                        # 最后：随便选一个（通常不会到这里）
-                        ckpt_path = os.path.join(ckpt_dir, sorted(ckpt_candidates)[0])
+                        # 其次：fallback 用 last.ckpt（如果存在）
+                        last_ckpts = [f for f in ckpt_candidates if "last" in f]
+                        if last_ckpts:
+                            ckpt_path = os.path.join(ckpt_dir, last_ckpts[0])
+                        else:
+                            # 最后：随便选一个（通常不会到这里）
+                            ckpt_path = os.path.join(ckpt_dir, sorted(ckpt_candidates)[0])
 
                 try:
                     print(f"[LGDVAEPipeline] Auto-loading checkpoint: {ckpt_path}")
