@@ -508,25 +508,30 @@ class LGDVAEPipeline:
         # 4) 训练：如果已有 checkpoint 则优先尝试加载；加载失败再回退到重新训练
         ckpt_path = None
         ckpt_dir = getattr(self.cfg.paths, "ckpt_dir", None)
-        if ckpt_dir is not None and os.path.isdir(ckpt_dir):
-            print(f"loading checkpoint from {ckpt_dir}")
-            ckpt_candidates = [f for f in os.listdir(ckpt_dir) if f.endswith(".ckpt")]
-            if ckpt_candidates:
-                import re
-                def extract_epoch(name: str):
-                    """ 解析文件名中的 epoch 数字，例如 'lgd-vae-epoch=50.ckpt' → 50 """
-                    match = re.search(r"epoch=(\d+)", name)
-                    return int(match.group(1)) if match else -1
+        env_ckpt_path = os.environ.get("LGD_VAE_CHECKPOINT_PATH")
 
-                env_ckpt_path = os.environ.get("LGD_VAE_CHECKPOINT_PATH")
+        # ---------------- Step 1: 确定 ckpt_path 路径 ----------------
+        if env_ckpt_path and os.path.exists(env_ckpt_path):
+            print(f"[Experiment] Loading specific checkpoint from env: {env_ckpt_path}")
+            ckpt_path = env_ckpt_path
+        else:
+            # 只有在没有环境变量指定时，才去目录自动搜索
+            if ckpt_dir is not None and os.path.isdir(ckpt_dir):
+                # print(f"loading checkpoint from {ckpt_dir}")
+                ckpt_candidates = [f for f in os.listdir(ckpt_dir) if f.endswith(".ckpt")]
 
-                if env_ckpt_path and os.path.exists(env_ckpt_path):
-                    print(f"[Experiment] Loading specific checkpoint from env: {env_ckpt_path}")
-                    ckpt_path = env_ckpt_path
-                else:
-                    print(f"[Experiment] No env var found, auto-loading best model...")
+                if ckpt_candidates:
+                    print(f"[Experiment] No env var found, auto-loading best model from {ckpt_dir}...")
+                    import re
+                    def extract_epoch(name: str):
+                        """ 解析文件名中的 epoch 数字 """
+                        match = re.search(r"epoch=(\d+)", name)
+                        return int(match.group(1)) if match else -1
+
                     epoch_ckpts = [f for f in ckpt_candidates if "epoch=" in f]
+
                     if epoch_ckpts:
+                        # 优先找 epoch 最大的
                         ckpt_file = max(epoch_ckpts, key=extract_epoch)
                         ckpt_path = os.path.join(ckpt_dir, ckpt_file)
                     else:
@@ -535,28 +540,42 @@ class LGDVAEPipeline:
                         if last_ckpts:
                             ckpt_path = os.path.join(ckpt_dir, last_ckpts[0])
                         else:
-                            # 最后：随便选一个（通常不会到这里）
+                            # 最后：随便选一个
                             ckpt_path = os.path.join(ckpt_dir, sorted(ckpt_candidates)[0])
+                else:
+                    print(f"[Experiment] Checkpoint directory exists but is empty.")
 
-                try:
-                    print(f"[LGDVAEPipeline] Auto-loading checkpoint: {ckpt_path}")
-                    from tsml_eval._wip.rt.transformations.collection.imbalance.LGD_VAE.src.nn.pl_model import LitAutoEncoder
-                    self.infer = Inference.from_checkpoint(
-                        ckpt_path,
-                        model_class=LitAutoEncoder,
-                        model_kwargs=None,  # 让它从 hyper_parameters 里自动捞
-                        device=self.device,
-                        strict=False,
-                    )
-                    print("load successfully!")
-                    if self.mean_ and self.std_:
-                        print(f"[LGDVAEPipeline] Loading mean and std: mean: {self.mean_}, std: {self.std_}")
-                        self.infer.load_zscore_values(mean=self.mean_, std=self.std_)
-                    return self
-                except Exception as e:
-                    print(f"[LGDVAEPipeline] Failed to load checkpoint ({e}), fallback to training from scratch.")
-                    ckpt_path = None  # 回退到正常训练
+        # ---------------- Step 2: 尝试加载 ----------------
+        if ckpt_path is not None:  # <--- [关键修改] 只有找到了路径才尝试加载
+            try:
+                print(f"[LGDVAEPipeline] Attempting to load checkpoint: {ckpt_path}")
+                from tsml_eval._wip.rt.transformations.collection.imbalance.LGD_VAE.src.nn.pl_model import \
+                    LitAutoEncoder
 
+                self.infer = Inference.from_checkpoint(
+                    ckpt_path,
+                    model_class=LitAutoEncoder,
+                    model_kwargs=None,
+                    device=self.device,
+                    strict=False,
+                )
+                print("load successfully!")
+
+                if self.mean_ is not None and self.std_ is not None:
+                    print(f"[LGDVAEPipeline] Loading mean and std: mean: {self.mean_}, std: {self.std_}")
+                    self.infer.load_zscore_values(mean=self.mean_, std=self.std_)
+
+                # 加载成功直接返回 self，不再进行后续训练
+                return self
+
+            except Exception as e:
+                print(f"[LGDVAEPipeline] Failed to load checkpoint ({e}).")
+                print("[LGDVAEPipeline] Fallback to training from scratch.")
+                ckpt_path = None  # 确保传给 trainer 的是 None，让它从头开始
+        else:
+            print("[LGDVAEPipeline] No checkpoint found. Starting training from scratch.")
+
+        # ... 代码继续执行，进入 trainer.fit() ...
         if eval_dataset is not None:
             trainer.fit(
                 autoencoder,
