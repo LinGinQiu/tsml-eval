@@ -117,6 +117,7 @@ class LitAutoEncoder(pl.LightningModule):
         disentangle_loss = out.get("disentangle_loss", 0.0)
         loss_center = out.get("loss_center", 0.0)
         cls_loss = out.get("cls_loss", None)
+        recom_loss_mse = out.get("recon_loss_mse", None)
 
         # 3) 在 PL 里组合 total loss
         loss = recon_w * recon_loss + kl_g_w * kl_g + kl_c_w * kl_c
@@ -142,6 +143,7 @@ class LitAutoEncoder(pl.LightningModule):
 
         # 6) 各项 raw loss
         self.log("train/recon_loss", recon_loss, on_step=False, on_epoch=True, sync_dist=True)
+        self.log("train/recon_loss_mse", recom_loss_mse, on_step=False, on_epoch=True, sync_dist=True)
         self.log("train/kl_g", kl_g, on_step=False, on_epoch=True, sync_dist=True)
         self.log("train/kl_c", kl_c, on_step=False, on_epoch=True, sync_dist=True)
         self.log("train/align_loss", align_loss, on_step=False, on_epoch=True, sync_dist=True)
@@ -180,6 +182,7 @@ class LitAutoEncoder(pl.LightningModule):
         disentangle_loss = out.get("disentangle_loss", 0.0)
         loss_center = out.get("loss_center", 0.0)
         cls_loss = out.get("cls_loss", None)
+        recom_loss_mse = out.get("recon_loss_mse", None)
 
         loss = recon_w * recon_loss + kl_g_w * kl_g + kl_c_w * kl_c
         loss = loss + align_w * align_loss
@@ -190,6 +193,7 @@ class LitAutoEncoder(pl.LightningModule):
 
         # log 各项
         self.log("eval_recon_loss", recon_loss, on_step=False, on_epoch=True, sync_dist=True)
+        self.log("eval_recon_loss_mse", recom_loss_mse, on_step=False, on_epoch=True, sync_dist=True)
         self.log("eval/kl_g", kl_g, on_step=False, on_epoch=True, sync_dist=True)
         self.log("eval/kl_c", kl_c, on_step=False, on_epoch=True, sync_dist=True)
         self.log("eval/align_loss", align_loss, on_step=False, on_epoch=True, sync_dist=True)
