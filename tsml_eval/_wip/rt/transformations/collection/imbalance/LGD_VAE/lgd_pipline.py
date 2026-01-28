@@ -413,32 +413,14 @@ class LGDVAEPipeline:
         # 这个模型生成的波形最平滑，最像真实数据
         callbacks.append(DelayedModelCheckpoint(
             dirpath=cfg.paths.ckpt_dir,
-            filename="best-fidelity-{epoch:02d}-{eval_recon_loss:.4f}",
-            monitor="eval_recon_loss",
-            mode="min",
-            save_top_k=3,
-            warmup_epochs=10  # 同样跳过前期作弊阶段
-        ))
-        callbacks.append(DelayedModelCheckpoint(
-            dirpath=cfg.paths.ckpt_dir,
-            filename="best-loss-{epoch:02d}-{eval_loss:.4f}",
+            filename="{epoch:02d}",
             monitor="eval_loss",
             mode="min",
-            save_top_k=3,
-            warmup_epochs=10  # 同样跳过前期作弊阶段
+            save_top_k=6,
+            warmup_epochs=10,  # 同样跳过前期作弊阶段
+            save_last=True,
         ))
 
-        # 策略 C: 保存“最后”的模型 (Last)
-        # 用于查看过拟合情况
-        callbacks.append(ModelCheckpoint(
-            dirpath=cfg.paths.ckpt_dir,
-            # [修改] 改个名字，别叫 last，叫 "latest-epoch" 之类的
-            filename="latest-run",
-            monitor=None,  # 不监控指标，只保存最新的
-            save_top_k=1,  # 只保留 1 个
-            save_last=True,  # [关键] 这会自动生成一个 'last.ckpt'
-            every_n_epochs=1  # 每个 epoch 都保存
-        ))
         if "callbacks" in cfg and "early_stopping" in cfg.callbacks:
             # allow an optional `warmup_epochs` key in the early_stopping config
             # so we can ignore early-stopping checks for the initial training epochs
