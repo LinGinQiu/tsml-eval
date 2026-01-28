@@ -906,7 +906,8 @@ class LatentGatedDualVAE(nn.Module):
         for blk in self.encoder_blocks:
             x = blk(x)
         x = self.enc_norm(x)  # [B, T', D]
-        feat = x[:, 0] # [B, D]
+        feat = x[:, 1:].mean(dim=1)  # [B, D]
+
         return feat
 
     def encode_latent_branches(self, feat: Tensor, y: Optional[Tensor] = None) \
