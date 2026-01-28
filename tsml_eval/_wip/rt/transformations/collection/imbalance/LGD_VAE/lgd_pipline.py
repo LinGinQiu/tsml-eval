@@ -481,6 +481,9 @@ class LGDVAEPipeline:
             assert np.array_equal(X_tr, X_tr_), "Train data mismatch!"
             assert np.array_equal(y_tr, y_tr_), "Train labels mismatch!"
             X_te, y_te = X_te_, y_te_
+            # classes, counts = np.unique(y_tr, return_counts=True)
+            # min_index = np.argmin(counts)
+            # label_minority = classes[min_index]
         # apply z-score
         normalizer = ZScoreNormalizer().fit(X_tr)
         stats_dir = os.path.join(cfg.paths.work_root, "stats")
