@@ -1190,7 +1190,7 @@ class LatentGatedDualVAE(nn.Module):
     #
     #     return x_gen
     @torch.no_grad()
-    def generate_vae_prior(self, x_min: Tensor, alpha: Optional[float] = None, ) -> Tensor:
+    def generate_vae_prior(self, x_min: Tensor, alpha: Optional[Tensor] = None, ) -> Tensor:
         # 复用原有逻辑
         y_min = torch.ones(x_min.shape[0], device=x_min.device).long()
         _, mu_g_min, logvar_g_min, mu_c_min, logvar_c_min = self.encode(x_min, y=y_min)
@@ -1201,7 +1201,8 @@ class LatentGatedDualVAE(nn.Module):
         if alpha is None:
             alpha_val = 0.15
         else:
-            alpha_val = float(alpha)
+            alpha_val = alpha.reshape(x_min.shape[0], 1).expand(-1, z_g_min.shape[1])
+            print(alpha_val.shape)
         z_g_min = (1.0 - alpha_val) * z_g_min + alpha_val * z_g_min_prior
         z_c_min = (1.0 - alpha_val) * z_c_min + alpha_val * z_c_min_prior
         if self.z_g_maj_ema_inited:
