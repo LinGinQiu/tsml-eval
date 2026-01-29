@@ -27,15 +27,15 @@ max_time="60:00:00"
 start_point=1
 
 # Put your home directory here
-local_path="/scratch/cq2u24/Result/lgd_F"
+local_path="/scratch/cq2u24/Exp/s"
 data_path="/scratch/$username/"
 # Datasets to use and directory of data files. Default is Tony's work space, all should be able to read these. Change if you want to use different data or lists
 data_dir="$data_path/Data/imbalanced_9_1/"
-datasets="$data_path/DataSetLists/DLset.txt"
+datasets="$data_path/DataSetLists/Longset2s.txt"
 
 # Results and output file write location. Change these to reflect your own file structure
-results_dir="$local_path/ClassificationResultsTN/results/"
-out_dir="$local_path/ClassificationResultsTN/output/"
+results_dir="$local_path/ClassificationResults/results/"
+out_dir="$local_path/ClassificationResults/output/"
 
 
 # The python script we are running
@@ -46,8 +46,8 @@ script_file_path="/home/cq2u24/tsml-eval/TimesNet/run.py"
 env_name="/scratch/cq2u24/conda-envs/deeplearning_tf"
 
 # Classifiers to loop over. Must be seperated by a space
-# See list of potential classifiers in set_classifier
-classifiers_to_run="TimesNet"
+# See list of potential classifiers in set_classifier Nonstationary_Transformer
+classifiers_to_run="Timesnet"
 
 # Extra arguments to pass to run.py
 
@@ -65,7 +65,7 @@ predefined_folds="false"
 normalise_data="false"
 
 # Data transformation options
-data_transform_name="timevae"
+data_transform_name="lgd_prior"
 transform_train_only="true"
 results_dir="${results_dir%/}_${data_transform_name}/"
 results_dir=$(echo "$results_dir" | sed 's#//*#/#g')
