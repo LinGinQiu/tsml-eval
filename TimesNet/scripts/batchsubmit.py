@@ -11,8 +11,8 @@ USERNAME = "cq2u24"
 # 2. 数据集列表文件路径
 DATASET_LIST_FILE = f"/scratch/{USERNAME}/DataSetLists/Longset2l.txt"
 
-# 3. 分类器固定为 Timesnet
-CLASSIFIER = "Timesnet"
+# 3. 分类器固定为 TimesNet
+CLASSIFIER = "TimesNet"
 
 # 4. Checkpoint 的种子后缀 (同时也是 Resample ID)
 SEED_SUFFIX = "0"
