@@ -1118,100 +1118,100 @@ class LatentGatedDualVAE(nn.Module):
         feat = self.encode_feat(x)
         return feat
 
-    @torch.no_grad()
-    def generate_vae_prior(self, x_min: Tensor, num_variations: int = 1, alpha: float = 0.5) -> Tensor:
-        """
-        [修改版] 生成策略：Latent Space Mixup (插值)
-
-        Args:
-            x_min: 一批真实的少数类样本 [B, C, T]
-            num_variations: 每个样本生成几个变体 (当前代码建议设为 1，保持 Batch Size 一致)
-            alpha: Mixup 的强度。
-                   alpha 接近 0: 生成结果很像原始 x_min
-                   alpha 接近 0.5: 生成结果是两个样本的中间形态 (创新性最强)
-                   alpha 接近 1.0: 生成结果很像被打乱的另一个样本
-        """
-        device = x_min.device
-        B = x_min.size(0)
-
-        # 1. 强制 Label 为少数类
-        y_min = torch.full((B,), self.minority_class_id, device=device, dtype=torch.long)
-
-        # 2. 编码得到 Latent 分布
-        # 注意：这里我们拿到的 mu 和 logvar 是这一批样本的
-        _, mu_g, logvar_g, mu_c, logvar_c = self.encode(x_min, y=y_min)
-
-        # 3. 重参数化得到 z
-        z_g = self.reparameterize(mu_g, logvar_g)
-        z_c = self.reparameterize(mu_c, logvar_c)
-
-        # 4. [核心修改] 执行 Latent Mixup
-        # 也就是：不加噪声，而是找“另一个少数类兄弟”来杂交
-
-        # 生成打乱的索引 (Shuffle)
-        perm = torch.randperm(B, device=device)
-
-        # 采样插值系数 lambda
-        # 这里的 alpha 控制 Beta 分布的形状。
-        # 如果你希望生成多样性大，用 Beta(0.5, 0.5)
-        # 如果你希望保守一点，直接用固定的数值，比如 0.2
-
-        # 方案 A: 随机插值 (推荐)
-        lam = torch.distributions.Beta(alpha, alpha).sample((B, 1)).to(device)
-
-        # 方案 B: 固定插值 (如果你想控制变量调试)
-        # lam = torch.full((B, 1), 0.5, device=device)
-
-        # 执行混合
-        z_g_mix = lam * z_g + (1 - lam) * z_g[perm]
-        z_c_mix = lam * z_c + (1 - lam) * z_c[perm]
-
-        # 5. [关键] Gate 的处理
-        # 训练时我们用了 Gate 融合 Majority Mean，是为了让 loss 下降。
-        # 但在生成少数类时，如果 Gate 打开，生成的波形会像多数类，这会导致下游分类器 F1 降低。
-        # 建议：强制关闭 Gate，或者只保留很小的比例。
-
-        use_gate = False  # <--- 建议设为 False，完全信任少数类自己的特征
-
-        if use_gate and self.z_g_maj_ema_inited:
-            gate = self.gate(z_c_mix)
-            z_g_maj = self.z_g_maj_mean
-            z_g_final = gate * z_g_mix + (1.0 - gate) * z_g_maj
-        else:
-            # 纯正的少数类特征
-            z_g_final = z_g_mix
-
-        # 6. 拼接并解码
-        z_full = torch.cat([z_g_final, z_c_mix], dim=1)
-
-        y_onehot = F.one_hot(y_min, num_classes=self.num_classes).float()
-
-        x_gen = self.decoder(z_full, y_onehot=y_onehot)
-
-        return x_gen
     # @torch.no_grad()
-    # def generate_vae_prior(self, x_min: Tensor, alpha: Optional[float] = None, ) -> Tensor:
-    #     # 复用原有逻辑
-    #     y_min = torch.ones(x_min.shape[0], device=x_min.device).long()
-    #     _, mu_g_min, logvar_g_min, mu_c_min, logvar_c_min = self.encode(x_min, y=y_min)
-    #     z_g_min = self.reparameterize(mu_g_min, logvar_g_min)
-    #     z_c_min = self.reparameterize(mu_c_min, logvar_c_min)
-    #     z_g_min_prior = torch.randn_like(z_g_min)
-    #     z_c_min_prior = torch.randn_like(z_c_min)
-    #     if alpha is None:
-    #         alpha_val = 0.15
-    #     else:
-    #         alpha_val = float(alpha)
-    #     z_g_min = (1.0 - alpha_val) * z_g_min + alpha_val * z_g_min_prior
-    #     z_c_min = (1.0 - alpha_val) * z_c_min + alpha_val * z_c_min_prior
-    #     if self.z_g_maj_ema_inited:
+    # def generate_vae_prior(self, x_min: Tensor, num_variations: int = 1, alpha: float = 0.5) -> Tensor:
+    #     """
+    #     [修改版] 生成策略：Latent Space Mixup (插值)
+    #
+    #     Args:
+    #         x_min: 一批真实的少数类样本 [B, C, T]
+    #         num_variations: 每个样本生成几个变体 (当前代码建议设为 1，保持 Batch Size 一致)
+    #         alpha: Mixup 的强度。
+    #                alpha 接近 0: 生成结果很像原始 x_min
+    #                alpha 接近 0.5: 生成结果是两个样本的中间形态 (创新性最强)
+    #                alpha 接近 1.0: 生成结果很像被打乱的另一个样本
+    #     """
+    #     device = x_min.device
+    #     B = x_min.size(0)
+    #
+    #     # 1. 强制 Label 为少数类
+    #     y_min = torch.full((B,), self.minority_class_id, device=device, dtype=torch.long)
+    #
+    #     # 2. 编码得到 Latent 分布
+    #     # 注意：这里我们拿到的 mu 和 logvar 是这一批样本的
+    #     _, mu_g, logvar_g, mu_c, logvar_c = self.encode(x_min, y=y_min)
+    #
+    #     # 3. 重参数化得到 z
+    #     z_g = self.reparameterize(mu_g, logvar_g)
+    #     z_c = self.reparameterize(mu_c, logvar_c)
+    #
+    #     # 4. [核心修改] 执行 Latent Mixup
+    #     # 也就是：不加噪声，而是找“另一个少数类兄弟”来杂交
+    #
+    #     # 生成打乱的索引 (Shuffle)
+    #     perm = torch.randperm(B, device=device)
+    #
+    #     # 采样插值系数 lambda
+    #     # 这里的 alpha 控制 Beta 分布的形状。
+    #     # 如果你希望生成多样性大，用 Beta(0.5, 0.5)
+    #     # 如果你希望保守一点，直接用固定的数值，比如 0.2
+    #
+    #     # 方案 A: 随机插值 (推荐)
+    #     lam = torch.distributions.Beta(alpha, alpha).sample((B, 1)).to(device)
+    #
+    #     # 方案 B: 固定插值 (如果你想控制变量调试)
+    #     # lam = torch.full((B, 1), 0.5, device=device)
+    #
+    #     # 执行混合
+    #     z_g_mix = lam * z_g + (1 - lam) * z_g[perm]
+    #     z_c_mix = lam * z_c + (1 - lam) * z_c[perm]
+    #
+    #     # 5. [关键] Gate 的处理
+    #     # 训练时我们用了 Gate 融合 Majority Mean，是为了让 loss 下降。
+    #     # 但在生成少数类时，如果 Gate 打开，生成的波形会像多数类，这会导致下游分类器 F1 降低。
+    #     # 建议：强制关闭 Gate，或者只保留很小的比例。
+    #
+    #     use_gate = False  # <--- 建议设为 False，完全信任少数类自己的特征
+    #
+    #     if use_gate and self.z_g_maj_ema_inited:
+    #         gate = self.gate(z_c_mix)
     #         z_g_maj = self.z_g_maj_mean
-    #         gate = self.gate(z_c_min)
-    #         z_g_mix = gate * z_g_min + (1.0 - gate) * z_g_maj
-    #         z_full = torch.cat([z_g_mix, z_c_min], dim=1)
+    #         z_g_final = gate * z_g_mix + (1.0 - gate) * z_g_maj
     #     else:
-    #         z_full = torch.cat([z_g_min, z_c_min], dim=1)
-    #     y = y_min
-    #     y_onehot = F.one_hot(y, num_classes=self.num_classes).float()
+    #         # 纯正的少数类特征
+    #         z_g_final = z_g_mix
+    #
+    #     # 6. 拼接并解码
+    #     z_full = torch.cat([z_g_final, z_c_mix], dim=1)
+    #
+    #     y_onehot = F.one_hot(y_min, num_classes=self.num_classes).float()
+    #
     #     x_gen = self.decoder(z_full, y_onehot=y_onehot)
+    #
     #     return x_gen
+    @torch.no_grad()
+    def generate_vae_prior(self, x_min: Tensor, alpha: Optional[float] = None, ) -> Tensor:
+        # 复用原有逻辑
+        y_min = torch.ones(x_min.shape[0], device=x_min.device).long()
+        _, mu_g_min, logvar_g_min, mu_c_min, logvar_c_min = self.encode(x_min, y=y_min)
+        z_g_min = self.reparameterize(mu_g_min, logvar_g_min)
+        z_c_min = self.reparameterize(mu_c_min, logvar_c_min)
+        z_g_min_prior = torch.randn_like(z_g_min)
+        z_c_min_prior = torch.randn_like(z_c_min)
+        if alpha is None:
+            alpha_val = 0.15
+        else:
+            alpha_val = float(alpha)
+        z_g_min = (1.0 - alpha_val) * z_g_min + alpha_val * z_g_min_prior
+        z_c_min = (1.0 - alpha_val) * z_c_min + alpha_val * z_c_min_prior
+        if self.z_g_maj_ema_inited:
+            z_g_maj = self.z_g_maj_mean
+            gate = self.gate(z_c_min)
+            z_g_mix = gate * z_g_min + (1.0 - gate) * z_g_maj
+            z_full = torch.cat([z_g_mix, z_c_min], dim=1)
+        else:
+            z_full = torch.cat([z_g_min, z_c_min], dim=1)
+        y = y_min
+        y_onehot = F.one_hot(y, num_classes=self.num_classes).float()
+        x_gen = self.decoder(z_full, y_onehot=y_onehot)
+        return x_gen
