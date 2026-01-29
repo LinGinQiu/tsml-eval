@@ -24,7 +24,7 @@ SCRIPT_PATH = f"/home/{USERNAME}/tsml-eval/TimesNet/run.py"
 CONFIG_DIR = f"/home/{USERNAME}/tsml-eval/TimesNet/TSTConfig/"
 
 DATA_DIR_BASE = f"/scratch/{USERNAME}/Data/imbalanced_9_1/"
-BASE_RESULTS_ROOT = f"/scratch/{USERNAME}/Exp/s/ClassificationResults/results/"
+BASE_RESULTS_ROOT = f"/scratch/{USERNAME}/Exp/results_TimesNet/"
 CKPT_ROOT = f"/scratch/{USERNAME}/models/MGD_CVAE/checkpoints/"
 
 # ================= ⚙️ 环境与资源配置 =================
@@ -37,7 +37,7 @@ QUEUE_GPU = "a100,swarm_a100,swarm_h100,l4,swarm_l4"
 
 # 资源限制
 MEM = "32000M"
-TIME = "60:00:00"  # TimesNet 比较慢，设长一点
+TIME = "10:00:00"  # TimesNet 比较慢，设长一点
 CORES = 8  # TimesNet 需要更多 CPU 核心
 
 # 是否强制重跑
