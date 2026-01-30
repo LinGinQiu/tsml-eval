@@ -373,7 +373,22 @@ class IBGANAugmenter(BaseCollectionTransformer):
         self._generated_samples = X_synth
         X_aug = np.concatenate([X, X_synth], axis=0)
         y_aug = np.concatenate([y, y_synth], axis=0)
+        import gc
+        import tensorflow as tf
 
+        # 删除模型对象引用
+        del self.generator
+        del self.discriminator
+        del self.classifier
+        self.generator = None
+        self.discriminator = None
+        self.classifier = None
+
+        # 清除 Keras 后端状态
+        tf.keras.backend.clear_session()
+
+        # 强制 Python 垃圾回收
+        gc.collect()
         # Shuffle after augmentation
         idx = self._random_state.permutation(X_aug.shape[0])
         X_aug = X_aug[idx]
