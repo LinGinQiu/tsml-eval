@@ -416,7 +416,7 @@ class LGDVAEPipeline:
             filename="{epoch:02d}",
             monitor="eval_loss",
             mode="min",
-            save_top_k=6,
+            save_top_k=3,
             warmup_epochs=10,  # 同样跳过前期作弊阶段
             save_last=True,
         ))
