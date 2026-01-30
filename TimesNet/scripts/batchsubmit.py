@@ -9,7 +9,7 @@ import sys
 USERNAME = "cq2u24"
 
 # 2. 数据集列表文件路径
-DATASET_LIST_FILE = f"/scratch/{USERNAME}/DataSetLists/Longset2l.txt"
+DATASET_LIST_FILE = f"/scratch/{USERNAME}/DataSetLists/Longset2s.txt"
 
 # 3. 分类器固定为 TimesNet
 CLASSIFIER = "TimesNet"
@@ -24,8 +24,8 @@ SCRIPT_PATH = f"/home/{USERNAME}/tsml-eval/TimesNet/run.py"
 CONFIG_DIR = f"/home/{USERNAME}/tsml-eval/TimesNet/TSTConfig/"
 
 DATA_DIR_BASE = f"/scratch/{USERNAME}/Data/imbalanced_9_1/"
-BASE_RESULTS_ROOT = f"/scratch/{USERNAME}/Exp/results_TimesNet_mse/"
-CKPT_ROOT = f"/scratch/{USERNAME}/models/MGD_CVAE_mse/checkpoints/"
+BASE_RESULTS_ROOT = f"/scratch/{USERNAME}/Exp/results_TimesNet/"
+CKPT_ROOT = f"/scratch/{USERNAME}/models/MGD_CVAE/checkpoints/"
 
 # ================= ⚙️ 环境与资源配置 =================
 
