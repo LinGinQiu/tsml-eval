@@ -389,6 +389,13 @@ class IBGANAugmenter(BaseCollectionTransformer):
 
         # 强制 Python 垃圾回收
         gc.collect()
+        from numba import cuda
+        try:
+            device = cuda.get_current_device()
+            device.reset()  # 这会强制释放当前进程在该显卡上的所有资源
+            print("[IBGAN] GPU context reset successfully.")
+        except Exception as e:
+            print(f"[IBGAN] Failed to reset GPU context: {e}")
         # Shuffle after augmentation
         idx = self._random_state.permutation(X_aug.shape[0])
         X_aug = X_aug[idx]
