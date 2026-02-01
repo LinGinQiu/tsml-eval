@@ -9,7 +9,7 @@ import sys
 USERNAME = "cq2u24"
 
 # 2. 数据集列表文件路径
-DATASET_LIST_FILE = f"/scratch/{USERNAME}/DataSetLists/Longset2s.txt"
+DATASET_LIST_FILE = f"/scratch/{USERNAME}/DataSetLists/Longset2-2.txt"
 
 # 3. 分类器固定为 TimesNet
 CLASSIFIER = "TimesNet"
