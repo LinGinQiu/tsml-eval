@@ -66,16 +66,16 @@ model:
   kl_g_lambda: 0.5         # 全局 KL 系数（beta-VAE 风格） 0.05/0.01
   kl_c_lambda: 0.5         # 类别 KL 系数
   recon_lambda: 1.00        # 重构项系数
-  disentangle_lambda: 0.10  # 0.10
+  disentangle_lambda: 0.00  # 0.10
   center_lambda: 0.01       # 0.01
   # Other flags
   minority_class_id: 1      # 你的少数类 id（UCR 使用 np.unique 后得到的索引）
   cls_embed: true
-  recon_metric: "soft_dtw"   # 同loss recon_metric, works here soft_dtw, dilate, mse
+  recon_metric: "dilate"   # 同loss recon_metric, works here soft_dtw, dilate, mse
 
 loss:
   type: "lgd_vae_default"
-  recon_metric: "soft_dtw"   # 同 model.recon_metric
+  recon_metric: "dilate"   # 同 model.recon_metric
   huber_delta: 1.0
 
 optim:
