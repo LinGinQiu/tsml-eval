@@ -6,10 +6,10 @@ experiment:
 
 paths:
   data_root: "/scratch/cq2u24/Data/imbalanced_9_1"
-  work_root: "/scratch/cq2u24/models/MGD_CVAE_mse_wo_align_dis"
-  logs_dir: "/scratch/cq2u24/models/MGD_CVAE_mse_wo_align_dis/logs"          # 不用 ${} 插值
-  ckpt_dir: "/scratch/cq2u24/models/MGD_CVAE_mse_wo_align_dis/checkpoints"
-  outputs_dir: "/scratch/cq2u24/models/MGD_CVAE_mse_wo_align_dis/imputations"
+  work_root: "/scratch/cq2u24/models/MGD_CVAE_dilate_wo_align_dis"
+  logs_dir: "/scratch/cq2u24/models/MGD_CVAE_dilate_wo_align_dis/logs"          # 不用 ${} 插值
+  ckpt_dir: "/scratch/cq2u24/models/MGD_CVAE_dilate_wo_align_dis/checkpoints"
+  outputs_dir: "/scratch/cq2u24/models/MGD_CVAE_dilate_wo_align_dis/imputations"
 
 data:
   # 由 CLI 覆盖：--dataset_name <UCR_NAME>
@@ -71,11 +71,11 @@ model:
   # Other flags
   minority_class_id: 1      # 你的少数类 id（UCR 使用 np.unique 后得到的索引）
   cls_embed: true
-  recon_metric: "mse"   # 同loss recon_metric, works here soft_dtw, dilate, mse
+  recon_metric: "dilate"   # 同loss recon_metric, works here soft_dtw, dilate, mse
 
 loss:
   type: "lgd_vae_default"
-  recon_metric: "mse"   # 同 model.recon_metric
+  recon_metric: "dilate"   # 同 model.recon_metric
   huber_delta: 1.0
 
 optim:
@@ -105,7 +105,7 @@ trainer:
 # —— 新增：配合 train.py 里 callbacks 的访问 ——
 callbacks:
   checkpointing:
-    dirpath: "/scratch/cq2u24/models/MGD_CVAE_mse_wo_align_dis/checkpoints"
+    dirpath: "/scratch/cq2u24/models/MGD_CVAE_dilate_wo_align_dis/checkpoints"
     filename: "MGD_CVAE-{epoch:02d}"
     monitor: "eval_f1_min"
     mode: "max"
