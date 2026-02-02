@@ -565,12 +565,12 @@ class LGDVAEPipeline:
                     print(f"[LGDVAEPipeline] Loading mean and std: mean: {self.mean_}, std: {self.std_}")
                     self.infer.load_zscore_values(mean=self.mean_, std=self.std_)
 
-                # 加载成功直接返回 self，不再进行后续训练
-                print("training finished! exiting here and storage the model...")
-
-                import sys
-                sys.exit(0)
-                # return self
+                # # 加载成功直接返回 self，不再进行后续训练
+                # print("training finished! exiting here and storage the model...")
+                #
+                # import sys
+                # sys.exit(0)
+                return self
 
             except Exception as e:
                 print(f"[LGDVAEPipeline] Failed to load checkpoint ({e}).")
