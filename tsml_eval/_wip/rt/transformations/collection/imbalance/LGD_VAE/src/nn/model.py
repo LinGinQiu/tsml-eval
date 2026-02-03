@@ -998,7 +998,7 @@ class LatentGatedDualVAE(nn.Module):
             is_min = (y == self.minority_class_id)  # [B]
             is_maj = ~is_min
             # 如果 batch 里一个多数都没有，那就退化成自己用自己
-            if is_maj.any():
+            if False:#is_maj.any():
                 z_g_maj = z_g[is_maj]  # [B_maj, G]
                 # batch-wise majority mean (no grad, for stats only)
                 z_c_maj = z_c[is_maj]
