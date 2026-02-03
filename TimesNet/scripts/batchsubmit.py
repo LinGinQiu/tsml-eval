@@ -159,6 +159,9 @@ def submit_jobs():
             )
 
             if os.path.exists(expected_csv) and not FORCE_RUN:
+                print(
+                    f"Skipping {dataset_name} due to already submitted file: {expected_csv}"
+                )
                 total_skipped += 1
                 continue
 
