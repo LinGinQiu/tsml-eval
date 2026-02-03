@@ -24,8 +24,8 @@ SCRIPT_PATH = f"/home/{USERNAME}/tsml-eval/TimesNet/run.py"
 CONFIG_DIR = f"/home/{USERNAME}/tsml-eval/TimesNet/TSTConfig/"
 
 DATA_DIR_BASE = f"/scratch/{USERNAME}/Data/imbalanced_9_1/"
-BASE_RESULTS_ROOT = f"/scratch/{USERNAME}/Exp/results_TimesNet_generative/"
-CKPT_ROOT = f"/scratch/{USERNAME}/models/MGD_CVAE/checkpoints/"
+BASE_RESULTS_ROOT = f"/scratch/{USERNAME}/Exp/results_TimesNet_mse_wo_dis_align/"
+CKPT_ROOT = f"/scratch/{USERNAME}/models/MGD_CVAE_mse_wo_dis_align/checkpoints/"
 
 # ================= ⚙️ 环境与资源配置 =================
 
@@ -139,6 +139,8 @@ def submit_jobs():
         os.makedirs(log_dir, exist_ok=True)
 
         for i, ckpt_file in enumerate(files):
+            if i >2:
+                continue
             ckpt_full_path = os.path.join(ckpt_dir, ckpt_file)
             ckpt_name_clean = ckpt_file.replace(".ckpt", "").replace("=", "_")
 
