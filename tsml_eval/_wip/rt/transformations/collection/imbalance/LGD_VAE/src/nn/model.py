@@ -1171,7 +1171,7 @@ class LatentGatedDualVAE(nn.Module):
         # 但在生成少数类时，如果 Gate 打开，生成的波形会像多数类，这会导致下游分类器 F1 降低。
         # 建议：强制关闭 Gate，或者只保留很小的比例。
 
-        use_gate = False
+        use_gate = True
 
         if use_gate and self.z_g_maj_ema_inited:
             gate = self.gate(z_c_mix)
