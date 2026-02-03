@@ -25,7 +25,7 @@ CONFIG_DIR = f"/home/{USERNAME}/tsml-eval/TimesNet/TSTConfig/"
 
 DATA_DIR_BASE = f"/scratch/{USERNAME}/Data/imbalanced_9_1/"
 BASE_RESULTS_ROOT = f"/scratch/{USERNAME}/Exp/results_TimesNet_generative/"
-CKPT_ROOT = f"/scratch/{USERNAME}/models/MGD_CVAEs/checkpoints/"
+CKPT_ROOT = f"/scratch/{USERNAME}/models/MGD_CVAE/checkpoints/"
 
 # ================= ⚙️ 环境与资源配置 =================
 
