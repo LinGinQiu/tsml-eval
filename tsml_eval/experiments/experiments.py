@@ -204,7 +204,10 @@ def run_classification_experiment(
                     f"{new_n_cases_test} after transformation "
                     f"{transform.__class__.__name__}"
                 )
+    print("transform done, exiting...")
+    import sys
 
+    sys.exit(0)
     le = preprocessing.LabelEncoder()
     le.fit(np.concatenate((y_train, y_test)))
     y_train = le.transform(y_train)
