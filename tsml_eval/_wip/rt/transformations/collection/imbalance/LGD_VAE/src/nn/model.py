@@ -998,7 +998,7 @@ class LatentGatedDualVAE(nn.Module):
             is_min = (y == self.minority_class_id)  # [B]
             is_maj = ~is_min
             # 如果 batch 里一个多数都没有，那就退化成自己用自己
-            if False:#is_maj.any():
+            if is_maj.any():
                 z_g_maj = z_g[is_maj]  # [B_maj, G]
                 # batch-wise majority mean (no grad, for stats only)
                 z_c_maj = z_c[is_maj]
@@ -1166,12 +1166,7 @@ class LatentGatedDualVAE(nn.Module):
         z_g_mix = lam * z_g + (1 - lam) * z_g[perm]
         z_c_mix = lam * z_c + (1 - lam) * z_c[perm]
 
-        # 5. [关键] Gate 的处理
-        # 训练时我们用了 Gate 融合 Majority Mean，是为了让 loss 下降。
-        # 但在生成少数类时，如果 Gate 打开，生成的波形会像多数类，这会导致下游分类器 F1 降低。
-        # 建议：强制关闭 Gate，或者只保留很小的比例。
-
-        use_gate = False
+        use_gate = True
 
         if use_gate and self.z_g_maj_ema_inited:
             gate = self.gate(z_c_mix)
