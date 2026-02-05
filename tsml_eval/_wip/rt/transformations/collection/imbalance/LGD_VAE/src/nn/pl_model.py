@@ -142,7 +142,7 @@ class LitAutoEncoder(pl.LightningModule):
         self.recon_lambda = float(recon_lambda)
         self.warmup_epochs = 5.0
         self.minority_class_id = minority_class_id
-        self.in_channels = in_chans
+        self.input_channels = in_chans
         self.validation_step_outputs = []
 
         if cls_embed and weights is not None:
