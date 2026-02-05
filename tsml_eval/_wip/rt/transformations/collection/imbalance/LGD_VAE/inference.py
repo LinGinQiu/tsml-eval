@@ -156,7 +156,7 @@ class Inference:
             if self.mean_ and self.std_:
                 x_min = self.apply_zscore(x_min, self.mean_, self.std_)
             return self.invert_zscore(
-                lite_model.generate_vae_prior(x_min.to(self.device),alpha),
+                lite_model.generate_vae_prior(x_min.to(self.device),alpha=alpha),
                 mean=self.mean_,
                 std=self.std_
             )

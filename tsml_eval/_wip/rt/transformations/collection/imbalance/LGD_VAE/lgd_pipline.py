@@ -180,11 +180,19 @@ class DelayedEarlyStopping(EarlyStopping):
         print("[DelayedEarlyStopping] Using warmup_epochs =", self.warmup_epochs)
         super().__init__(*args, **kwargs)
 
-    def on_validation_epoch_end(self, trainer, pl_module):
-        # trainer.current_epoch is 0-based; skip checks while < warmup
+    def _should_skip_check(self, trainer):
+        # 如果当前 epoch 小于 warmup，直接告诉基类跳过所有逻辑
         if trainer.current_epoch < self.warmup_epochs:
+            return True
+        return False
+
+    # 为了兼容旧版本 Lightning，我们也重写核心检查入口
+    def on_validation_epoch_end(self, trainer, pl_module):
+        if self._should_skip_check(trainer):
+            # 关键：确保在 warmup 期间，基类的 wait_count 始终为 0
+            self.wait_count = 0
             return
-        return super().on_validation_epoch_end(trainer, pl_module)
+        super().on_validation_epoch_end(trainer, pl_module)
 
     def on_validation_end(self, trainer, pl_module):
         if trainer.current_epoch < self.warmup_epochs:
