@@ -143,6 +143,7 @@ class LitAutoEncoder(pl.LightningModule):
         self.warmup_epochs = 5.0
         self.minority_class_id = minority_class_id
         self.in_channels = in_chans
+        self.validation_step_outputs = []
 
         if cls_embed and weights is not None:
             num_c = len(weights)
@@ -228,7 +229,7 @@ class LitAutoEncoder(pl.LightningModule):
         self.log("train/align_loss", align_loss, on_step=False, on_epoch=True, sync_dist=True)
         self.log("train/disentangle_loss", disentangle_loss, on_step=False, on_epoch=True, sync_dist=True)
         self.log("train/loss_center", loss_center, on_step=False, on_epoch=True, sync_dist=True)
-        self.validation_step_outputs = []
+
         if cls_loss is not None:
             self.log("train/cls_loss", cls_loss, on_step=False, on_epoch=True, sync_dist=True)
             if (
