@@ -525,17 +525,20 @@ class LGDVAEPipeline:
                 if ckpt_candidates:
                     print(f"[Experiment] No env var found, auto-loading best model from {ckpt_dir}...")
                     import re
-                    def extract_epoch(name: str):
-                        """ 解析文件名中的 epoch 数字 """
-                        match = re.search(r"epoch=(\d+)", name)
-                        return int(match.group(1)) if match else -1
+                    def extract_loss(name: str):
+                        """ 从文件名中提取 eval_loss 的数值 """
+                        # 匹配 eval_loss= 后面跟着的数字（包括小数点）
+                        match = re.search(r"eval_loss=([0-9.]+)", name)
+                        return float(match.group(1)) if match else float('inf')  # 没找到则返回无穷大
 
-                    epoch_ckpts = [f for f in ckpt_candidates if "epoch=" in f]
+                    # 过滤出包含 eval_loss 的文件
+                    loss_ckpts = [f for f in ckpt_candidates if "eval_loss=" in f]
 
-                    if epoch_ckpts:
-                        # 优先找 epoch 最大的
-                        ckpt_file = max(epoch_ckpts, key=extract_epoch)
-                        ckpt_path = os.path.join(ckpt_dir, ckpt_file)
+                    if loss_ckpts:
+                        # 使用 min() 找到 eval_loss 最小的文件
+                        best_ckpt_file = min(loss_ckpts, key=extract_loss)
+                        ckpt_path = os.path.join(ckpt_dir, best_ckpt_file)
+                        print(f"Loading best model: {best_ckpt_file}")
                     else:
                         # 其次：fallback 用 last.ckpt（如果存在）
                         last_ckpts = [f for f in ckpt_candidates if "last" in f]
