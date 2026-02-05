@@ -838,10 +838,10 @@ class LatentGatedDualVAE(nn.Module):
             # 因为下面 y_embed_latent 输出维度设为了 d_model，所以拼接后是 2 * d_model
             head_in_dim = d_model + d_model
 
-        self.global_head_p = LatentHead(head_in_dim, latent_dim_global)
+        self.global_head_p = LatentHead(d_model, latent_dim_global)
         self.class_head_p = LatentHead(head_in_dim, latent_dim_class)
 
-        self.global_head_n = LatentHead(head_in_dim, latent_dim_global)
+        self.global_head_n = LatentHead(d_model, latent_dim_global)
         self.class_head_n = LatentHead(head_in_dim, latent_dim_class)
 
         # 3) gate: 用 minority 的 z_c 预测一个 [0,1] 的门控
@@ -914,9 +914,11 @@ class LatentGatedDualVAE(nn.Module):
             -> tuple[Tensor, Tensor, Tensor, Tensor]:
         B = feat.size(0)
         device = feat.device
-
-        # 注意：这里的 feat 已经是拼接过 label embedding 的特征 (如果 y 存在)
-        # 所以 feat 的维度可能是 d_model (无 y) 或者 2*d_model (有 y)
+        if y is not None and self.num_classes is not None and self.y_embed_latent is not None:
+            y_onehot = F.one_hot(y, num_classes=self.num_classes).float()
+            y_cond = self.y_embed_latent(y_onehot)  # [B, d_model]
+        else:
+            y_cond = None
 
         if y is None:
             mu_g, logvar_g = self.global_head_p(feat)
@@ -937,8 +939,9 @@ class LatentGatedDualVAE(nn.Module):
             # positive branch
             if is_pos.any():
                 feat_pos = feat[is_pos]
+                cond_pos = y_cond[is_pos]
                 mu_g_pos, logvar_g_pos = self.global_head_p(feat_pos)
-                mu_c_pos, logvar_c_pos = self.class_head_p(feat_pos)
+                mu_c_pos, logvar_c_pos = self.class_head_p(torch.cat([feat_pos, cond_pos], dim=1))
                 mu_g[is_pos] = mu_g_pos
                 logvar_g[is_pos] = logvar_g_pos
                 mu_c[is_pos] = mu_c_pos
@@ -947,8 +950,9 @@ class LatentGatedDualVAE(nn.Module):
             # negative branch
             if is_neg.any():
                 feat_neg = feat[is_neg]
+                cond_neg = y_cond[is_neg]
                 mu_g_neg, logvar_g_neg = self.global_head_n(feat_neg)
-                mu_c_neg, logvar_c_neg = self.class_head_n(feat_neg)
+                mu_c_neg, logvar_c_neg = self.class_head_n(torch.cat([feat_neg, cond_neg], dim=1))
                 mu_g[is_neg] = mu_g_neg
                 logvar_g[is_neg] = logvar_g_neg
                 mu_c[is_neg] = mu_c_neg
@@ -960,15 +964,6 @@ class LatentGatedDualVAE(nn.Module):
             -> tuple[Tensor, Tensor, Tensor, Tensor, Tensor]:
         feat = self.encode_feat(x)  # [B, d_model]
         #  stop conditional
-        if y is not None and self.num_classes is not None and self.y_embed_latent is not None:
-            y_onehot = F.one_hot(y, num_classes=self.num_classes).float()
-            y_cond = self.y_embed_latent(y_onehot)  # [B, d_model]
-
-            # -----------------------------------------------------------
-            # [MODIFIED] Concatenation instead of Addition
-            # -----------------------------------------------------------
-            # feat = feat + y_cond  <-- OLD
-            feat = torch.cat([feat, y_cond], dim=1)  # [B, d_model * 2]
 
         mu_g, logvar_g, mu_c, logvar_c = self.encode_latent_branches(feat, y)
         return feat, mu_g, logvar_g, mu_c, logvar_c
