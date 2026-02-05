@@ -605,14 +605,13 @@ class LGDVAEPipeline:
         best_path = trainer.checkpoint_callback.best_model_path
         best_score = trainer.checkpoint_callback.best_model_score
         print(f"最低 eval_loss: {best_score}")
-        autoencoder = Inference.from_checkpoint(
+        self.infer = Inference.from_checkpoint(
                     best_path,
                     model_class=LitAutoEncoder,
                     model_kwargs=None,
                     device=self.device,
                     strict=False,
                 )
-        self.infer = Inference(autoencoder, device=self.device)
         if self.mean_ and self.std_:
             print(f"[LGDVAEPipeline] Loading mean and std: ")
             self.infer.load_zscore_values(mean=self.mean_, std=self.std_)
