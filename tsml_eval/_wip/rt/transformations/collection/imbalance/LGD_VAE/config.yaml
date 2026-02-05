@@ -115,9 +115,9 @@ callbacks:
 #    warmup_epochs: 20
 
   early_stopping:
-    monitor: "eval_loss"
-    mode: "min"
-    patience: 20
+    monitor: "eval/gen_f1_macro"
+    mode: "max"
+    patience: 10
     min_delta: 0.0
     warmup_epochs: 20
 

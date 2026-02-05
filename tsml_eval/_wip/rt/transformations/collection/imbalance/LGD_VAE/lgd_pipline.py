@@ -524,17 +524,17 @@ class LGDVAEPipeline:
                     import re
                     def extract_loss(name: str):
                         # 修改后的正则：匹配数字开头，中间可选一个点，再接数字
-                        match = re.search(r"eval_loss=([0-9]+\.?[0-9]*)", name)
+                        match = re.search(r"eval/gen_f1_macro=([0-9]+\.?[0-9]*)", name)
                         if match:
                             return float(match.group(1))
                         return float('inf')
 
-                    # 过滤出包含 eval_loss 的文件
-                    loss_ckpts = [f for f in ckpt_candidates if "eval_loss=" in f]
+                    # 过滤出包含 eval/gen_f1_macro 的文件
+                    loss_ckpts = [f for f in ckpt_candidates if "eval/gen_f1_macro=" in f]
 
                     if loss_ckpts:
-                        # 使用 min() 找到 eval_loss 最小的文件
-                        best_ckpt_file = min(loss_ckpts, key=extract_loss)
+                        # 使用 min() 找到 eval/gen_f1_macro 最大的文件
+                        best_ckpt_file = max(loss_ckpts, key=extract_loss)
                         ckpt_path = os.path.join(ckpt_dir, best_ckpt_file)
                         print(f"Loading best model: {best_ckpt_file}")
                     else:
@@ -605,7 +605,7 @@ class LGDVAEPipeline:
         # 训练完 从 ckpt 读取模型（确保和推断阶段完全一致的模型权重）
         best_path = trainer.checkpoint_callback.best_model_path
         best_score = trainer.checkpoint_callback.best_model_score
-        print(f"最低 eval_loss: {best_score}")
+        print(f"最高 eval/gen_f1_macro: {best_score}")
         self.infer = Inference.from_checkpoint(
                     best_path,
                     model_class=LitAutoEncoder,
