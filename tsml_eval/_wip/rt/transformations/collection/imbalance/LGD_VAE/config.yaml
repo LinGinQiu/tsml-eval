@@ -6,10 +6,10 @@ experiment:
 
 paths:
   data_root: "/scratch/cq2u24/Data/imbalanced_9_1"
-  work_root: "/scratch/cq2u24/models_time/MGD_CVAE_mse_wo_dis"
-  logs_dir: "/scratch/cq2u24/models_time/MGD_CVAE_mse_wo_dis/logs"          # 不用 ${} 插值
-  ckpt_dir: "/scratch/cq2u24/models_time/MGD_CVAE_mse_wo_dis/checkpoints"
-  outputs_dir: "/scratch/cq2u24/models_time/MGD_CVAE_mse_wo_dis/imputations"
+  work_root: "/scratch/cq2u24/models_time/MGD_CVAE_mse"
+  logs_dir: "/scratch/cq2u24/models_time/MGD_CVAE_mse/logs"          # 不用 ${} 插值
+  ckpt_dir: "/scratch/cq2u24/models_time/MGD_CVAE_mse/checkpoints"
+  outputs_dir: "/scratch/cq2u24/models_time/MGD_CVAE_mse/imputations"
 
 data:
   # 由 CLI 覆盖：--dataset_name <UCR_NAME>
@@ -105,7 +105,7 @@ trainer:
 # —— 新增：配合 train.py 里 callbacks 的访问 ——
 callbacks:
   checkpointing:
-    dirpath: "/scratch/cq2u24/models_time/MGD_CVAE_mse_wo_dis/checkpoints"
+    dirpath: "/scratch/cq2u24/models_time/MGD_CVAE_mse/checkpoints"
     filename: "MGD_CVAE-{epoch:02d}"
     monitor: "eval_f1_min"
     mode: "max"
