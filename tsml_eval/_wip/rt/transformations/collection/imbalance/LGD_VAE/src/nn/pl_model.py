@@ -303,7 +303,7 @@ class LitAutoEncoder(pl.LightningModule):
         all_y_test = torch.cat([o["y_test"] for o in self.validation_step_outputs], dim=0)
 
         # 3. 每隔 N 个 Epoch 执行分类器评估
-        if (self.current_epoch + 1) % 5 == 0 and self.current_epoch >20:
+        if self.current_epoch >20: #(self.current_epoch + 1) % 1 == 0 and
             # 调用之前写的 train_and_eval_classifier 函数
             metrics = train_and_eval_classifier(
                 all_x_train, all_y_train,
