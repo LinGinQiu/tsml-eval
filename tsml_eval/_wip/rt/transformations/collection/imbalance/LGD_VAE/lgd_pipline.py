@@ -154,7 +154,6 @@ class PrintLossCallback(Callback):
     def on_validation_epoch_end(self, trainer, pl_module):
         metrics = trainer.callback_metrics
         epoch = trainer.current_epoch
-        print(metrics)
         gmeans = metrics.get("eval/gen_g_means")
         macrof1 = metrics.get("eval/gen_f1_macro")
         acc = metrics.get("eval/acc")
