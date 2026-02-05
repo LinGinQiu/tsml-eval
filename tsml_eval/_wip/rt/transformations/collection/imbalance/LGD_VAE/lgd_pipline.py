@@ -324,7 +324,14 @@ class LGDVAEPipeline:
                 augmentation_ratio=0.0,
             )
         else:
-            eval_dataset = train_dataset
+            eval_dataset = UCRDataset(
+            data=X_tr,
+            labels=y_tr,
+            split="eval",
+            normalizer=None,
+            augmentation_ratio=0.0,
+            rebalance=False,
+        )
             print("use train data for evaluation since test data is not provided.")
         print(
             f"{datetime.now()} : Train size: {len(train_dataset)}; "
@@ -334,16 +341,6 @@ class LGDVAEPipeline:
 
         if getattr(train_dataset, "sample_weights", None) is not None:
             print("Use WeightedRandomSampler for training data.")
-            # print("Use SwitchableWeightedSampler for latent distillation training.")
-            # sampler = WeightedRandomSampler(
-            #     weights=train_dataset.sample_weights,
-            #     num_samples=len(train_dataset.sample_weights),
-            #     replacement=True,
-            # )
-            # sampler = SwitchableWeightedSampler(
-            #     full_weights=train_dataset.sample_weights,
-            #     majority_indices=train_dataset.majority_indices,
-            #     switch_epoch=1)
             train_loader = DataLoader(
                 train_dataset,
                 batch_size=cfg.data.train_batch_size,
@@ -360,7 +357,7 @@ class LGDVAEPipeline:
         if eval_dataset:
             eval_loader = DataLoader(
                 eval_dataset,
-                batch_size=cfg.data.eval_batch_size,
+                batch_size=len(eval_dataset),
                 shuffle=False,
                 num_workers=cfg.data.loader_workers,
             )

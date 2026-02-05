@@ -1,8 +1,84 @@
 import torch
+import torch.nn as nn
 from tsml_eval._wip.rt.transformations.collection.imbalance.LGD_VAE.src.nn.model import LatentGatedDualVAE
 import lightning.pytorch as pl
 import torchmetrics
 from typing import Tuple
+from torchmetrics import Accuracy, F1Score, Recall
+
+class TSQualityClassifier(pl.LightningModule):
+    def __init__(self, input_channels, num_classes=2, lr=1e-3):
+        super().__init__()
+        self.save_hyperparameters()
+        self.lr = lr
+
+        # 定义特征提取器
+        self.features = nn.Sequential(
+            nn.Conv1d(input_channels, 64, kernel_size=5, padding=2),
+            nn.BatchNorm1d(64),
+            nn.ReLU(),
+            nn.MaxPool1d(2),
+            nn.Conv1d(64, 128, kernel_size=3, padding=1),
+            nn.BatchNorm1d(128),
+            nn.ReLU(),
+            nn.AdaptiveAvgPool1d(1)
+        )
+        self.classifier = nn.Linear(128, num_classes)
+
+        # 初始化评估指标
+        # num_classes=2 时，task 可以设为 'multiclass' 也可以设为 'binary'
+        # 这里用 multiclass 确保通用性
+        task = "multiclass"
+        self.acc_metric = Accuracy(task=task, num_classes=num_classes)
+        self.f1_metric = Accuracy(task=task, num_classes=num_classes, average='macro')  # 也就是 Macro-F1 的逻辑
+        self.f1_macro = F1Score(task=task, num_classes=num_classes, average='macro')
+
+        # G-Means 是每个类别召回率（Recall）的几何平均值
+        # 我们先记录每个类的 Recall
+        self.recall_per_class = Recall(task=task, num_classes=num_classes, average='none')
+
+    def forward(self, x):
+        if x.ndim == 2:  # 如果是 (Batch, Length) 自动补齐通道维度
+            x = x.unsqueeze(1)
+        elif x.shape[1] != self.hparams.input_channels:
+            x = x.transpose(1, 2)
+
+        x = self.features(x)
+        x = torch.flatten(x, 1)
+        return self.classifier(x)
+
+    def training_step(self, batch, batch_idx):
+        x, y = batch
+        logits = self(x)
+        loss = F.cross_entropy(logits, y)
+        return loss
+
+    def validation_step(self, batch, batch_idx):
+        x, y = batch
+        logits = self(x)
+        loss = F.cross_entropy(logits, y)
+        preds = torch.argmax(logits, dim=1)
+
+        # 计算指标
+        acc = self.acc_metric(preds, y)
+        f1 = self.f1_macro(preds, y)
+
+        # 计算 G-Means: 先拿所有类的 Recall，然后求乘积再开方
+        recalls = self.recall_per_class(preds, y)
+        g_means = torch.prod(recalls).pow(1 / len(recalls))
+
+        # 日志记录，这样你在训练生成模型时可以拿到这些结果
+        metrics = {
+            "val_loss": loss,
+            "val_acc": acc,
+            "val_f1_macro": f1,
+            "val_g_means": g_means
+        }
+        self.log_dict(metrics, prog_bar=True)
+        return metrics
+
+    def configure_optimizers(self):
+        return torch.optim.Adam(self.parameters(), lr=self.lr)
 
 
 # define the LightningModule
@@ -64,6 +140,8 @@ class LitAutoEncoder(pl.LightningModule):
         self.kl_c_lambda = float(kl_c_lambda)
         self.recon_lambda = float(recon_lambda)
         self.warmup_epochs = 5.0
+        self.minority_class_id = minority_class_id
+        self.in_channels = in_chans
 
         if cls_embed and weights is not None:
             num_c = len(weights)
@@ -149,6 +227,7 @@ class LitAutoEncoder(pl.LightningModule):
         self.log("train/align_loss", align_loss, on_step=False, on_epoch=True, sync_dist=True)
         self.log("train/disentangle_loss", disentangle_loss, on_step=False, on_epoch=True, sync_dist=True)
         self.log("train/loss_center", loss_center, on_step=False, on_epoch=True, sync_dist=True)
+        self.validation_step_outputs = []
         if cls_loss is not None:
             self.log("train/cls_loss", cls_loss, on_step=False, on_epoch=True, sync_dist=True)
             if (
@@ -172,60 +251,69 @@ class LitAutoEncoder(pl.LightningModule):
         else:
             x, y = batch, None
 
-        recon_w, kl_g_w, kl_c_w, align_w, disentangle_w, center_w, cls_w = self._current_loss_weights()
-        out = self.model(x, y)
+        is_min = (y == self.minority_class_id)  # [B]
+        is_maj = ~is_min
+        X_majortiy = x[is_maj]
+        X_minority = x[is_min]
+        num_minority = X_minority.size(0)
+        num_majority = X_majortiy.size(0)
+        minority_test =X_minority[:num_minority//2]
+        majority_test = X_majortiy[:num_majority//2]
+        majority_train = X_majortiy[num_majority//2:]
+        minority_train = X_minority[num_minority//2:]
+        n_generation_per_minority = 9
+        new_minority = self.model.generate_vae_prior(x_min=minority_train, num_variations=9)
 
-        recon_loss = out.get("recon_loss", 0.0)
-        kl_g = out.get("kl_g", 0.0)
-        kl_c = out.get("kl_c", 0.0)
-        align_loss = out.get("align_loss", 0.0)
-        disentangle_loss = out.get("disentangle_loss", 0.0)
-        loss_center = out.get("loss_center", 0.0)
-        cls_loss = out.get("cls_loss", None)
-        recom_loss_mse = out.get("recon_loss_mse", None)
+        # 构建本次 Batch 的评估数据
+        X_eval_train = torch.cat([majority_train, minority_train, new_minority], dim=0)
+        y_eval_train = torch.cat([
+            torch.full((len(majority_train),), 0, device=x.device),
+            torch.full((len(minority_train) + len(new_minority),), 1, device=x.device)
+        ], dim=0)
 
-        loss = recon_w * recon_loss + kl_g_w * kl_g + kl_c_w * kl_c
-        loss = loss + align_w * align_loss
-        loss = loss + disentangle_w * disentangle_loss
-        loss = loss + center_w * loss_center
-        if cls_loss is not None:
-            loss = loss + cls_w * cls_loss
+        X_eval_test = torch.cat([majority_test, minority_test], dim=0)
+        y_eval_test = torch.cat([
+            torch.full((len(majority_test),), 0, device=x.device),
+            torch.full((len(minority_test),), 1, device=x.device)
+        ], dim=0)
 
-        # log 各项
-        self.log("eval_recon_loss", recon_loss, on_step=False, on_epoch=True, sync_dist=True)
-        self.log("eval_recon_loss_mse", recom_loss_mse, on_step=False, on_epoch=True, sync_dist=True)
-        self.log("eval/kl_g", kl_g, on_step=False, on_epoch=True, sync_dist=True)
-        self.log("eval/kl_c", kl_c, on_step=False, on_epoch=True, sync_dist=True)
-        self.log("eval/align_loss", align_loss, on_step=False, on_epoch=True, sync_dist=True)
-        self.log("eval/disentangle_loss", disentangle_loss, on_step=False, on_epoch=True, sync_dist=True)
-        self.log("eval/loss_center", loss_center, on_step=False, on_epoch=True, sync_dist=True)
-        if cls_loss is not None:
-            self.log("eval/cls_loss", cls_loss, on_step=False, on_epoch=True, sync_dist=True)
-            if out.get("cls_logits") is not None and y is not None:
-                # [修改点 2] 更新 valid_f1
-                if self.valid_acc is not None:
-                    self.valid_acc.update(out["cls_logits"], y)
-                if self.valid_f1 is not None:
-                    self.valid_f1.update(out["cls_logits"], y)
-
-        self.log("eval_loss", loss, on_step=False, on_epoch=True, prog_bar=True, sync_dist=True)
-        return loss
+        # 关键：将这些数据暂时存入 outputs，在 epoch 结束时统一处理
+        eval_dict= {
+            "x_train": X_eval_train.detach(),
+            "y_train": y_eval_train.detach(),
+            "x_test": X_eval_test.detach(),
+            "y_test": y_eval_test.detach()
+        }
+        self.validation_step_outputs.append(eval_dict)
 
     def on_validation_epoch_end(self):
-        # 1. 计算所有类别的 F1 (返回一个向量，例如 [0.98, 0.45])
-        all_f1_scores = self.valid_f1.compute()
-        # 2. 提取少数类 F1
-        # self.hparams.minority_class_id 是你在 __init__ 里存下来的那个 ID
-        min_id = self.hparams.minority_class_id
-        # 即使你只有两个类，all_f1_scores[min_id] 也能精准拿到少数类的分数
-        f1_min = all_f1_scores[min_id]
-        # 3. 记录日志 (这个名字 'eval_f1_min' 要跟你的 Monitor 对应)
-        self.log("eval_f1_min", f1_min, prog_bar=True)
+        # 1. 检查是否有数据
+        if not self.validation_step_outputs:
+            return
 
-        # 4. (可选) 如果你想看多数类 F1，也可以记下来对比
-        f1_maj = all_f1_scores[0]
-        self.log("eval_f1_maj", f1_maj)
-        self.valid_f1.reset()
+        # 2. 汇总所有 batch 的数据
+        all_x_train = torch.cat([o["x_train"] for o in self.validation_step_outputs], dim=0)
+        all_y_train = torch.cat([o["y_train"] for o in self.validation_step_outputs], dim=0)
+        all_x_test = torch.cat([o["x_test"] for o in self.validation_step_outputs], dim=0)
+        all_y_test = torch.cat([o["y_test"] for o in self.validation_step_outputs], dim=0)
+
+        # 3. 每隔 N 个 Epoch 执行分类器评估
+        if (self.current_epoch + 1) % 5 == 0 and self.current_epoch >20:
+            # 调用之前写的 train_and_eval_classifier 函数
+            metrics = train_and_eval_classifier(
+                all_x_train, all_y_train,
+                all_x_test, all_y_test,
+                input_chans=self.input_channels,
+                num_classes=2,
+                device=self.device
+            )
+
+            # 日志记录
+            self.log("eval/gen_g_means", metrics["val_g_means"], prog_bar=True)
+            self.log("eval/gen_f1_macro", metrics["val_f1_macro"], prog_bar=True)
+
+        # 4. 关键：手动清空列表，防止显存爆炸
+        self.validation_step_outputs.clear()
 
     def configure_optimizers(self):
         # 统一从 self.cfg 读取（由 train.py 赋值为 DotDict/ dict）
@@ -276,3 +364,31 @@ class LitAutoEncoder(pl.LightningModule):
         cls_weight = self.cls_lambda
 
         return recon_weight, kl_g_weight, kl_c_weight, align_weight, disentangle_weight, center_weight, cls_weight
+
+
+def train_and_eval_classifier(train_data, train_labels, test_data, test_labels, input_chans, num_classes, device):
+    # 1. 组建 DataLoader
+    from torch.utils.data import TensorDataset, DataLoader
+    train_ds = TensorDataset(train_data, train_labels)
+    test_ds = TensorDataset(test_data, test_labels)
+
+    # 判别器训练不需要太多 Epoch，3-5 次足以看出生成质量
+    train_loader = DataLoader(train_ds, batch_size=32, shuffle=True)
+    test_loader = DataLoader(test_ds, batch_size=32)
+    clf = TSQualityClassifier(input_channels=input_chans, num_classes=num_classes).to(device)
+
+    # 3. 使用轻量级 Trainer 训练
+    # logger=False 和 enable_checkpointing=False 极其重要，防止产生垃圾文件
+    eval_trainer = pl.Trainer(
+        max_epochs=10,
+        accelerator="auto",
+        devices=1,
+        enable_checkpointing=False,
+        logger=False,
+        enable_progress_bar=False  # 关闭进度条，避免洗屏
+    )
+
+    eval_trainer.fit(clf, train_loader, test_loader)
+
+    # 4. 获取结果
+    return eval_trainer.callback_metrics
