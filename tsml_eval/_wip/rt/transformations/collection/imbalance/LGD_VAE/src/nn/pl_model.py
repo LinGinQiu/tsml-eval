@@ -291,20 +291,23 @@ class LitAutoEncoder(pl.LightningModule):
     def on_validation_epoch_end(self):
         # 1. 检查是否有数据
         if not self.validation_step_outputs:
-            self.log("eval/gen_g_means", 0., prog_bar=False)
-            self.log("eval/gen_f1_macro", 0., prog_bar=False)
-            self.log("eval/acc", 0., prog_bar=False)
+            # 统一使用 prog_bar=True (或者全部 False)
+            self.log("eval/gen_g_means", 0., prog_bar=True)
+            self.log("eval/gen_f1_macro", 0., prog_bar=True)
+            self.log("eval/acc", 0., prog_bar=True)
             return
 
-        # 2. 汇总所有 batch 的数据
+        # 2. 汇总数据
         all_x_train = torch.cat([o["x_train"] for o in self.validation_step_outputs], dim=0)
         all_y_train = torch.cat([o["y_train"] for o in self.validation_step_outputs], dim=0)
         all_x_test = torch.cat([o["x_test"] for o in self.validation_step_outputs], dim=0)
         all_y_test = torch.cat([o["y_test"] for o in self.validation_step_outputs], dim=0)
 
+        # 初始化默认值
+        res_g, res_f1, res_acc = 0., 0., 0.
+
         # 3. 每隔 N 个 Epoch 执行分类器评估
-        if self.current_epoch >20: #(self.current_epoch + 1) % 1 == 0 and
-            # 调用之前写的 train_and_eval_classifier 函数
+        if self.current_epoch > 20:
             metrics = train_and_eval_classifier(
                 all_x_train, all_y_train,
                 all_x_test, all_y_test,
@@ -312,17 +315,16 @@ class LitAutoEncoder(pl.LightningModule):
                 num_classes=2,
                 device=self.device
             )
+            res_g = metrics["val_g_means"]
+            res_f1 = metrics["val_f1_macro"]
+            res_acc = metrics["val_acc"]
 
-            # 日志记录
-            self.log("eval/gen_g_means", metrics["val_g_means"], prog_bar=True)
-            self.log("eval/gen_f1_macro", metrics["val_f1_macro"], prog_bar=True)
-            self.log("eval/acc", metrics["val_acc"], prog_bar=True)
-        else:
-            self.log("eval/gen_g_means", 0., prog_bar=False)
-            self.log("eval/gen_f1_macro", 0., prog_bar=False)
-            self.log("eval/acc", 0., prog_bar=False)
+        # 4. 统一在分支外 Log，确保参数永远一致
+        self.log("eval/gen_g_means", res_g, prog_bar=True)
+        self.log("eval/gen_f1_macro", res_f1, prog_bar=True)
+        self.log("eval/acc", res_acc, prog_bar=True)
 
-        # 4. 关键：手动清空列表，防止显存爆炸
+        # 5. 清空列表
         self.validation_step_outputs.clear()
 
     def configure_optimizers(self):
