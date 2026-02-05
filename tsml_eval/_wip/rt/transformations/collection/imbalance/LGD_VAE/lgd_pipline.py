@@ -599,15 +599,15 @@ class LGDVAEPipeline:
         self.model = autoencoder
         print("training finished! exiting here and storage the model...")
 
-        import sys
-        sys.exit(0)
-        # # 训练完直接建一个 Inference wrapper（不从 ckpt 读，直接包内存模型）
-        # self.infer = Inference(autoencoder, device=self.device)
-        # if self.mean_ and self.std_:
-        #     print(f"[LGDVAEPipeline] Loading mean and std: ")
-        #     self.infer.load_zscore_values(mean=self.mean_, std=self.std_)
-        #     print(f"[LGDVAEPipeline] Loaded mean and std: {self.infer.mean_, self.infer.std_}")
-        # return self
+        # import sys
+        # sys.exit(0)
+        # 训练完直接建一个 Inference wrapper（不从 ckpt 读，直接包内存模型）
+        self.infer = Inference(autoencoder, device=self.device)
+        if self.mean_ and self.std_:
+            print(f"[LGDVAEPipeline] Loading mean and std: ")
+            self.infer.load_zscore_values(mean=self.mean_, std=self.std_)
+            print(f"[LGDVAEPipeline] Loaded mean and std: {self.infer.mean_, self.infer.std_}")
+        return self
 
     # -------------------------
     # 公共接口：transform / 生成
