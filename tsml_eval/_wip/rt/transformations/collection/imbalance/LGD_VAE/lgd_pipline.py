@@ -168,56 +168,77 @@ class PrintLossCallback(Callback):
 # EarlyStopping with warmup: DelayedEarlyStopping
 # --------------------------------------------------------
 class DelayedEarlyStopping(EarlyStopping):
-    """EarlyStopping that ignores validation checks for the first `warmup_epochs`.
-
-    It subclasses Lightning's EarlyStopping and simply skips calling the parent's
-    validation hooks until the trainer has reached `warmup_epochs`.
-
-    Configure the warmup period via the callback config key `warmup_epochs` (int).
-    """
     def __init__(self, warmup_epochs: int = 10, *args, **kwargs):
         self.warmup_epochs = int(warmup_epochs)
-        print("[DelayedEarlyStopping] Using warmup_epochs =", self.warmup_epochs)
         super().__init__(*args, **kwargs)
+        print(f"✅ [DelayedEarlyStopping] Initialized. Warmup: {self.warmup_epochs} epochs. Monitoring: {self.monitor}")
 
-    def _should_skip_check(self, trainer):
-        # 如果当前 epoch 小于 warmup，直接告诉基类跳过所有逻辑
-        if trainer.current_epoch < self.warmup_epochs:
-            return True
-        return False
-
-    # 为了兼容旧版本 Lightning，我们也重写核心检查入口
     def on_validation_epoch_end(self, trainer, pl_module):
-        if self._should_skip_check(trainer):
-            # 关键：确保在 warmup 期间，基类的 wait_count 始终为 0
-            self.wait_count = 0
+        epoch = trainer.current_epoch
+
+        # 获取当前监控指标的值
+        logs = trainer.callback_metrics
+        current_score = logs.get(self.monitor)
+
+        # 1. Warmup 阶段
+        if epoch < self.warmup_epochs:
+            self.wait_count = 0  # 强制重置计数器
+            if current_score is not None:
+                print(f"⏳ [Epoch {epoch}] Warmup Phase: {self.monitor} = {current_score:.4f} (EarlyStopping Inactive)")
+            else:
+                print(f"⏳ [Epoch {epoch}] Warmup Phase: Waiting for {self.monitor}...")
             return
+
+        # 2. 正常监控阶段
+        # 在调用父类逻辑前记录一下旧的 wait_count
+        old_wait_count = self.wait_count
+
+        # 调用基类逻辑执行真正的检查
         super().on_validation_epoch_end(trainer, pl_module)
 
-    def on_validation_end(self, trainer, pl_module):
-        if trainer.current_epoch < self.warmup_epochs:
-            return
-        return super().on_validation_end(trainer, pl_module)
+        # 3. 打印 Debug 信息
+        if current_score is not None:
+            status = "✅ Improved" if self.wait_count == 0 else "❌ No Improvement"
+            best_score = self.best_score.item() if hasattr(self.best_score, "item") else self.best_score
+
+            print(f"🔍 [Epoch {epoch}] Monitoring: {self.monitor} = {current_score:.4f} | "
+                  f"Best = {best_score:.4f} | "
+                  f"Patience = {self.wait_count}/{self.patience} ({status})")
+
+            if self.wait_count >= self.patience:
+                print(f"🛑 [Early Stop] Patience reached at epoch {epoch}. Stopping training...")
+        else:
+            print(f"⚠️ [Epoch {epoch}] Warning: {self.monitor} not found in callback_metrics!")
+
+    def on_train_end(self, trainer, pl_module):
+        print("🏁 Training finished. Final EarlyStopping state: "
+              f"Best {self.monitor} = {self.best_score:.4f}, total epochs = {trainer.current_epoch}")
 
 from lightning.pytorch.callbacks import ModelCheckpoint
+
 
 class DelayedModelCheckpoint(ModelCheckpoint):
     def __init__(self, warmup_epochs: int = 10, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        print("[DelayedModelCheckpoint] Using warmup_epochs =", warmup_epochs)
-        self.start_save_epoch = warmup_epochs
-
-    def on_train_epoch_end(self, trainer, pl_module):
-        # 拦截 save_last=True 的逻辑，以及 monitor="train/..." 的逻辑
-        if trainer.current_epoch < self.start_save_epoch:
-            return
-        super().on_train_epoch_end(trainer, pl_module)
+        self.start_save_epoch = int(warmup_epochs)
+        print(f"💾 [DelayedModelCheckpoint] Initialized. Saving will start after Epoch {self.start_save_epoch}")
 
     def on_validation_end(self, trainer, pl_module):
-        # 拦截 monitor="eval/..." 的逻辑
-        if trainer.current_epoch < self.start_save_epoch:
+        epoch = trainer.current_epoch
+        if epoch < self.start_save_epoch:
+            # 仅仅打印，不调用 super()，从而跳过保存逻辑
+            if trainer.is_global_zero:  # 只在主进程打印，避免多卡训练刷屏
+                print(f"⏳ [Epoch {epoch}] Checkpoint: Warmup phase, skipping save...")
             return
+
+        # 记录一下保存前的路径，用于 debug
+        old_best = self.best_model_path
+
         super().on_validation_end(trainer, pl_module)
+
+        # 如果保存路径变了，说明存了新模型
+        if self.best_model_path != old_best:
+            print(f"🌟 [Epoch {epoch}] Checkpoint: New best model saved at {self.best_model_path}")
 
 # ========================================================
 # LGD-VAE 端到端 Pipeline: __init__ + fit + transform
