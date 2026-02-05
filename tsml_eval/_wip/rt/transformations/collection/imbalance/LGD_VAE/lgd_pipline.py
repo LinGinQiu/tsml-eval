@@ -526,10 +526,11 @@ class LGDVAEPipeline:
                     print(f"[Experiment] No env var found, auto-loading best model from {ckpt_dir}...")
                     import re
                     def extract_loss(name: str):
-                        """ 从文件名中提取 eval_loss 的数值 """
-                        # 匹配 eval_loss= 后面跟着的数字（包括小数点）
-                        match = re.search(r"eval_loss=([0-9.]+)", name)
-                        return float(match.group(1)) if match else float('inf')  # 没找到则返回无穷大
+                        # 修改后的正则：匹配数字开头，中间可选一个点，再接数字
+                        match = re.search(r"eval_loss=([0-9]+\.?[0-9]*)", name)
+                        if match:
+                            return float(match.group(1))
+                        return float('inf')
 
                     # 过滤出包含 eval_loss 的文件
                     loss_ckpts = [f for f in ckpt_candidates if "eval_loss=" in f]
