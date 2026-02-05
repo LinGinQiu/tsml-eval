@@ -445,7 +445,7 @@ class LGDVAEPipeline:
             mode="max",
             save_top_k=3,
             warmup_epochs=10,  # 同样跳过前期作弊阶段
-            save_last=True,
+            save_last=False
         ))
 
         if "callbacks" in cfg and "early_stopping" in cfg.callbacks:
