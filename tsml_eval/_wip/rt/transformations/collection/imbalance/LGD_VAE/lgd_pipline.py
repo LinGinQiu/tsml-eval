@@ -411,7 +411,7 @@ class LGDVAEPipeline:
         # 这个模型生成的波形最平滑，最像真实数据
         callbacks.append(DelayedModelCheckpoint(
             dirpath=cfg.paths.ckpt_dir,
-            filename="{epoch:02d}-{eval_loss:.4f}",
+            filename="{epoch:02d}-{gen_f1_macro:.4f}",
             monitor="eval/gen_f1_macro",
             mode="max",
             save_top_k=3,

@@ -317,6 +317,10 @@ class LitAutoEncoder(pl.LightningModule):
             self.log("eval/gen_g_means", metrics["val_g_means"], prog_bar=True)
             self.log("eval/gen_f1_macro", metrics["val_f1_macro"], prog_bar=True)
             self.log("eval/acc", metrics["val_acc"], prog_bar=True)
+        else:
+            self.log("eval/gen_g_means", 0., prog_bar=False)
+            self.log("eval/gen_f1_macro", 0., prog_bar=False)
+            self.log("eval/acc", 0., prog_bar=False)
 
         # 4. 关键：手动清空列表，防止显存爆炸
         self.validation_step_outputs.clear()
