@@ -324,7 +324,8 @@ class LGDVAEPipeline:
                 augmentation_ratio=0.0,
             )
         else:
-            eval_dataset = None
+            eval_dataset = train_dataset
+            print("use train data for evaluation since test data is not provided.")
         print(
             f"{datetime.now()} : Train size: {len(train_dataset)}; "
             f"Eval size: {len(eval_dataset)if eval_dataset else None}."
@@ -413,7 +414,7 @@ class LGDVAEPipeline:
         # 这个模型生成的波形最平滑，最像真实数据
         callbacks.append(DelayedModelCheckpoint(
             dirpath=cfg.paths.ckpt_dir,
-            filename="{epoch:02d}",
+            filename="{epoch:02d}-{eval_loss:.4f}",
             monitor="eval_loss",
             mode="min",
             save_top_k=3,
@@ -463,24 +464,24 @@ class LGDVAEPipeline:
         cfg = self.cfg
         dataset_name = cfg.data.dataset_name
         # 1) 准备数据
-        if  X_te is None or y_te is None:
-
-            if getattr(cfg.data, "format", "ucr") != "ucr":
-                raise NotImplementedError("Only UCR format is implemented yet.")
-
-            problem_path = cfg.paths.data_root
-            resample_id = self.seed
-            predefined_resample = getattr(cfg.data, "predefined_resample", False)
-            print(f'random id in pipline is {resample_id}')
-            X_tr_, y_tr_, X_te_, y_te_ = load_ucr_splits(
-                problem_path=problem_path,
-                dataset_name=dataset_name,
-                resample_id=resample_id,
-                predefined_resample=predefined_resample,
-            )
-            assert np.array_equal(X_tr, X_tr_), "Train data mismatch!"
-            assert np.array_equal(y_tr, y_tr_), "Train labels mismatch!"
-            X_te, y_te = X_te_, y_te_
+        # if  X_te is None or y_te is None:
+            # X_te, y_te = None, None
+            # if getattr(cfg.data, "format", "ucr") != "ucr":
+            #     raise NotImplementedError("Only UCR format is implemented yet.")
+            #
+            # problem_path = cfg.paths.data_root
+            # resample_id = self.seed
+            # predefined_resample = getattr(cfg.data, "predefined_resample", False)
+            # print(f'random id in pipline is {resample_id}')
+            # X_tr_, y_tr_, X_te_, y_te_ = load_ucr_splits(
+            #     problem_path=problem_path,
+            #     dataset_name=dataset_name,
+            #     resample_id=resample_id,
+            #     predefined_resample=predefined_resample,
+            # )
+            # assert np.array_equal(X_tr, X_tr_), "Train data mismatch!"
+            # assert np.array_equal(y_tr, y_tr_), "Train labels mismatch!"
+            # X_te, y_te = X_te_, y_te_
             # classes, counts = np.unique(y_tr, return_counts=True)
             # min_index = np.argmin(counts)
             # label_minority = classes[min_index]
@@ -494,7 +495,8 @@ class LGDVAEPipeline:
         self.std_ = normalizer.std_
         print(f"dataset mean: {normalizer.mean_} and std: {normalizer.std_}")
         X_tr = normalizer.transform(X_tr)
-        X_te = normalizer.transform(X_te)
+        if X_te is not None and y_te is not None:
+            X_te = normalizer.transform(X_te)
         # prerebalance use smote
 
         # 2) DataLoader + Dataset
@@ -549,8 +551,6 @@ class LGDVAEPipeline:
         if ckpt_path is not None:  # <--- [关键修改] 只有找到了路径才尝试加载
             try:
                 print(f"[LGDVAEPipeline] Attempting to load checkpoint: {ckpt_path}")
-                from tsml_eval._wip.rt.transformations.collection.imbalance.LGD_VAE.src.nn.pl_model import \
-                    LitAutoEncoder
 
                 self.infer = Inference.from_checkpoint(
                     ckpt_path,
@@ -601,7 +601,17 @@ class LGDVAEPipeline:
 
         # import sys
         # sys.exit(0)
-        # 训练完直接建一个 Inference wrapper（不从 ckpt 读，直接包内存模型）
+        # 训练完 从 ckpt 读取模型（确保和推断阶段完全一致的模型权重）
+        best_path = trainer.checkpoint_callback.best_model_path
+        best_score = trainer.checkpoint_callback.best_model_score
+        print(f"最低 eval_loss: {best_score}")
+        autoencoder = Inference.from_checkpoint(
+                    best_path,
+                    model_class=LitAutoEncoder,
+                    model_kwargs=None,
+                    device=self.device,
+                    strict=False,
+                )
         self.infer = Inference(autoencoder, device=self.device)
         if self.mean_ and self.std_:
             print(f"[LGDVAEPipeline] Loading mean and std: ")
