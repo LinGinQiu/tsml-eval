@@ -154,14 +154,14 @@ class PrintLossCallback(Callback):
     def on_validation_epoch_end(self, trainer, pl_module):
         metrics = trainer.callback_metrics
         epoch = trainer.current_epoch
-        val_loss = metrics.get("eval_loss")
-        recon_loss = metrics.get("eval_recon_loss")
-        recon_mse = metrics.get("eval_recon_loss_mse")
-        if val_loss is not None:
-            print(f"[Epoch {epoch}] Val Loss={float(val_loss):.4f}"
-                  f", Recon={float(recon_loss):.4f}"
-                    f", Recon_MSE={float(recon_mse):.4f}"
-                  )
+        gmeans = metrics.get("eval/gen_g_means")
+        macrof1 = metrics.get("eval/gen_f1_macro")
+        acc = metrics.get("eval/acc")
+
+        print(f"[Epoch {epoch}] Val acc={float(acc):.4f}"
+              f", gmeans={float(gmeans):.4f}"
+                f", macrof1={float(macrof1):.4f}"
+              )
 
 
 # --------------------------------------------------------
@@ -412,8 +412,8 @@ class LGDVAEPipeline:
         callbacks.append(DelayedModelCheckpoint(
             dirpath=cfg.paths.ckpt_dir,
             filename="{epoch:02d}-{eval_loss:.4f}",
-            monitor="eval_loss",
-            mode="min",
+            monitor="eval/gen_f1_macro",
+            mode="max",
             save_top_k=3,
             warmup_epochs=10,  # 同样跳过前期作弊阶段
             save_last=True,

@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from tsml_eval._wip.rt.transformations.collection.imbalance.LGD_VAE.src.nn.model import LatentGatedDualVAE
 import lightning.pytorch as pl
 import torchmetrics
@@ -289,6 +290,9 @@ class LitAutoEncoder(pl.LightningModule):
     def on_validation_epoch_end(self):
         # 1. 检查是否有数据
         if not self.validation_step_outputs:
+            self.log("eval/gen_g_means", 0., prog_bar=False)
+            self.log("eval/gen_f1_macro", 0., prog_bar=False)
+            self.log("eval/acc", 0., prog_bar=False)
             return
 
         # 2. 汇总所有 batch 的数据
@@ -311,6 +315,7 @@ class LitAutoEncoder(pl.LightningModule):
             # 日志记录
             self.log("eval/gen_g_means", metrics["val_g_means"], prog_bar=True)
             self.log("eval/gen_f1_macro", metrics["val_f1_macro"], prog_bar=True)
+            self.log("eval/acc", metrics["val_acc"], prog_bar=True)
 
         # 4. 关键：手动清空列表，防止显存爆炸
         self.validation_step_outputs.clear()
