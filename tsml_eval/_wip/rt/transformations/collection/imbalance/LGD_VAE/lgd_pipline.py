@@ -173,7 +173,7 @@ class DelayedEarlyStopping(EarlyStopping):
     def __init__(self, warmup_epochs: int = 10, *args, **kwargs):
         self.warmup_epochs = int(warmup_epochs)
         super().__init__(*args, **kwargs)
-        print(f"✅ [DelayedEarlyStopping] Initialized. Warmup: {self.warmup_epochs} epochs. Monitoring: {self.monitor}")
+        print(f"[DelayedEarlyStopping] Initialized. Warmup: {self.warmup_epochs} epochs. Monitoring: {self.monitor}")
 
     def on_validation_epoch_end(self, trainer, pl_module):
         epoch = trainer.current_epoch
@@ -186,9 +186,9 @@ class DelayedEarlyStopping(EarlyStopping):
         if epoch < self.warmup_epochs:
             self.wait_count = 0  # 强制重置计数器
             if current_score is not None:
-                print(f"⏳ [Epoch {epoch}] Warmup Phase: {self.monitor} = {current_score:.4f} (EarlyStopping Inactive)")
+                print(f"[Epoch {epoch}] Warmup Phase: {self.monitor} = {current_score:.4f} (EarlyStopping Inactive)")
             else:
-                print(f"⏳ [Epoch {epoch}] Warmup Phase: Waiting for {self.monitor}...")
+                print(f"[Epoch {epoch}] Warmup Phase: Waiting for {self.monitor}...")
             return
 
         # 2. 正常监控阶段
@@ -200,7 +200,7 @@ class DelayedEarlyStopping(EarlyStopping):
 
         # 3. 打印 Debug 信息
         if current_score is not None:
-            status = "✅ Improved" if self.wait_count == 0 else "❌ No Improvement"
+            status = "Improved" if self.wait_count == 0 else "No Improvement"
             best_score = self.best_score.item() if hasattr(self.best_score, "item") else self.best_score
 
             print(f"🔍 [Epoch {epoch}] Monitoring: {self.monitor} = {current_score:.4f} | "
@@ -208,13 +208,14 @@ class DelayedEarlyStopping(EarlyStopping):
                   f"Patience = {self.wait_count}/{self.patience} ({status})")
 
             if self.wait_count >= self.patience:
-                print(f"🛑 [Early Stop] Patience reached at epoch {epoch}. Stopping training...")
+                print(f"[Early Stop] Patience reached at epoch {epoch}. Stopping training...")
         else:
-            print(f"⚠️ [Epoch {epoch}] Warning: {self.monitor} not found in callback_metrics!")
+            print(f"[Epoch {epoch}] Warning: {self.monitor} not found in callback_metrics!")
 
     def on_train_end(self, trainer, pl_module):
-        print("🏁 Training finished. Final EarlyStopping state: "
+        print("Training finished. Final EarlyStopping state: "
               f"Best {self.monitor} = {self.best_score:.4f}, total epochs = {trainer.current_epoch}")
+        print("Best model path:", getattr(trainer.checkpoint_callback, "best_model_path", "N/A"))
 
 from lightning.pytorch.callbacks import ModelCheckpoint
 
@@ -555,13 +556,13 @@ class LGDVAEPipeline:
                     import re
                     def extract_loss(name: str):
                         # 修改后的正则：匹配数字开头，中间可选一个点，再接数字
-                        match = re.search(r"eval/gen_f1_macro=([0-9]+\.?[0-9]*)", name)
+                        match = re.search(r"eval_gen=([0-9]+\.?[0-9]*)", name)
                         if match:
                             return float(match.group(1))
                         return float('inf')
 
                     # 过滤出包含 eval/gen_f1_macro 的文件
-                    loss_ckpts = [f for f in ckpt_candidates if "eval/gen_f1_macro=" in f]
+                    loss_ckpts = [f for f in ckpt_candidates if "eval_gen=" in f]
 
                     if loss_ckpts:
                         # 使用 min() 找到 eval/gen_f1_macro 最大的文件
