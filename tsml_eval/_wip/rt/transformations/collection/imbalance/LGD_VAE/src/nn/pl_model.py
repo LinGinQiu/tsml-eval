@@ -396,7 +396,7 @@ def train_and_eval_classifier(train_data, train_labels, test_data, test_labels, 
     # 3. 使用轻量级 Trainer 训练
     # logger=False 和 enable_checkpointing=False 极其重要，防止产生垃圾文件
     eval_trainer = pl.Trainer(
-        max_epochs=5,
+        max_epochs=10,
         accelerator="auto",
         devices=1,
         enable_checkpointing=False,
