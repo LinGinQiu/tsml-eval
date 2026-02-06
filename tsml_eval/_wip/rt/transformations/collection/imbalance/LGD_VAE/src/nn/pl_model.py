@@ -295,6 +295,7 @@ class LitAutoEncoder(pl.LightningModule):
             self.log("eval/gen_g_means", 0., prog_bar=True)
             self.log("eval/gen_f1_macro", 0., prog_bar=True)
             self.log("eval/acc", 0., prog_bar=True)
+            self.log("eval_gen", 0., prog_bar=True)
             return
 
         # 2. 汇总数据
@@ -305,6 +306,7 @@ class LitAutoEncoder(pl.LightningModule):
 
         # 初始化默认值
         res_g, res_f1, res_acc = 0., 0., 0.
+        res_gen = res_g + res_f1 + res_acc
 
         # 3. 每隔 N 个 Epoch 执行分类器评估
         if self.current_epoch > 20:
@@ -318,11 +320,13 @@ class LitAutoEncoder(pl.LightningModule):
             res_g = metrics["val_g_means"]
             res_f1 = metrics["val_f1_macro"]
             res_acc = metrics["val_acc"]
+            res_gen = res_g + res_f1 + res_acc
 
         # 4. 统一在分支外 Log，确保参数永远一致
         self.log("eval/gen_g_means", res_g, prog_bar=True)
         self.log("eval/gen_f1_macro", res_f1, prog_bar=True)
         self.log("eval/acc", res_acc, prog_bar=True)
+        self.log("eval_gen", res_gen, prog_bar=True)
 
         # 5. 清空列表
         self.validation_step_outputs.clear()

@@ -157,10 +157,12 @@ class PrintLossCallback(Callback):
         gmeans = metrics.get("eval/gen_g_means")
         macrof1 = metrics.get("eval/gen_f1_macro")
         acc = metrics.get("eval/acc")
+        gen_metrics = metrics.get("eval_gen")
         if acc is not None:
             print(f"[Epoch {epoch}] Val acc={float(acc):.4f}"
                   f", gmeans={float(gmeans):.4f}"
                     f", macrof1={float(macrof1):.4f}"
+                    f", gen={float(gen_metrics):.4f}"
                   )
 
 
@@ -440,8 +442,8 @@ class LGDVAEPipeline:
         # 这个模型生成的波形最平滑，最像真实数据
         callbacks.append(DelayedModelCheckpoint(
             dirpath=cfg.paths.ckpt_dir,
-            filename="{epoch:02d}-{gen_f1_macro:.4f}",
-            monitor="eval/gen_f1_macro",
+            filename="{epoch:02d}-{eval_gen:.4f}",
+            monitor="eval_gen",
             mode="max",
             save_top_k=3,
             warmup_epochs=10,  # 同样跳过前期作弊阶段
