@@ -309,7 +309,7 @@ class LitAutoEncoder(pl.LightningModule):
         res_gen = res_g + res_f1 + res_acc
 
         # 3. 每隔 N 个 Epoch 执行分类器评估
-        if self.current_epoch > 20:
+        if self.current_epoch > 10:
             metrics = train_and_eval_classifier(
                 all_x_train, all_y_train,
                 all_x_test, all_y_test,
@@ -396,7 +396,7 @@ def train_and_eval_classifier(train_data, train_labels, test_data, test_labels, 
     # 3. 使用轻量级 Trainer 训练
     # logger=False 和 enable_checkpointing=False 极其重要，防止产生垃圾文件
     eval_trainer = pl.Trainer(
-        max_epochs=10,
+        max_epochs=5,
         accelerator="auto",
         devices=1,
         enable_checkpointing=False,
