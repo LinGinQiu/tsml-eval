@@ -110,6 +110,7 @@ class LitAutoEncoder(pl.LightningModule):
         stride = 1,
         padding =1,
         recon_metric = 'mse',
+        val_data = None,
         lr = 1e-3):
 
         super().__init__()
@@ -144,6 +145,7 @@ class LitAutoEncoder(pl.LightningModule):
         self.minority_class_id = minority_class_id
         self.input_channels = in_chans
         self.validation_step_outputs = []
+        self.val_data = val_data
 
         if cls_embed and weights is not None:
             num_c = len(weights)
@@ -259,7 +261,7 @@ class LitAutoEncoder(pl.LightningModule):
         X_minority = x[is_min]
         num_minority = X_minority.size(0)
         num_majority = X_majortiy.size(0)
-        minority_test =X_minority[:num_minority//2]
+        minority_test = X_minority[:num_minority//2]
         majority_test = X_majortiy[:num_majority//2]
         majority_train = X_majortiy[num_majority//2:]
         minority_train = X_minority[num_minority//2:]
@@ -299,10 +301,21 @@ class LitAutoEncoder(pl.LightningModule):
             return
 
         # 2. 汇总数据
-        all_x_train = torch.cat([o["x_train"] for o in self.validation_step_outputs], dim=0)
-        all_y_train = torch.cat([o["y_train"] for o in self.validation_step_outputs], dim=0)
-        all_x_test = torch.cat([o["x_test"] for o in self.validation_step_outputs], dim=0)
-        all_y_test = torch.cat([o["y_test"] for o in self.validation_step_outputs], dim=0)
+        if self.val_data is not None:
+            all_x_train = torch.cat([o["x_train"] for o in self.validation_step_outputs], dim=0)
+            all_y_train = torch.cat([o["y_train"] for o in self.validation_step_outputs], dim=0)
+            all_x_test = torch.cat([o["x_test"] for o in self.validation_step_outputs], dim=0)
+            all_y_test = torch.cat([o["y_test"] for o in self.validation_step_outputs], dim=0)
+            # 合并训练集和测试集, 使用新的测试集进行评估
+            all_x_train = torch.cat([all_x_train, all_x_test], dim=0)
+            all_y_train = torch.cat([all_y_train, all_y_test], dim=0)
+            all_x_test = self.val_data["x_test"]
+            all_y_test = self.val_data["y_test"]
+        else:
+            all_x_train = torch.cat([o["x_train"] for o in self.validation_step_outputs], dim=0)
+            all_y_train = torch.cat([o["y_train"] for o in self.validation_step_outputs], dim=0)
+            all_x_test = torch.cat([o["x_test"] for o in self.validation_step_outputs], dim=0)
+            all_y_test = torch.cat([o["y_test"] for o in self.validation_step_outputs], dim=0)
 
         # 初始化默认值
         res_g, res_f1, res_acc = 0., 0., 0.

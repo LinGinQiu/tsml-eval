@@ -1146,10 +1146,6 @@ class LatentGatedDualVAE(nn.Module):
 
         perm = torch.randperm(B, device=device)
 
-        # 采样插值系数 lambda
-        # 这里的 alpha 控制 Beta 分布的形状。
-        # 如果你希望生成多样性大，用 Beta(0.5, 0.5)
-        # 如果你希望保守一点，直接用固定的数值，比如 0.2
         alpha=0.5
         # 方案 A: 随机插值 (推荐)
         lam = torch.distributions.Beta(alpha, alpha).sample((B, 1)).to(device)
