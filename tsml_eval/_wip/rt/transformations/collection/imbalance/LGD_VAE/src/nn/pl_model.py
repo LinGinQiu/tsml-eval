@@ -320,7 +320,7 @@ class LitAutoEncoder(pl.LightningModule):
             res_g = metrics["val_g_means"]
             res_f1 = metrics["val_f1_macro"]
             res_acc = metrics["val_acc"]
-            res_gen = res_g + res_f1 + res_acc
+            res_gen = res_f1
 
         # 4. 统一在分支外 Log，确保参数永远一致
         self.log("eval/gen_g_means", res_g, prog_bar=True)

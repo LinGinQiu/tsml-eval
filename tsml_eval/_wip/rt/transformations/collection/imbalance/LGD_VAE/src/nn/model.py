@@ -1142,10 +1142,6 @@ class LatentGatedDualVAE(nn.Module):
         z_g = self.reparameterize(mu_g, logvar_g)
         z_c = self.reparameterize(mu_c, logvar_c)
 
-        # 4. [核心修改] 执行 Latent Mixup
-        # 也就是：不加噪声，而是找“另一个少数类兄弟”来杂交
-
-        # 生成打乱的索引 (Shuffle)
         perm = torch.randperm(B, device=device)
 
         # 采样插值系数 lambda
