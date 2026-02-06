@@ -637,7 +637,7 @@ class LGDVAEPipeline:
         # 训练完 从 ckpt 读取模型（确保和推断阶段完全一致的模型权重）
         best_path = trainer.checkpoint_callback.best_model_path
         best_score = trainer.checkpoint_callback.best_model_score
-        print(f"最高 eval/gen_f1_macro: {best_score}")
+        print(f"最高 eval_gen score is: {best_score}")
         self.infer = Inference.from_checkpoint(
                     best_path,
                     model_class=LitAutoEncoder,
