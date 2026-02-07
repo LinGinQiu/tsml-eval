@@ -56,7 +56,7 @@ model:
   padding: 1             # 原 conv.padding
 
   # Regularization / layout
-  dropout: 0.1
+  dropout: 0.15
   norm_first: true
   # Initialization & extras
 
