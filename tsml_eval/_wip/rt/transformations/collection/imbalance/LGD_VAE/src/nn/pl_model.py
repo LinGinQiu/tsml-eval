@@ -419,7 +419,6 @@ class LitAutoEncoder(pl.LightningModule):
             torch.full((len(majority_test),), 0, device=x.device),
             torch.full((len(minority_test),), 1, device=x.device)
         ], dim=0)
-
         # 关键：将这些数据暂时存入 outputs，在 epoch 结束时统一处理
         eval_dict= {
             "x_train": X_eval_train.detach(),
@@ -461,7 +460,7 @@ class LitAutoEncoder(pl.LightningModule):
         res_gen = res_g + res_f1 + res_acc
 
         # 3. 每隔 N 个 Epoch 执行分类器评估
-        if self.current_epoch > 10:
+        if self.current_epoch > 5:
             metrics = train_and_eval_classifier(
                 all_x_train, all_y_train,
                 all_x_test, all_y_test,
