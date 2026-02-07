@@ -127,7 +127,6 @@ class PrintLossCallback(Callback):
         epoch = trainer.current_epoch
 
         recon = metrics.get("train/recon_loss")
-        recon_mse = metrics.get("train/recon_loss_mse")
         kl_g = metrics.get("train/kl_g")
         kl_c = metrics.get("train/kl_c")
         align = metrics.get("train/align_loss")
@@ -141,7 +140,6 @@ class PrintLossCallback(Callback):
 
         msg = f"[Epoch {epoch}] Train Loss={float(total):.4f}"
         if recon is not None:       msg += f", Recon={float(recon):.4f}"
-        if recon_mse is not None:   msg += f", Recon_MSE={float(recon_mse):.4f}"
         if kl_g is not None:        msg += f", KL_g={float(kl_g):.4f}"
         if kl_c is not None:        msg += f", KL_c={float(kl_c):.4f}"
         if align is not None:       msg += f", Align={float(align):.4f}"

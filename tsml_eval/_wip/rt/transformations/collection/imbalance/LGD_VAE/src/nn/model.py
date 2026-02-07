@@ -1048,15 +1048,16 @@ class LatentGatedDualVAE(nn.Module):
         recon_loss_mse = ((recon - x) ** 2).mean()
         if self.recon_metric == 'soft_dtw':
             from tsml_eval._wip.rt.transformations.collection.imbalance.LGD_VAE.loss.dilate_loss import dilate_loss
-            recon_loss, _, _ = dilate_loss(outputs=recon, targets=x, device=x.device, alpha=1)
+            recon_loss_dtw, _, _ = dilate_loss(outputs=recon, targets=x, device=x.device, alpha=1)
+            recon_loss = recon_loss_mse + recon_loss_dtw
         elif self.recon_metric == 'dilate':
             from tsml_eval._wip.rt.transformations.collection.imbalance.LGD_VAE.loss.dilate_loss import dilate_loss
-            recon_loss, _, _ = dilate_loss(outputs=recon, targets=x, device=x.device, alpha=0.5)
+            recon_loss_dilate, _, _ = dilate_loss(outputs=recon, targets=x, device=x.device, alpha=0.5)
+            recon_loss = recon_loss_dilate + recon_loss_mse
         elif self.recon_metric == 'mse':
             recon_loss = recon_loss_mse
         else:
             raise NotImplementedError
-        metric_mse_value = recon_loss_mse.detach().item()
 
         kl_g = self.kl_loss(mu_g, logvar_g)
         kl_c = self.kl_loss(mu_c, logvar_c)
@@ -1104,7 +1105,6 @@ class LatentGatedDualVAE(nn.Module):
             "recon": recon,
             "z_g": z_g,
             "z_c": z_c,
-            "recon_loss_mse": metric_mse_value,
         }
         return out
 
