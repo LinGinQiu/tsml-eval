@@ -457,7 +457,7 @@ class LitAutoEncoder(pl.LightningModule):
 
         # 初始化默认值
         res_g, res_f1, res_acc = 0., 0., 0.
-        res_gen = res_g + res_f1 + res_acc
+        res_gen = res_f1
 
         # 3. 每隔 N 个 Epoch 执行分类器评估
         if self.current_epoch > 5:
@@ -589,11 +589,10 @@ def train_and_eval_classifier(train_data, train_labels, test_data, test_labels, 
         best_f1 = eval_trainer.callback_metrics.get("val_f1_macro")
 
         results = {
-            "best_g_means": best_g_means.item() if best_g_means is not None else 0.0,
-            "best_acc": best_acc.item() if best_acc is not None else 0.0,
-            "best_f1": best_f1.item() if best_f1 is not None else 0.0
+            "val_g_means": best_g_means.item() if best_g_means is not None else 0.0,
+            "val_acc": best_acc.item() if best_acc is not None else 0.0,
+            "val_f1_macro": best_f1.item() if best_f1 is not None else 0.0
         }
-
     finally:
         # 7. 销毁临时文件夹及其所有内容
         if os.path.exists(temp_dir):
