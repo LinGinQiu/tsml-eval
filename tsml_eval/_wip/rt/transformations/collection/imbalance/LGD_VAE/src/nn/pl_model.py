@@ -518,7 +518,7 @@ class LitAutoEncoder(pl.LightningModule):
         """Compute effective loss weights with epoch-based warmup."""
         epoch = float(self.current_epoch)
         factor = min(1.0, max(0.0, epoch / self.warmup_epochs))
-        if epoch <= 10:
+        if epoch <= 5:
             turn_off_dilate = True
         else:
             turn_off_dilate = False
