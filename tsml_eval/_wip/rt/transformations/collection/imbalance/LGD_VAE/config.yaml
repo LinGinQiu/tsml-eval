@@ -81,7 +81,7 @@ loss:
 optim:
   optimizer: "adamw"
   lr: 0.001
-  weight_decay: 0.001
+  weight_decay: 1e-4
   betas: [0.9, 0.999]
   scheduler: "cosine"
   cosine:
