@@ -398,10 +398,13 @@ class LitAutoEncoder(pl.LightningModule):
         X_minority = x[is_min]
         num_minority = X_minority.size(0)
         num_majority = X_majortiy.size(0)
-        minority_test = X_minority[:num_minority//2]
-        majority_test = X_majortiy[:num_majority//2]
-        majority_train = X_majortiy[num_majority//2:]
-        minority_train = X_minority[num_minority//2:]
+        index_maj = int(num_majority * 0.7)
+        index_min = int(num_minority * 0.7)
+        minority_train = X_minority[:index_min]
+        minority_test = X_minority[index_min:]
+        majority_train = X_majortiy[:index_maj]
+        majority_test = X_majortiy[index_maj:]
+
         n_generation_per_minority = 9
         new_minority = self.model.generate_vae_prior(x_min=minority_train, num_variations=9)
 
@@ -571,7 +574,7 @@ def train_and_eval_classifier(train_data, train_labels, test_data, test_labels, 
 
     # 5. 轻量化 Trainer
     eval_trainer = pl.Trainer(
-        max_epochs=20,
+        max_epochs=30,
         accelerator="auto",
         devices=1,
         enable_checkpointing=True,  # 必须开启才能追踪 best_score

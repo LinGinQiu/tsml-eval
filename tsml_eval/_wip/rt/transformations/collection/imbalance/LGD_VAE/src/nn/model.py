@@ -1132,7 +1132,7 @@ class LatentGatedDualVAE(nn.Module):
                        alpha 接近 0.5: 生成结果是两个样本的中间形态 (创新性最强)
                        alpha 接近 1.0: 生成结果很像被打乱的另一个样本
             """
-            seed = 42
+            seed = 2025
             torch.manual_seed(seed)
             if num_variations>1:
                 x_min = x_min.repeat(num_variations, 1, 1)  # [B*num_variations, C, T]
@@ -1155,11 +1155,6 @@ class LatentGatedDualVAE(nn.Module):
             alpha=0.5
             # 方案 A: 随机插值 (推荐)
             lam = torch.distributions.Beta(alpha, alpha).sample((B, 1)).to(device)
-
-            # 方案 B: 固定插值 (如果你想控制变量调试)
-            # lam = torch.full((B, 1), 0.5, device=device)
-
-            # 执行混合
             z_g_mix = lam * z_g + (1 - lam) * z_g[perm]
             z_c_mix = lam * z_c + (1 - lam) * z_c[perm]
 
