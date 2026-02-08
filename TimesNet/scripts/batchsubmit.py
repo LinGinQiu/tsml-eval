@@ -22,10 +22,9 @@ SEED_SUFFIX = "0"
 SCRIPT_PATH = f"/home/{USERNAME}/tsml-eval/TimesNet/run.py"
 # TimesNet 的 Config 文件目录
 CONFIG_DIR = f"/home/{USERNAME}/tsml-eval/TimesNet/TSTConfig/"
-
 DATA_DIR_BASE = f"/scratch/{USERNAME}/Data/imbalanced_9_1/"
-BASE_RESULTS_ROOT = f"/scratch/{USERNAME}/Exp/results_TimesNet_mse_wo_dis/"
-CKPT_ROOT = f"/scratch/{USERNAME}/models/MGD_CVAE_mse_wo_dis/checkpoints/"
+BASE_RESULTS_ROOT = f"/scratch/{USERNAME}/Exp/results_TimesNet_MGD_CVAE/"
+CKPT_ROOT = f"/scratch/{USERNAME}/models/MGD_CVAE/checkpoints/"
 
 # ================= ⚙️ 环境与资源配置 =================
 
