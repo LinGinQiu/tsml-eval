@@ -1055,9 +1055,11 @@ class LatentGatedDualVAE(nn.Module):
             if not turn_off_dilate:
                 from tsml_eval._wip.rt.transformations.collection.imbalance.LGD_VAE.loss.dilate_loss import dilate_loss
                 recon_loss_dilate, _, _ = dilate_loss(outputs=recon, targets=x, device=x.device, alpha=0.8)
+                recon_loss = recon_loss_dilate
             else:
                 recon_loss_dilate = torch.tensor(0.0, device=x.device)
-            recon_loss = recon_loss_dilate + recon_loss_mse
+                recon_loss = recon_loss_dilate + recon_loss_mse
+
         elif self.recon_metric == 'mse':
             recon_loss = recon_loss_mse
         else:
