@@ -568,7 +568,7 @@ def train_and_eval_classifier(train_data, train_labels, test_data, test_labels, 
 
     # 5. 轻量化 Trainer
     eval_trainer = pl.Trainer(
-        max_epochs=10,
+        max_epochs=20,
         accelerator="auto",
         devices=1,
         enable_checkpointing=True,  # 必须开启才能追踪 best_score

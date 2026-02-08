@@ -1049,11 +1049,11 @@ class LatentGatedDualVAE(nn.Module):
         if self.recon_metric == 'soft_dtw':
             from tsml_eval._wip.rt.transformations.collection.imbalance.LGD_VAE.loss.dilate_loss import dilate_loss
             recon_loss_dtw, _, _ = dilate_loss(outputs=recon, targets=x, device=x.device, alpha=1)
-            recon_loss = recon_loss_mse + recon_loss_dtw
+            recon_loss = recon_loss_mse
         elif self.recon_metric == 'dilate':
             from tsml_eval._wip.rt.transformations.collection.imbalance.LGD_VAE.loss.dilate_loss import dilate_loss
-            recon_loss_dilate, _, _ = dilate_loss(outputs=recon, targets=x, device=x.device, alpha=0.5)
-            recon_loss = recon_loss_dilate + recon_loss_mse
+            recon_loss_dilate, _, _ = dilate_loss(outputs=recon, targets=x, device=x.device, alpha=0.8)
+            recon_loss = recon_loss_dilate
         elif self.recon_metric == 'mse':
             recon_loss = recon_loss_mse
         else:
@@ -1064,29 +1064,29 @@ class LatentGatedDualVAE(nn.Module):
 
         cls_loss = torch.tensor(0.0, device=device)
         cls_logits = None
-        if self.classifier is not None and y is not None:
-            # 1. 基础分类 Loss (对原始样本)
-            logits_base = self.classifier(feat_x)
-            cls_loss_base = F.cross_entropy(logits_base, y)
-
-            # 2. [关键修改] 针对 Batch 内样本做 Latent Mixup 增强
-            # 目的：防止模型死记硬背重复的样本，强迫它理解样本之间的连续性
-
-            # 生成随机排列索引
-            lam = torch.distributions.Beta(0.5, 0.5).sample((feat_x.size(0), 1)).to(device)
-            perm = torch.randperm(feat_x.size(0), device=device)
-
-            feat_mix = lam * feat_x + (1 - lam) * feat_x[perm]
-            y_onehot = F.one_hot(y, num_classes=self.num_classes).float()
-            y_mix = lam * y_onehot + (1 - lam) * y_onehot[perm]
-
-            logits_mix = self.classifier(feat_mix)
-            cls_loss_mix = -torch.sum(y_mix * F.log_softmax(logits_mix, dim=1), dim=1).mean()
-
-            cls_loss = cls_loss_base + cls_loss_mix
-
-            # 用于显示的 logits 依然是 base
-            cls_logits = logits_base
+        # if self.classifier is not None and y is not None:
+        #     # 1. 基础分类 Loss (对原始样本)
+        #     logits_base = self.classifier(feat_x)
+        #     cls_loss_base = F.cross_entropy(logits_base, y)
+        #
+        #     # 2. [关键修改] 针对 Batch 内样本做 Latent Mixup 增强
+        #     # 目的：防止模型死记硬背重复的样本，强迫它理解样本之间的连续性
+        #
+        #     # 生成随机排列索引
+        #     lam = torch.distributions.Beta(0.5, 0.5).sample((feat_x.size(0), 1)).to(device)
+        #     perm = torch.randperm(feat_x.size(0), device=device)
+        #
+        #     feat_mix = lam * feat_x + (1 - lam) * feat_x[perm]
+        #     y_onehot = F.one_hot(y, num_classes=self.num_classes).float()
+        #     y_mix = lam * y_onehot + (1 - lam) * y_onehot[perm]
+        #
+        #     logits_mix = self.classifier(feat_mix)
+        #     cls_loss_mix = -torch.sum(y_mix * F.log_softmax(logits_mix, dim=1), dim=1).mean()
+        #
+        #     cls_loss = cls_loss_base + cls_loss_mix
+        #
+        #     # 用于显示的 logits 依然是 base
+        #     cls_logits = logits_base
 
         if not self.z_g_maj_ema_inited:
             loss_maj_center = torch.tensor(0.0, device=device)
@@ -1115,66 +1115,66 @@ class LatentGatedDualVAE(nn.Module):
 
     @torch.no_grad()
     def generate_vae_prior(self, x_min: Tensor, num_variations: int = 1, alpha: float = 0.5) -> Tensor:
-        """
-        [修改版] 生成策略：Latent Space Mixup (插值)
+            """
+            [修改版] 生成策略：Latent Space Mixup (插值)
 
-        Args:
-            x_min: 一批真实的少数类样本 [B, C, T]
-            num_variations: 每个样本生成几个变体 (当前代码建议设为 1，保持 Batch Size 一致)
-            alpha: Mixup 的强度。
-                   alpha 接近 0: 生成结果很像原始 x_min
-                   alpha 接近 0.5: 生成结果是两个样本的中间形态 (创新性最强)
-                   alpha 接近 1.0: 生成结果很像被打乱的另一个样本
-        """
-        seed = 42
-        torch.manual_seed(seed)
-        if num_variations>1:
-            x_min = x_min.repeat(num_variations, 1, 1)  # [B*num_variations, C, T]
-        device = x_min.device
-        B = x_min.size(0)
+            Args:
+                x_min: 一批真实的少数类样本 [B, C, T]
+                num_variations: 每个样本生成几个变体 (当前代码建议设为 1，保持 Batch Size 一致)
+                alpha: Mixup 的强度。
+                       alpha 接近 0: 生成结果很像原始 x_min
+                       alpha 接近 0.5: 生成结果是两个样本的中间形态 (创新性最强)
+                       alpha 接近 1.0: 生成结果很像被打乱的另一个样本
+            """
+            seed = 42
+            torch.manual_seed(seed)
+            if num_variations>1:
+                x_min = x_min.repeat(num_variations, 1, 1)  # [B*num_variations, C, T]
+            device = x_min.device
+            B = x_min.size(0)
 
-        # 1. 强制 Label 为少数类
-        y_min = torch.full((B,), self.minority_class_id, device=device, dtype=torch.long)
+            # 1. 强制 Label 为少数类
+            y_min = torch.full((B,), self.minority_class_id, device=device, dtype=torch.long)
 
-        # 2. 编码得到 Latent 分布
-        # 注意：这里我们拿到的 mu 和 logvar 是这一批样本的
-        _, mu_g, logvar_g, mu_c, logvar_c = self.encode(x_min, y=y_min)
+            # 2. 编码得到 Latent 分布
+            # 注意：这里我们拿到的 mu 和 logvar 是这一批样本的
+            _, mu_g, logvar_g, mu_c, logvar_c = self.encode(x_min, y=y_min)
 
-        # 3. 重参数化得到 z
-        z_g = self.reparameterize(mu_g, logvar_g)
-        z_c = self.reparameterize(mu_c, logvar_c)
+            # 3. 重参数化得到 z
+            z_g = self.reparameterize(mu_g, logvar_g)
+            z_c = self.reparameterize(mu_c, logvar_c)
 
-        perm = torch.randperm(B, device=device)
+            perm = torch.randperm(B, device=device)
 
-        alpha=0.5
-        # 方案 A: 随机插值 (推荐)
-        lam = torch.distributions.Beta(alpha, alpha).sample((B, 1)).to(device)
+            alpha=0.5
+            # 方案 A: 随机插值 (推荐)
+            lam = torch.distributions.Beta(alpha, alpha).sample((B, 1)).to(device)
 
-        # 方案 B: 固定插值 (如果你想控制变量调试)
-        # lam = torch.full((B, 1), 0.5, device=device)
+            # 方案 B: 固定插值 (如果你想控制变量调试)
+            # lam = torch.full((B, 1), 0.5, device=device)
 
-        # 执行混合
-        z_g_mix = lam * z_g + (1 - lam) * z_g[perm]
-        z_c_mix = lam * z_c + (1 - lam) * z_c[perm]
+            # 执行混合
+            z_g_mix = lam * z_g + (1 - lam) * z_g[perm]
+            z_c_mix = lam * z_c + (1 - lam) * z_c[perm]
 
-        use_gate = True
+            use_gate = True
 
-        if use_gate and self.z_g_maj_ema_inited:
-            gate = self.gate(z_c_mix)
-            z_g_maj = self.z_g_maj_mean
-            z_g_final = gate * z_g_mix + (1.0 - gate) * z_g_maj
-        else:
-            # 纯正的少数类特征
-            z_g_final = z_g_mix
+            if use_gate and self.z_g_maj_ema_inited:
+                gate = self.gate(z_c_mix)
+                z_g_maj = self.z_g_maj_mean
+                z_g_final = gate * z_g_mix + (1.0 - gate) * z_g_maj
+            else:
+                # 纯正的少数类特征
+                z_g_final = z_g_mix
 
-        # 6. 拼接并解码
-        z_full = torch.cat([z_g_final, z_c_mix], dim=1)
+            # 6. 拼接并解码
+            z_full = torch.cat([z_g_final, z_c_mix], dim=1)
+            # use soft y embedding to generate more diverse samples
+            y_onehot = F.one_hot(y_min, num_classes=self.num_classes).float()
 
-        y_onehot = F.one_hot(y_min, num_classes=self.num_classes).float()
+            x_gen = self.decoder(z_full, y_onehot=y_onehot)
 
-        x_gen = self.decoder(z_full, y_onehot=y_onehot)
-
-        return x_gen
+            return x_gen
     # @torch.no_grad()
     # def generate_vae_prior(self, x_min: Tensor, alpha: Optional[Tensor] = None, ) -> Tensor:
     #     # 复用原有逻辑
