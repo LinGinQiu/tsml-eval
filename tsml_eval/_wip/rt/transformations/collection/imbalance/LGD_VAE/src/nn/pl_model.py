@@ -326,10 +326,10 @@ class LitAutoEncoder(pl.LightningModule):
             y = None
 
         # 1) 当前 epoch 下的有效权重
-        recon_w, kl_g_w, kl_c_w, align_w, disentangle_w, center_w, cls_w = self._current_loss_weights()
-
+        turn_off_dilate =False
+        recon_w, kl_g_w, kl_c_w, align_w, disentangle_w, center_w, cls_w,turn_off_dilate = self._current_loss_weights()
         # === 2) 把有效权重传进模型 ===
-        out = self.model(batch, y)
+        out = self.model(batch, y, turn_off_dilate=turn_off_dilate)
 
         recon_loss = out.get("recon_loss", 0.0)
         kl_g = out.get("kl_g", 0.0)
@@ -515,7 +515,10 @@ class LitAutoEncoder(pl.LightningModule):
         """Compute effective loss weights with epoch-based warmup."""
         epoch = float(self.current_epoch)
         factor = min(1.0, max(0.0, epoch / self.warmup_epochs))
-
+        if epoch <= self.warmup_epochs:
+            turn_off_dilate = True
+        else:
+            turn_off_dilate = False
         recon_weight = self.recon_lambda
 
         # 只有正则化项需要 Warmup
@@ -528,7 +531,7 @@ class LitAutoEncoder(pl.LightningModule):
         # 分类损失始终保持满额，提供强监督信号
         cls_weight = self.cls_lambda
 
-        return recon_weight, kl_g_weight, kl_c_weight, align_weight, disentangle_weight, center_weight, cls_weight
+        return recon_weight, kl_g_weight, kl_c_weight, align_weight, disentangle_weight, center_weight, cls_weight, turn_off_dilate
 
 
 def train_and_eval_classifier(train_data, train_labels, test_data, test_labels, input_chans, seq_len, device):
