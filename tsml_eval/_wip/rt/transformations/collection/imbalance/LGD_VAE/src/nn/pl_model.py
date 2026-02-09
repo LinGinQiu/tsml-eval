@@ -440,8 +440,8 @@ class LitAutoEncoder(pl.LightningModule):
 
         # 3. 双分类器筛选生成
         target_count = minority_train.size(0) * 9
-        # new_minority = self.get_filtered_samples(minority_train, target_count)
-        new_minority = self.model.generate_vae_prior(minority_train, num_variations=9, alpha=0.5)
+        new_minority = self.get_filtered_samples(minority_train, target_count)
+        # new_minority = self.model.generate_vae_prior(minority_train, num_variations=9, alpha=0.5)
         # 4. 构建评估集
         all_x_train = torch.cat([majority_train, minority_train, new_minority], dim=0)
         all_y_train = torch.cat([

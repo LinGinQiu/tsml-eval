@@ -509,7 +509,7 @@ class LGDVAEPipeline:
         oracle.eval()
         for param in oracle.parameters():
             param.requires_grad = False
-
+        print('✅ Static Oracle training completed.')
         return oracle
     # -------------------------
     # 公共接口：fit
