@@ -398,9 +398,8 @@ class LGDVAEPipeline:
     # -------------------------
     # 内部工具：构建 pl_model + Trainer
     # -------------------------
-    def _build_model_and_trainer(self, train_dataset: UCRDataset) -> tuple[LitAutoEncoder, pl.Trainer]:
+    def _build_model_and_trainer(self, train_dataset: UCRDataset, oracle: torch.nn.Module = None) -> tuple[LitAutoEncoder, pl.Trainer]:
         cfg = self.cfg
-
         train_size = len(train_dataset)
         seq_len = int(train_dataset.data.shape[-1])
         cfg_model = dict(cfg.model)  # 拷一份，避免修改原配置
@@ -430,6 +429,7 @@ class LGDVAEPipeline:
         autoencoder = LitAutoEncoder(
             **model_kwargs,
             weights=getattr(train_dataset, "class_freq", None),
+            oracle_model=oracle,  # <--- 关键修改：注入裁判
         )
         # 把完整 cfg 挂上，方便 pl_model 里读取 optim/trainer 配置
         autoencoder.cfg = cfg
@@ -472,6 +472,45 @@ class LGDVAEPipeline:
 
         return autoencoder, trainer
 
+    # 在 LGDVAEPipeline 类中添加
+    def _train_static_oracle(self, X_tr, y_tr, seq_len, in_chans):
+        """在 VAE 训练前，先训练一个静态判别器作为 Oracle"""
+        print("🚀 Training static Oracle (discriminator) on original imbalanced data...")
+        from tsml_eval._wip.rt.transformations.collection.imbalance.LGD_VAE.src.nn.pl_model import \
+            TimesNetQualityClassifier
+        import lightning.pytorch as pl
+        from torch.utils.data import DataLoader, TensorDataset
+
+        # 1. 准备数据
+        X_tensor = torch.from_numpy(X_tr).float()
+        y_tensor = torch.from_numpy(y_tr).long()
+        train_loader = DataLoader(TensorDataset(X_tensor, y_tensor), batch_size=32, shuffle=True)
+
+        # 2. 实例化 TimesNet
+        oracle = TimesNetQualityClassifier(
+            input_channels=in_chans,
+            seq_len=seq_len,
+            num_classes=len(np.unique(y_tr)),
+            d_model=64,
+            lr=1e-3
+        )
+
+        # 3. 快速训练 (20-30 epoch 足够捕捉原始分布边界)
+        trainer = pl.Trainer(
+            max_epochs=30,
+            accelerator="auto",
+            devices=1,
+            enable_checkpointing=False,
+            logger=False,
+            enable_progress_bar=False
+        )
+        trainer.fit(oracle, train_loader)
+
+        oracle.eval()
+        for param in oracle.parameters():
+            param.requires_grad = False
+
+        return oracle
     # -------------------------
     # 公共接口：fit
     # -------------------------
@@ -509,7 +548,14 @@ class LGDVAEPipeline:
         )
 
         # 3) 构建模型 & Trainer
-        autoencoder, trainer = self._build_model_and_trainer(train_dataset)
+        # ------------------ 新增：Oracle 预训练 ------------------
+        seq_len = X_tr.shape[-1]
+        in_chans = X_tr.shape[1]
+        # 我们在这里先练一个 Oracle
+        self.static_oracle = self._train_static_oracle(X_tr, y_tr, seq_len, in_chans)
+        # -------------------------------------------------------
+        # 3. 构建模型 (传入 Oracle)
+        autoencoder, trainer = self._build_model_and_trainer(train_dataset, oracle=self.static_oracle)
 
         # 4) 训练：如果已有 checkpoint 则优先尝试加载；加载失败再回退到重新训练
         ckpt_path = None
@@ -625,44 +671,45 @@ class LGDVAEPipeline:
             print(f"[LGDVAEPipeline] Loaded mean and std: {self.infer.mean_, self.infer.std_}")
         return self
 
+
     # -------------------------
     # 公共接口：transform / 生成
     # -------------------------
-    def transform(self, mode: str, **kwargs) -> torch.Tensor:
-        """
-        统一的生成接口，内部直接调用 Inference 的方法。
+    # def transform(self, mode: str, **kwargs) -> torch.Tensor:
+    #     """
+    #     统一的生成接口，内部直接调用 Inference 的方法。
+    #
+    #     mode:
+    #       - "vae_prior"      → 先验采样生成（generate_vae_prior）
+    #       - "mix_pair"       → minority + majority pair 门控混合（generate_mix_pair）
+    #       - "smote_latent"   → latent 空间 SMOTE 插值生成（generate_smote_latent）
+    #       - "prototype"      → 基于 prototype 生成（generate_from_prototype）
+    #     """
+    #     if self.infer is None:
+    #         raise RuntimeError("Pipeline is not fitted yet. Call `fit()` first.")
+    #
+    #     mode = mode.lower()
+    #     if mode == "classification" and self.task=="classification":
+    #         # kwargs: x=...
+    #         synthetics = self.infer.feature_extract(**kwargs)
+    #     if mode == "prior":
+    #         # kwargs: batch_size=..., device=...
+    #         synthetics = self.infer.generate_vae_prior(**kwargs)
+    #     elif mode == "pair":
+    #         # kwargs: x_min=..., x_maj=..., use_y=...
+    #         synthetics = self.infer.generate_mix_pair(**kwargs)
+    #     elif mode == "latent":
+    #         # kwargs: x_min1=..., x_min2=..., alpha=..., num_samples=...
+    #         synthetics = self.infer.generate_smote_latent(**kwargs)
+    #     elif mode == "prototype":
+    #         # kwargs: x_min=..., use_y=...
+    #         synthetics = self.infer.generate_from_prototype(**kwargs)
+    #     else:
+    #         raise ValueError(f"Unknown transform mode: {mode!r}")
+    #
+    #     return synthetics
 
-        mode:
-          - "vae_prior"      → 先验采样生成（generate_vae_prior）
-          - "mix_pair"       → minority + majority pair 门控混合（generate_mix_pair）
-          - "smote_latent"   → latent 空间 SMOTE 插值生成（generate_smote_latent）
-          - "prototype"      → 基于 prototype 生成（generate_from_prototype）
-        """
-        if self.infer is None:
-            raise RuntimeError("Pipeline is not fitted yet. Call `fit()` first.")
-
-        mode = mode.lower()
-        if mode == "classification" and self.task=="classification":
-            # kwargs: x=...
-            synthetics = self.infer.feature_extract(**kwargs)
-        if mode == "prior":
-            # kwargs: batch_size=..., device=...
-            synthetics = self.infer.generate_vae_prior(**kwargs)
-        elif mode == "pair":
-            # kwargs: x_min=..., x_maj=..., use_y=...
-            synthetics = self.infer.generate_mix_pair(**kwargs)
-        elif mode == "latent":
-            # kwargs: x_min1=..., x_min2=..., alpha=..., num_samples=...
-            synthetics = self.infer.generate_smote_latent(**kwargs)
-        elif mode == "prototype":
-            # kwargs: x_min=..., use_y=...
-            synthetics = self.infer.generate_from_prototype(**kwargs)
-        else:
-            raise ValueError(f"Unknown transform mode: {mode!r}")
-
-        return synthetics
-
-    def transform_with_rejection(self, x_min, threshold=0.8, max_retries=3):
+    def transform(self, x_min, threshold=0.8, max_retries=3):
         """
         带有拒绝采样的少数类生成
         x_min: 原始少数类样本 [B, C, T]
@@ -674,6 +721,13 @@ class LGDVAEPipeline:
         # 如果没有，可以使用 pl_model.py 中的 TimesNetQualityClassifier
 
         device = x_min.device
+        discriminator = getattr(self, "static_oracle", None)
+
+        if discriminator is None:
+            print("⚠️ Warning: No static oracle found, performing standard generation.")
+            return self.infer.generate_vae_prior(x_min=x_min, alpha=0.5)
+
+        discriminator.to(x_min.device)
         batch_size = x_min.size(0)
         final_samples = []
 
@@ -690,7 +744,7 @@ class LGDVAEPipeline:
             # 2. 判别器评估 (确保输入维度正确 [B, C, T])
             with torch.no_grad():
                 # 这里的 discriminator 需预先训练并加载
-                logits = self.discriminator(candidates)
+                logits = discriminator(candidates)
                 probs = torch.nn.functional.softmax(logits, dim=1)
 
             # 3. 筛选少数类 (ID=1) 且信心值达标的样本
