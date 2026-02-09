@@ -94,7 +94,7 @@ trainer:
   accelerator: "auto"
   devices: 1
   strategy: "auto"
-  deterministic: true
+  deterministic: false
   log_every_n_steps: 5
   check_val_every_n_epoch: 1
   accumulate_grad_batches: 1
