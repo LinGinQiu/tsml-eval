@@ -445,7 +445,7 @@ class LGDVAEPipeline:
             monitor="eval_gen",
             mode="max",
             save_top_k=3,
-            warmup_epochs=10,
+            warmup_epochs=5,
             save_last=False
         ))
 
