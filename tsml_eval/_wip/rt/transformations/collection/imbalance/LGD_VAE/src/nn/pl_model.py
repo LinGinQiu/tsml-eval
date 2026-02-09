@@ -472,7 +472,7 @@ class LitAutoEncoder(pl.LightningModule):
             res_g = metrics["val_g_means"]
             res_f1 = metrics["val_f1_macro"]
             res_acc = metrics["val_acc"]
-            res_gen = res_acc
+            res_gen = res_f1
 
         # 4. 统一在分支外 Log，确保参数永远一致
         self.log("eval/gen_g_means", res_g, prog_bar=True)
@@ -566,7 +566,7 @@ def train_and_eval_classifier(train_data, train_labels, test_data, test_labels, 
     checkpoint_callback = pl.callbacks.ModelCheckpoint(
         dirpath=temp_dir,
         filename="best_eval",
-        monitor="val_acc",  # 监控 Macro-F1 作为主要指标
+        monitor="val_f1_macro",  # 监控 Macro-F1 作为主要指标
         mode="max",
         save_top_k=1,
         save_weights_only=True
