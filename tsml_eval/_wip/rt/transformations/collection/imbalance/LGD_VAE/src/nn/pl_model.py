@@ -562,6 +562,7 @@ class LitAutoEncoder(pl.LightningModule):
 
         # 3. 拒绝采样：只选出概率最高（最像真实少数类）的 target_num 个样本
         _, top_indices = torch.topk(minority_probs, k=min(target_num, len(minority_probs)))
+        print(f"Generated {len(candidates)} candidates, selected top {len(top_indices)} based on oracle confidence.")
         return candidates[top_indices]
 
 def train_and_eval_classifier(train_data, train_labels, test_data, test_labels, input_chans, seq_len, device):
