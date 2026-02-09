@@ -1158,7 +1158,7 @@ class LatentGatedDualVAE(nn.Module):
             z_g_mix = lam * z_g + (1 - lam) * z_g[perm]
             z_c_mix = lam * z_c + (1 - lam) * z_c[perm]
 
-            use_gate = False
+            use_gate = True
 
             if use_gate and self.z_g_maj_ema_inited:
                 gate = self.gate(z_c_mix)
