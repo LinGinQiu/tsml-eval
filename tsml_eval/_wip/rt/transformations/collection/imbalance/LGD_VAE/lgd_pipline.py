@@ -661,3 +661,51 @@ class LGDVAEPipeline:
             raise ValueError(f"Unknown transform mode: {mode!r}")
 
         return synthetics
+
+    def transform_with_rejection(self, x_min, threshold=0.8, max_retries=3):
+        """
+        带有拒绝采样的少数类生成
+        x_min: 原始少数类样本 [B, C, T]
+        threshold: 判别器信心阈值，建议 0.8 以上
+        max_retries: 尝试生成的最大轮次，防止死循环
+        """
+        self.infer.model.eval()
+        # 假设你已经加载了一个预训练好的分类器到 self.discriminator
+        # 如果没有，可以使用 pl_model.py 中的 TimesNetQualityClassifier
+
+        device = x_min.device
+        batch_size = x_min.size(0)
+        final_samples = []
+
+        # 我们循环尝试，直到收集够 batch_size 数量的高质量样本
+        for i in range(max_retries):
+            current_needed = batch_size - sum(len(s) for s in final_samples)
+            if current_needed <= 0:
+                break
+
+            # 1. 调用你现有的生成逻辑 (Alpha=0.5 插值)
+            # 对应 model.py 中的 generate_vae_prior 实现
+            candidates = self.infer.generate_vae_prior(x_min=x_min, alpha=0.5)
+
+            # 2. 判别器评估 (确保输入维度正确 [B, C, T])
+            with torch.no_grad():
+                # 这里的 discriminator 需预先训练并加载
+                logits = self.discriminator(candidates)
+                probs = torch.nn.functional.softmax(logits, dim=1)
+
+            # 3. 筛选少数类 (ID=1) 且信心值达标的样本
+            minority_id = self.cfg.model.minority_class_id
+            conf = probs[:, minority_id]
+            mask = conf > threshold
+
+            valid_candidates = candidates[mask]
+            if len(valid_candidates) > 0:
+                final_samples.append(valid_candidates)
+
+        # 4. 汇总结果
+        if not final_samples:
+            # 如果多次尝试都失败，回退到原始生成或报错
+            return self.infer.generate_vae_prior(x_min=x_min, alpha=0.1)
+
+        all_generated = torch.cat(final_samples, dim=0)
+        return all_generated[:batch_size]

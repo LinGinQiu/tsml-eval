@@ -250,6 +250,7 @@ class LitAutoEncoder(pl.LightningModule):
         padding =1,
         recon_metric = 'mse',
         val_data = None,
+        oracle_model: nn.Module = None,
         lr = 1e-3):
 
         super().__init__()
@@ -285,7 +286,13 @@ class LitAutoEncoder(pl.LightningModule):
         self.input_channels = in_chans
         self.validation_step_outputs = []
         self.val_data = val_data
-
+        self.train_data = []
+        self.train_data_sample = True
+        self.oracle = oracle_model
+        if self.oracle:
+            self.oracle.eval()
+            for param in self.oracle.parameters():
+                param.requires_grad = False  # 确保不被误训练
         if cls_embed and weights is not None:
             num_c = len(weights)
             print(weights)
@@ -392,71 +399,61 @@ class LitAutoEncoder(pl.LightningModule):
         else:
             x, y = batch, None
 
-        is_min = (y == self.minority_class_id)  # [B]
-        is_maj = ~is_min
-        X_majortiy = x[is_maj]
-        X_minority = x[is_min]
-        num_minority = X_minority.size(0)
-        num_majority = X_majortiy.size(0)
-        index_maj = int(num_majority * 0.7)
-        index_min = int(num_minority * 0.7)
-        minority_train = X_minority[:index_min]
-        minority_test = X_minority[index_min:]
-        majority_train = X_majortiy[:index_maj]
-        majority_test = X_majortiy[index_maj:]
+        if self.train_data_sample:
+            is_min = (y == self.minority_class_id)
+            is_maj = ~is_min
+            # 必须使用 .detach() 避免计算图积压
+            self.train_data.append({
+                "x_majority": x[is_maj].detach(),
+                "x_minority": x[is_min].detach()
+            })
 
-        n_generation_per_minority = 9
-        new_minority = self.model.generate_vae_prior(x_min=minority_train, num_variations=9)
-
-        # 构建本次 Batch 的评估数据
-        X_eval_train = torch.cat([majority_train, minority_train, new_minority], dim=0)
-        y_eval_train = torch.cat([
-            torch.full((len(majority_train),), 0, device=x.device),
-            torch.full((len(minority_train) + len(new_minority),), 1, device=x.device)
-        ], dim=0)
-
-        X_eval_test = torch.cat([majority_test, minority_test], dim=0)
-        y_eval_test = torch.cat([
-            torch.full((len(majority_test),), 0, device=x.device),
-            torch.full((len(minority_test),), 1, device=x.device)
-        ], dim=0)
-        # 关键：将这些数据暂时存入 outputs，在 epoch 结束时统一处理
-        eval_dict= {
-            "x_train": X_eval_train.detach(),
-            "y_train": y_eval_train.detach(),
-            "x_test": X_eval_test.detach(),
-            "y_test": y_eval_test.detach()
-        }
-        self.validation_step_outputs.append(eval_dict)
 
     def on_validation_epoch_end(self):
         # 1. 检查是否有数据
-        if not self.validation_step_outputs:
-            # 统一使用 prog_bar=True (或者全部 False)
-            self.log("eval/gen_g_means", 0., prog_bar=True)
-            self.log("eval/gen_f1_macro", 0., prog_bar=True)
-            self.log("eval/acc", 0., prog_bar=True)
-            self.log("eval_gen", 0., prog_bar=True)
+        if not self.train_data:
             return
 
-        # 2. 汇总数据
-        if self.val_data is not None:
-            all_x_train = torch.cat([o["x_train"] for o in self.validation_step_outputs], dim=0)
-            all_y_train = torch.cat([o["y_train"] for o in self.validation_step_outputs], dim=0)
-            all_x_test = torch.cat([o["x_test"] for o in self.validation_step_outputs], dim=0)
-            all_y_test = torch.cat([o["y_test"] for o in self.validation_step_outputs], dim=0)
-            # 合并训练集和测试集, 使用新的测试集进行评估
-            all_x_train = torch.cat([all_x_train, all_x_test], dim=0)
-            all_y_train = torch.cat([all_y_train, all_y_test], dim=0)
-            all_x_test = self.val_data["x_test"]
-            all_y_test = self.val_data["y_test"]
-        else:
-            all_x_train = torch.cat([o["x_train"] for o in self.validation_step_outputs], dim=0)
-            all_y_train = torch.cat([o["y_train"] for o in self.validation_step_outputs], dim=0)
-            all_x_test = torch.cat([o["x_test"] for o in self.validation_step_outputs], dim=0)
-            all_y_test = torch.cat([o["y_test"] for o in self.validation_step_outputs], dim=0)
+        X_majority = torch.cat([d["x_majority"] for d in self.train_data], dim=0)
+        X_minority = torch.cat([d["x_minority"] for d in self.train_data], dim=0)
+        # 如果你只想采样一次训练集作为 benchmark，保留此 flag
+        # 如果希望每轮都刷新，就在末尾把此 flag 设为 True
+        # self.train_data_sample = False
 
-        # 初始化默认值
+        device = X_majority.device
+
+        # 2. 划分训练/测试 (如果没有外部验证集)
+        if self.val_data is None:
+            # ... 原有的切片逻辑 ...
+            # 建议加一个保险：
+            idx_min = max(1, int(X_minority.size(0) * 0.7))
+            idx_maj = max(1, int(X_majority.size(0) * 0.7))
+            minority_train, minority_test = X_minority[:idx_min], X_minority[idx_min:]
+            majority_train, majority_test = X_majority[:idx_maj], X_majority[idx_maj:]
+        else:
+            minority_train = X_minority
+            majority_train = X_majority
+            # 确保 val_data 也在正确的设备上
+            v_x, v_y = self.val_data["x_test"].to(device), self.val_data["y_test"].to(device)
+            minority_test = v_x[v_y == self.minority_class_id]
+            majority_test = v_x[v_y != self.minority_class_id]
+
+        # 3. 双分类器筛选生成
+        target_count = minority_train.size(0) * 9
+        # new_minority = self.get_filtered_samples(minority_train, target_count)
+        new_minority = self.model.generate_vae_prior(minority_train, num_variations=9, alpha=0.5)
+        # 4. 构建评估集
+        all_x_train = torch.cat([majority_train, minority_train, new_minority], dim=0)
+        all_y_train = torch.cat([
+            torch.full((len(majority_train),), 0, device=device),
+            torch.full((len(minority_train) + len(new_minority),), 1, device=device)
+        ], dim=0)
+
+        all_x_test = torch.cat([majority_test, minority_test], dim=0)
+        all_y_test = torch.cat([
+            torch.full((len(majority_test),), 0, device=device),
+            torch.full((len(minority_test),), 1, device=device)
+        ], dim=0)
         res_g, res_f1, res_acc = 0., 0., 0.
         res_gen = res_f1
 
@@ -481,7 +478,9 @@ class LitAutoEncoder(pl.LightningModule):
         self.log("eval_gen", res_gen, prog_bar=True)
 
         # 5. 清空列表
-        self.validation_step_outputs.clear()
+        self.train_data.clear()
+        # 如果希望下一轮继续收集，重置 flag (取决于你的逻辑需求)
+        self.train_data_sample = True
 
     def configure_optimizers(self):
         # 统一从 self.cfg 读取（由 train.py 赋值为 DotDict/ dict）
@@ -536,6 +535,34 @@ class LitAutoEncoder(pl.LightningModule):
 
         return recon_weight, kl_g_weight, kl_c_weight, align_weight, disentangle_weight, center_weight, cls_weight, turn_off_dilate
 
+    def get_filtered_samples(self, x_min, target_num, threshold=0.8):
+        if self.oracle is not None:
+            self.oracle.to(self.device)
+            self.oracle.eval()
+
+        num_variations = 9
+        if self.oracle is None:
+            return self.model.generate_vae_prior(x_min, num_variations=num_variations, alpha=0.5)
+
+        # 1. 扩大生成范围（比如生成 3 倍于目标的样本量）
+        candidate_multiplier = 3
+        candidates = self.model.generate_vae_prior(
+            x_min.repeat(candidate_multiplier, 1, 1),
+            num_variations=num_variations,
+            alpha=0.5
+        )
+
+        # 2. 让 Static Oracle 评价这些样本
+        with torch.no_grad():
+            logits = self.oracle(candidates)
+            probs = torch.softmax(logits, dim=1)
+
+            # 提取属于少数类（ID=1）的概率
+            minority_probs = probs[:, self.minority_class_id]
+
+        # 3. 拒绝采样：只选出概率最高（最像真实少数类）的 target_num 个样本
+        _, top_indices = torch.topk(minority_probs, k=min(target_num, len(minority_probs)))
+        return candidates[top_indices]
 
 def train_and_eval_classifier(train_data, train_labels, test_data, test_labels, input_chans, seq_len, device):
     # 1. 创建一个临时文件夹，专门存放这次评估的 checkpoint
