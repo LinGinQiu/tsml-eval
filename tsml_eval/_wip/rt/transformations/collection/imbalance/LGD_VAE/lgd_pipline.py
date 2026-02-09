@@ -490,29 +490,6 @@ class LGDVAEPipeline:
         """
         cfg = self.cfg
         dataset_name = cfg.data.dataset_name
-        # 1) 准备数据
-        # if  X_te is None or y_te is None:
-            # X_te, y_te = None, None
-            # if getattr(cfg.data, "format", "ucr") != "ucr":
-            #     raise NotImplementedError("Only UCR format is implemented yet.")
-            #
-            # problem_path = cfg.paths.data_root
-            # resample_id = self.seed
-            # predefined_resample = getattr(cfg.data, "predefined_resample", False)
-            # print(f'random id in pipline is {resample_id}')
-            # X_tr_, y_tr_, X_te_, y_te_ = load_ucr_splits(
-            #     problem_path=problem_path,
-            #     dataset_name=dataset_name,
-            #     resample_id=resample_id,
-            #     predefined_resample=predefined_resample,
-            # )
-            # assert np.array_equal(X_tr, X_tr_), "Train data mismatch!"
-            # assert np.array_equal(y_tr, y_tr_), "Train labels mismatch!"
-            # X_te, y_te = X_te_, y_te_
-            # classes, counts = np.unique(y_tr, return_counts=True)
-            # min_index = np.argmin(counts)
-            # label_minority = classes[min_index]
-        # apply z-score
         normalizer = ZScoreNormalizer().fit(X_tr)
         stats_dir = os.path.join(cfg.paths.work_root, "stats")
         os.makedirs(stats_dir, exist_ok=True)
@@ -553,7 +530,6 @@ class LGDVAEPipeline:
                     print(f"[Experiment] No env var found, auto-loading best model from {ckpt_dir}...")
                     import re
                     def extract_loss(name: str):
-                        # 修改后的正则：匹配数字开头，中间可选一个点，再接数字
                         match = re.search(r"eval_gen=([0-9]+\.?[0-9]*)", name)
                         if match:
                             return float(match.group(1))
@@ -563,7 +539,7 @@ class LGDVAEPipeline:
                     loss_ckpts = [f for f in ckpt_candidates if "eval_gen=" in f]
 
                     if loss_ckpts:
-                        # 使用 min() 找到 eval/gen_f1_macro 最大的文件
+                        # 使用 max() 找到 eval/gen_f1_macro 最大的文件
                         best_ckpt_file = max(loss_ckpts, key=extract_loss)
                         ckpt_path = os.path.join(ckpt_dir, best_ckpt_file)
                         print(f"Loading best model: {best_ckpt_file}")
