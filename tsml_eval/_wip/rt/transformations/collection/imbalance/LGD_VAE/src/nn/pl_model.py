@@ -458,7 +458,7 @@ class LitAutoEncoder(pl.LightningModule):
         res_gen = res_f1
 
         # 3. 每隔 N 个 Epoch 执行分类器评估
-        if self.current_epoch > 5:
+        if self.current_epoch >= 5:
             metrics = train_and_eval_classifier(
                 all_x_train, all_y_train,
                 all_x_test, all_y_test,
