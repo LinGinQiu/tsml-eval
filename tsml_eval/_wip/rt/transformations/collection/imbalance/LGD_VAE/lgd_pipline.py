@@ -709,7 +709,7 @@ class LGDVAEPipeline:
     #
     #     return synthetics
 
-    def transform(self, x_min, threshold=0.8, max_retries=3):
+    def transform(self, x_min, mode: str=None, threshold=0.8, max_retries=3, alpha = None):
         """
         带有拒绝采样的少数类生成
         x_min: 原始少数类样本 [B, C, T]
@@ -759,7 +759,8 @@ class LGDVAEPipeline:
         # 4. 汇总结果
         if not final_samples:
             # 如果多次尝试都失败，回退到原始生成或报错
-            return self.infer.generate_vae_prior(x_min=x_min, alpha=0.1)
+            print("[LGDVAEPipeline] No valid samples found.")
+            return self.infer.generate_vae_prior(x_min=x_min)
 
         all_generated = torch.cat(final_samples, dim=0)
         return all_generated[:batch_size]
