@@ -187,7 +187,8 @@ class VOTE(BaseCollectionTransformer):
             del new_series_torch
             # 6. (可选) 如果显存真的很紧，每一步都清空
             torch.cuda.empty_cache()
-            assert new_series.shape == (self.n_generate_samples, C, L), f"VAE output shape {new_series.shape} != {(self.n_generate_samples, C, L)}"
+            n_generated_samples = new_series.shape[0]
+            assert new_series.shape == (n_generated_samples, C, L), f"VAE output shape {new_series.shape} != {(self.n_generate_samples, C, L)}"
             new_ts = new_series
             if self.visualize:
                 _plot_series_list(new_ts[:10], title="generated from latent smote")
