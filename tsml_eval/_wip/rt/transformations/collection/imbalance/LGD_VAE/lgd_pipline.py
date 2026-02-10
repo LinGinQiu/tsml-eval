@@ -445,7 +445,7 @@ class LGDVAEPipeline:
             monitor="eval_gen",
             mode="max",
             save_top_k=3,
-            warmup_epochs=5,
+            warmup_epochs=10,
             save_last=False
         ))
 
@@ -497,7 +497,7 @@ class LGDVAEPipeline:
 
         # 3. 快速训练 (20-30 epoch 足够捕捉原始分布边界)
         trainer = pl.Trainer(
-            max_epochs=30,
+            max_epochs=25,
             accelerator="auto",
             devices=1,
             enable_checkpointing=False,
@@ -709,7 +709,7 @@ class LGDVAEPipeline:
     #
     #     return synthetics
 
-    def transform(self, x_min, mode: str=None, threshold=0.8, max_retries=3, alpha = None):
+    def transform(self, x_min, mode: str=None, threshold=0.7, max_retries=3, alpha = None):
         """
         带有拒绝采样的少数类生成
         x_min: 原始少数类样本 [B, C, T]

@@ -440,8 +440,8 @@ class LitAutoEncoder(pl.LightningModule):
 
         # 3. 双分类器筛选生成
         target_count = minority_train.size(0) * 9
-        new_minority = self.get_filtered_samples(minority_train, target_count)
-        # new_minority = self.model.generate_vae_prior(minority_train, num_variations=9, alpha=0.5)
+        # new_minority = self.get_filtered_samples(minority_train, target_count)
+        new_minority = self.model.generate_vae_prior(minority_train, num_variations=9, alpha=0.5)
         # 4. 构建评估集
         all_x_train = torch.cat([majority_train, minority_train, new_minority], dim=0)
         all_y_train = torch.cat([
@@ -544,8 +544,8 @@ class LitAutoEncoder(pl.LightningModule):
         if self.oracle is None:
             return self.model.generate_vae_prior(x_min, num_variations=num_variations, alpha=0.5)
 
-        # 1. 扩大生成范围（比如生成 3 倍于目标的样本量）
-        candidate_multiplier = 3
+        # 1. 扩大生成范围（比如生成 5 倍于目标的样本量）
+        candidate_multiplier = 5
         candidates = self.model.generate_vae_prior(
             x_min.repeat(candidate_multiplier, 1, 1),
             num_variations=num_variations,
@@ -594,8 +594,8 @@ def train_and_eval_classifier(train_data, train_labels, test_data, test_labels, 
     checkpoint_callback = pl.callbacks.ModelCheckpoint(
         dirpath=temp_dir,
         filename="best_eval",
-        monitor="val_f1_macro",  # 监控 Macro-F1 作为主要指标
-        mode="max",
+        monitor="val_loss",  # 监控 Macro-F1 作为主要指标
+        mode="min",  # loss 越小越好
         save_top_k=1,
         save_weights_only=True
     )
