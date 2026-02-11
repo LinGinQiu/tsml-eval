@@ -535,7 +535,7 @@ class LitAutoEncoder(pl.LightningModule):
 
         return recon_weight, kl_g_weight, kl_c_weight, align_weight, disentangle_weight, center_weight, cls_weight, turn_off_dilate
 
-    def get_filtered_samples(self, x_min, target_num, threshold=0.8):
+    def get_filtered_samples(self, x_min, target_num, threshold=0.7):
         if self.oracle is not None:
             self.oracle.to(self.device)
             self.oracle.eval()
@@ -559,7 +559,7 @@ class LitAutoEncoder(pl.LightningModule):
 
             # 提取属于少数类（ID=1）的概率
             minority_probs = probs[:, self.minority_class_id]
-            mask = threshold < minority_probs <= 0.99
+            mask = (minority_probs > threshold) & (minority_probs <= 0.99)
             valid_candidates = candidates[mask]
 
         print(f"Generated {len(candidates)} candidates, selected top {len(valid_candidates)} based on oracle confidence.")

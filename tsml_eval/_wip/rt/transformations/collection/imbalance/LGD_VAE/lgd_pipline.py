@@ -709,7 +709,7 @@ class LGDVAEPipeline:
     #
     #     return synthetics
 
-    def transform(self, x_min, mode: str=None, threshold=0.6, max_retries=10, alpha = None):
+    def transform(self, x_min, mode: str=None, threshold=0.7, max_retries=10, alpha = None):
         """
         带有拒绝采样的少数类生成
         x_min: 原始少数类样本 [B, C, T]
@@ -750,7 +750,7 @@ class LGDVAEPipeline:
             # 3. 筛选少数类 (ID=1) 且信心值达标的样本
             minority_id = self.cfg.model.minority_class_id
             conf = probs[:, minority_id]
-            mask = threshold < conf <= 0.99
+            mask = (conf > threshold) & (conf <= 0.99)
 
             valid_candidates = candidates[mask]
             if len(valid_candidates) > 0:
