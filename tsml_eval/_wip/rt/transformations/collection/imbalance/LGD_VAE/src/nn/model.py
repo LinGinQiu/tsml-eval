@@ -1052,13 +1052,12 @@ class LatentGatedDualVAE(nn.Module):
             recon_loss_dtw, _, _ = dilate_loss(outputs=recon, targets=x, device=x.device, alpha=1)
             recon_loss = recon_loss_mse
         elif self.recon_metric == 'dilate':
-            if not turn_off_dilate:
-                from tsml_eval._wip.rt.transformations.collection.imbalance.LGD_VAE.loss.dilate_loss import dilate_loss
-                recon_loss_dilate, _, _ = dilate_loss(outputs=recon, targets=x, device=x.device, alpha=0.6)
-                recon_loss = recon_loss_dilate
-            else:
-                recon_loss = ((recon - x) ** 2).mean()
-
+            # if not turn_off_dilate:
+            from tsml_eval._wip.rt.transformations.collection.imbalance.LGD_VAE.loss.dilate_loss import dilate_loss
+            recon_loss_dilate, _, _ = dilate_loss(outputs=recon, targets=x, device=x.device, alpha=0.6)
+            recon_loss = recon_loss_dilate
+            # else:
+            #     recon_loss = ((recon - x) ** 2).mean()
         elif self.recon_metric == 'mse':
             recon_loss = recon_loss_mse
         else:

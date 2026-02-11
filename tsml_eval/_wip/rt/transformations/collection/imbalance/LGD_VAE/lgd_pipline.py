@@ -582,11 +582,11 @@ class LGDVAEPipeline:
                         return float('inf')
 
                     # 过滤出包含 eval/gen_f1_macro 的文件
-                    loss_ckpts = [f for f in ckpt_candidates if "eval_gen=" in f]
+                    eval_ckpts = [f for f in ckpt_candidates if "eval_gen=" in f]
 
-                    if loss_ckpts:
+                    if eval_ckpts:
                         # 使用 max() 找到 eval/gen_f1_macro 最大的文件
-                        best_ckpt_file = max(loss_ckpts, key=extract_loss)
+                        best_ckpt_file = max(eval_ckpts, key=extract_loss)
                         ckpt_path = os.path.join(ckpt_dir, best_ckpt_file)
                         print(f"Loading best model: {best_ckpt_file}")
                     else:
@@ -709,7 +709,7 @@ class LGDVAEPipeline:
     #
     #     return synthetics
 
-    def transform(self, x_min, mode: str=None, threshold=0.7, max_retries=3, alpha = None):
+    def transform(self, x_min, mode: str=None, threshold=0.6, max_retries=10, alpha = None):
         """
         带有拒绝采样的少数类生成
         x_min: 原始少数类样本 [B, C, T]
@@ -750,7 +750,7 @@ class LGDVAEPipeline:
             # 3. 筛选少数类 (ID=1) 且信心值达标的样本
             minority_id = self.cfg.model.minority_class_id
             conf = probs[:, minority_id]
-            mask = conf > threshold
+            mask = threshold < conf <= 0.99
 
             valid_candidates = candidates[mask]
             if len(valid_candidates) > 0:
