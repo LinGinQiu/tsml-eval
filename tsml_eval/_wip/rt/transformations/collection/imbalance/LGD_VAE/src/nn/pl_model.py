@@ -440,8 +440,8 @@ class LitAutoEncoder(pl.LightningModule):
 
         # 3. 双分类器筛选生成
         target_count = minority_train.size(0) * 9
-        # new_minority = self.get_filtered_samples(minority_train, target_count)
-        new_minority = self.model.generate_vae_prior(minority_train, num_variations=9, alpha=0.5)
+        new_minority = self.get_filtered_samples(minority_train, target_count)
+        # new_minority = self.model.generate_vae_prior(minority_train, num_variations=9, alpha=0.5)
         # 4. 构建评估集
         all_x_train = torch.cat([majority_train, minority_train, new_minority], dim=0)
         all_y_train = torch.cat([
@@ -517,7 +517,7 @@ class LitAutoEncoder(pl.LightningModule):
         """Compute effective loss weights with epoch-based warmup."""
         epoch = float(self.current_epoch)
         factor = min(1.0, max(0.0, epoch / self.warmup_epochs))
-        if epoch <= 6:
+        if epoch <= 5:
             turn_off_dilate = True
         else:
             turn_off_dilate = False
@@ -559,11 +559,11 @@ class LitAutoEncoder(pl.LightningModule):
 
             # 提取属于少数类（ID=1）的概率
             minority_probs = probs[:, self.minority_class_id]
+            mask = threshold < minority_probs <= 0.99
+            valid_candidates = candidates[mask]
 
-        # 3. 拒绝采样：只选出概率最高（最像真实少数类）的 target_num 个样本
-        _, top_indices = torch.topk(minority_probs, k=min(target_num, len(minority_probs)))
-        print(f"Generated {len(candidates)} candidates, selected top {len(top_indices)} based on oracle confidence.")
-        return candidates[top_indices]
+        print(f"Generated {len(candidates)} candidates, selected top {len(valid_candidates)} based on oracle confidence.")
+        return candidates[valid_candidates]
 
 def train_and_eval_classifier(train_data, train_labels, test_data, test_labels, input_chans, seq_len, device):
     # 1. 创建一个临时文件夹，专门存放这次评估的 checkpoint
