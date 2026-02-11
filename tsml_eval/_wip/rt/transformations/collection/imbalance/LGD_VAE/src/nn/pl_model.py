@@ -566,7 +566,7 @@ class LitAutoEncoder(pl.LightningModule):
                     f"Generated {len(candidates)} candidates, with valid condidates {len(valid_candidates)} based on oracle confidence.")
                 valid_candidates = valid_candidates[:target_num]
             elif len(valid_candidates) == 0:
-                print(f"Warning: No candidates passed the oracle filter with threshold {threshold}. Returning unfiltered samples.")
+                print(f"Warning: No candidates passed the oracle filter between threshold {threshold} and 0.999. Returning unfiltered samples.")
                 valid_candidates = candidates[:target_num]
         print(f"Generated {len(candidates)} candidates, selected top {len(valid_candidates)} based on oracle confidence.")
         return valid_candidates
