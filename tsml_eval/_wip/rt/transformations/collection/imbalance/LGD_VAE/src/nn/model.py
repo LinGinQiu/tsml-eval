@@ -1130,8 +1130,6 @@ class LatentGatedDualVAE(nn.Module):
                        alpha 接近 0.5: 生成结果是两个样本的中间形态 (创新性最强)
                        alpha 接近 1.0: 生成结果很像被打乱的另一个样本
             """
-            seed = 2025
-            torch.manual_seed(seed)
             if num_variations>1:
                 x_min = x_min.repeat(num_variations, 1, 1)  # [B*num_variations, C, T]
             device = x_min.device

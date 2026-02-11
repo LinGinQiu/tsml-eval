@@ -126,6 +126,10 @@ class VOTE(BaseCollectionTransformer):
             self._device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     def _fit(self, X, y=None):
+        if self.random_state is not None:
+            torch.manual_seed(self.random_state)
+        else:
+            torch.manual_seed(42)  # 默认种子，确保可复现
         # Make sure inference.py can be imported
         print(f"device in oversampler is {self._device}")
         self._random_state = check_random_state(self.random_state)

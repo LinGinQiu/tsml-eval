@@ -719,7 +719,7 @@ class LGDVAEPipeline:
         self.infer.model.eval()
         # 假设你已经加载了一个预训练好的分类器到 self.discriminator
         # 如果没有，可以使用 pl_model.py 中的 TimesNetQualityClassifier
-
+        all_needed = x_min.size(0)
         device = x_min.device
         discriminator = getattr(self, "static_oracle", None)
 
@@ -763,4 +763,9 @@ class LGDVAEPipeline:
             return self.infer.generate_vae_prior(x_min=x_min)
 
         all_generated = torch.cat(final_samples, dim=0)
+        if len(all_generated) <= all_needed:
+            n_needed = all_needed - len(all_generated)
+            print(f"[LGDVAEPipeline] Only {len(all_generated)} valid samples found, need {n_needed} more. Generating additional samples without filtering...")
+            additional = self.infer.generate_vae_prior(x_min=x_min[:n_needed], alpha=0.5)
+            all_generated = torch.cat([all_generated, additional], dim=0)
         return all_generated[:batch_size]

@@ -565,6 +565,19 @@ class LitAutoEncoder(pl.LightningModule):
                 print(
                     f"Generated {len(candidates)} candidates, with valid condidates {len(valid_candidates)} based on oracle confidence.")
                 valid_candidates = valid_candidates[:target_num]
+            elif len(valid_candidates) < target_num and len(valid_candidates) > 0:
+                print(
+                    f"Warning: Only {len(valid_candidates)} candidates passed the oracle filter between "
+                    f"threshold {threshold} and 0.999, which is less than the target {target_num}. "
+                    f"Use some higher condidates to add in.")
+                n_num_needed = target_num - len(valid_candidates)
+                higher_mask = minority_probs > 0.999
+                higher_candidates = candidates[higher_mask]
+                print("higher candidates num:", len(higher_candidates))
+                if len(higher_candidates) >= n_num_needed:
+                    valid_candidates = torch.cat([valid_candidates, higher_candidates[:n_num_needed]], dim=0)
+                else:
+                    valid_candidates = torch.cat([valid_candidates, higher_candidates], dim=0)
             elif len(valid_candidates) == 0:
                 print(f"Warning: No candidates passed the oracle filter between threshold {threshold} and 0.999. Returning unfiltered samples.")
                 valid_candidates = candidates[:target_num]
