@@ -559,7 +559,7 @@ class LitAutoEncoder(pl.LightningModule):
 
             # 提取属于少数类（ID=1）的概率
             minority_probs = probs[:, self.minority_class_id]
-            mask = (minority_probs > threshold) & (minority_probs <= 0.99)
+            mask = (minority_probs > threshold) & (minority_probs <= 0.999)
             valid_candidates = candidates[mask]
 
         print(f"Generated {len(candidates)} candidates, selected top {len(valid_candidates)} based on oracle confidence.")

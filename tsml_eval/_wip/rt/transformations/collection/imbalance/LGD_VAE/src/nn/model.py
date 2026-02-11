@@ -1155,28 +1155,22 @@ class LatentGatedDualVAE(nn.Module):
             lam = torch.distributions.Beta(alpha, alpha).sample((B, 1)).to(device)
             z_g_mix = lam * z_g + (1 - lam) * z_g[perm]
             z_c_mix = lam * z_c + (1 - lam) * z_c[perm]
-
-            # --- 核心修改：一半 True, 一半 False ---
-            z_g_final = z_g_mix.clone()
-
-            if self.z_g_maj_ema_inited:
-                # 创建一个 mask，一半为 True，一半为 False
-                # torch.randperm 可以保证随机性，或者直接切片
-                gate_mask = torch.zeros(B, 1, device=device, dtype=torch.bool)
-                gate_indices = torch.randperm(B)[:B // 2]  # 随机选一半的索引
-                gate_mask[gate_indices] = True
-
-                # 计算 Gate 融合后的特征
-                gate_weights = self.gate(z_c_mix)
+            use_gate = False
+            if self.z_g_maj_ema_inited and use_gate:
                 z_g_maj = self.z_g_maj_mean
-                z_g_gated = gate_weights * z_g_mix + (1.0 - gate_weights) * z_g_maj
-
-                # 根据 Mask 更新：只有 True 的行使用 gated 特征，其余保持 z_g_mix (即纯少数类)
-                z_g_final = torch.where(gate_mask, z_g_gated, z_g_mix)
+                gate = self.gate(z_c_mix)
+                z_g_mix = gate * z_g_mix + (1.0 - gate) * z_g_maj
+                z_full = torch.cat([z_g_mix, z_c_mix], dim=1)
+            else:
+                z_full = torch.cat([z_g_mix, z_c_mix], dim=1)
 
             # 6. 拼接并解码
-            z_full = torch.cat([z_g_final, z_c_mix], dim=1)
-            y_onehot = F.one_hot(y_min, num_classes=self.num_classes).float()
+            # y_onehot = F.one_hot(y_min, num_classes=self.num_classes).float()
+            epsilon = 0.1  # 平滑因子
+            y_soft = torch.full((B, self.num_classes), epsilon / self.num_classes, device=device)
+            y_soft.scatter_(1, y_min.unsqueeze(1), 1.0 - epsilon + (epsilon / self.num_classes))
+
+            y_onehot = y_soft  # 替代原来的 y_onehot
             x_gen = self.decoder(z_full, y_onehot=y_onehot)
 
             return x_gen
