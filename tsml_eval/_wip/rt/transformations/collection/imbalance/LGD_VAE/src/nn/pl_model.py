@@ -563,7 +563,7 @@ class LitAutoEncoder(pl.LightningModule):
             valid_candidates = candidates[mask]
 
         print(f"Generated {len(candidates)} candidates, selected top {len(valid_candidates)} based on oracle confidence.")
-        return candidates[valid_candidates]
+        return valid_candidates
 
 def train_and_eval_classifier(train_data, train_labels, test_data, test_labels, input_chans, seq_len, device):
     # 1. 创建一个临时文件夹，专门存放这次评估的 checkpoint
