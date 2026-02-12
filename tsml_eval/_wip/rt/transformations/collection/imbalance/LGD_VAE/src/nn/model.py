@@ -1039,7 +1039,11 @@ class LatentGatedDualVAE(nn.Module):
         z_full = torch.cat([z_g_final, z_c], dim=1)  # [B, G+C]
 
         if y is not None and self.num_classes is not None:
+            # y_onehot = F.one_hot(y, num_classes=self.num_classes).float()
+            epsilon = 0.1
             y_onehot = F.one_hot(y, num_classes=self.num_classes).float()
+            y_soft = y_onehot * (1 - epsilon) + (epsilon / self.num_classes)
+            y_onehot = y_soft  # 替代原来的 y_onehot
         else:
             y_onehot = None
         recon = self.decoder(z_full, y_onehot=y_onehot)

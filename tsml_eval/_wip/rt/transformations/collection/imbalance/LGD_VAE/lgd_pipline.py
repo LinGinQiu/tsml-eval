@@ -769,6 +769,7 @@ class LGDVAEPipeline:
         final_samples = []
 
         # 我们循环尝试，直到收集够 batch_size 数量的高质量样本
+
         for i in range(max_retries):
             current_needed = batch_size - sum(len(s) for s in final_samples)
             if current_needed <= 0:
