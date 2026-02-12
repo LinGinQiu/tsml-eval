@@ -6,7 +6,7 @@ import lightning.pytorch as pl
 import torchmetrics
 from typing import Tuple
 from torchmetrics import Accuracy, F1Score, Recall
-
+from TimesNet.models import TimesNet
 # class TSQualityClassifier(pl.LightningModule):
 #     def __init__(self, input_channels, num_classes=2, lr=1e-3):
 #         super().__init__()
@@ -154,7 +154,7 @@ class TimesBlock(nn.Module):
 
 # --- 最终分类器模块 ---
 class TimesNetQualityClassifier(pl.LightningModule):
-    def __init__(self, input_channels, seq_len, num_classes=2, d_model=64, d_ff=64, top_k=5, e_layers=2, lr=1e-3):
+    def __init__(self, input_channels, seq_len, num_classes=2, d_model=64, d_ff=256, top_k=5, e_layers=2, lr=1e-3):
         super().__init__()
         self.save_hyperparameters()
         self.lr = lr
@@ -621,7 +621,7 @@ def train_and_eval_classifier(train_data, train_labels, test_data, test_labels, 
 
     # 5. 轻量化 Trainer
     eval_trainer = pl.Trainer(
-        max_epochs=25,
+        max_epochs=30,
         accelerator="auto",
         devices=1,
         enable_checkpointing=True,  # 必须开启才能追踪 best_score

@@ -474,19 +474,35 @@ class LGDVAEPipeline:
 
     # 在 LGDVAEPipeline 类中添加
     def _train_static_oracle(self, X_tr, y_tr, seq_len, in_chans):
-        """在 VAE 训练前，先训练一个静态判别器作为 Oracle"""
-        print("🚀 Training static Oracle (discriminator) on original imbalanced data...")
+        """在 VAE 训练前，训练一个静态判别器作为 Oracle，并选择验证集 Macro F1 最好的版本"""
+        print("🚀 Training static Oracle (discriminator) with Val-split and Macro-F1 monitoring...")
+
+        from sklearn.model_selection import train_test_split
+        from torch.utils.data import DataLoader, TensorDataset
+        import lightning.pytorch as pl
+        from lightning.pytorch.callbacks import ModelCheckpoint
+        import tempfile
+        import shutil
+        import os
+
+        # 1. 划分训练集和验证集 (例如 8:2)，使用 stratify 保证类别不平衡比例一致
+        X_train, X_val, y_train, y_val = train_test_split(
+            X_tr, y_tr, test_size=0.2, random_state=42, stratify=y_tr
+        )
+
+        train_loader = DataLoader(
+            TensorDataset(torch.from_numpy(X_train).float(), torch.from_numpy(y_train).long()),
+            batch_size=32, shuffle=True
+        )
+        val_loader = DataLoader(
+            TensorDataset(torch.from_numpy(X_val).float(), torch.from_numpy(y_val).long()),
+            batch_size=32, shuffle=False
+        )
+
+        # 2. 实例化 TimesNet (确保 TimesNetQualityClassifier 内部有 self.log("val_f1_macro", ...))
         from tsml_eval._wip.rt.transformations.collection.imbalance.LGD_VAE.src.nn.pl_model import \
             TimesNetQualityClassifier
-        import lightning.pytorch as pl
-        from torch.utils.data import DataLoader, TensorDataset
 
-        # 1. 准备数据
-        X_tensor = torch.from_numpy(X_tr).float()
-        y_tensor = torch.from_numpy(y_tr).long()
-        train_loader = DataLoader(TensorDataset(X_tensor, y_tensor), batch_size=32, shuffle=True)
-
-        # 2. 实例化 TimesNet
         oracle = TimesNetQualityClassifier(
             input_channels=in_chans,
             seq_len=seq_len,
@@ -495,21 +511,48 @@ class LGDVAEPipeline:
             lr=1e-3
         )
 
-        # 3. 快速训练 (20-30 epoch 足够捕捉原始分布边界)
+        # 3. 设置临时路径用于保存最优模型权重
+        tmp_ckpt_dir = tempfile.mkdtemp()
+        checkpoint_callback = ModelCheckpoint(
+            dirpath=tmp_ckpt_dir,
+            filename="best_oracle",
+            monitor="val_f1_macro",
+            mode="max",
+            save_top_k=1,
+            save_weights_only=True
+        )
+
+        # 4. 训练
         trainer = pl.Trainer(
-            max_epochs=25,
+            max_epochs=50,
             accelerator="auto",
             devices=1,
-            enable_checkpointing=False,
-            logger=False,
-            enable_progress_bar=False
+            callbacks=[checkpoint_callback],
+            logger=False,  # 如果需要可视化可以开启 TensorBoard
+            enable_progress_bar=False,
+            enable_checkpointing=True  # 必须开启以使用 callback
         )
-        trainer.fit(oracle, train_loader)
 
+        trainer.fit(oracle, train_loader, val_loader)
+
+        # 5. 加载表现最好的权重
+        best_model_path = checkpoint_callback.best_model_path
+        if best_model_path and os.path.exists(best_model_path):
+            print(
+                f"✨ Loading best Oracle weights from {best_model_path} (Score: {checkpoint_callback.best_model_score:.4f})")
+            # 直接加载到当前 oracle 实例
+            ckpt = torch.load(best_model_path)
+            oracle.load_state_dict(ckpt['state_dict'])
+
+        # 6. 冻结并清理
         oracle.eval()
         for param in oracle.parameters():
             param.requires_grad = False
-        print('✅ Static Oracle training completed.')
+
+        # 清理临时文件
+        shutil.rmtree(tmp_ckpt_dir)
+
+        print('✅ Static Oracle training and selection completed.')
         return oracle
     # -------------------------
     # 公共接口：fit
@@ -617,12 +660,6 @@ class LGDVAEPipeline:
                 if self.mean_ is not None and self.std_ is not None:
                     print(f"[LGDVAEPipeline] Loading mean and std: mean: {self.mean_}, std: {self.std_}")
                     self.infer.load_zscore_values(mean=self.mean_, std=self.std_)
-
-                # # 加载成功直接返回 self，不再进行后续训练
-                # print("training finished! exiting here and storage the model...")
-                #
-                # import sys
-                # sys.exit(0)
                 return self
 
             except Exception as e:
