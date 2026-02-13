@@ -577,7 +577,7 @@ class LGDVAEPipeline:
 
             for fold, (train_idx, val_idx) in enumerate(skf.split(X_tr, y_tr)):
                 # 1. 提取训练折并转为原始量级 (使用 .copy() 确保安全)
-                x_train_fold_raw = temp_vae._invert_zscore(X_tr[train_idx].copy())
+                x_train_fold_raw = temp_vae._invert_zscore_numpy(X_tr[train_idx].copy())
                 y_train_fold = y_tr[train_idx]
 
                 # 2. 准备生成用的输入 (必须是归一化后的，因为 VAE Encoder 见过的是归一化分布)
@@ -591,7 +591,7 @@ class LGDVAEPipeline:
                     x_gen = temp_vae.generate_vae_prior(x_min_raw, alpha=0.5)
 
                 # 4. 提取并转换验证折量级
-                x_val_raw = temp_vae._invert_zscor(X_tr[val_idx].copy())
+                x_val_raw = temp_vae._invert_zscore_numpy(X_tr[val_idx].copy())
                 y_val_fold = y_tr[val_idx]
 
                 # 5. 构建统一原始量级的增强训练集
