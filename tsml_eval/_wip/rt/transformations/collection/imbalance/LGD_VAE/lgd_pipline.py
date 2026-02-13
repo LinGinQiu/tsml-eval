@@ -558,47 +558,54 @@ class LGDVAEPipeline:
     def _tournament_selection(self, ckpt_paths, X_tr, y_tr, k_folds=5):
         from sklearn.model_selection import StratifiedKFold
         import torch
+        import numpy as np
+        from tsml_eval._wip.rt.transformations.collection.imbalance.LGD_VAE.src.nn.pl_model import \
+            train_and_eval_classifier
+        import gc
 
         skf = StratifiedKFold(n_splits=k_folds, shuffle=True, random_state=42)
         ckpt_scores = {}
 
         for path in ckpt_paths:
             print(f"🧐 Evaluating CKPT: {os.path.basename(path)}")
-            # 临时加载该 VAE
             temp_vae = Inference.from_checkpoint(path, LitAutoEncoder, device=self.device)
+
             if self.mean_ is not None and self.std_ is not None:
                 temp_vae.load_zscore_values(mean=self.mean_, std=self.std_)
+
             fold_f1s = []
 
             for fold, (train_idx, val_idx) in enumerate(skf.split(X_tr, y_tr)):
-                # 划分本折数据
-                x_train_fold, y_train_fold = X_tr[train_idx], y_tr[train_idx]
-                x_val_fold, y_val_fold = X_tr[val_idx], y_tr[val_idx]
+                # 1. 提取训练折并转为原始量级 (使用 .copy() 确保安全)
+                x_train_fold_raw = self.normalizer.inverse_transform(X_tr[train_idx].copy())
+                y_train_fold = y_tr[train_idx]
 
-                # 少数类生成
-                is_min = (y_train_fold == self.cfg.model.minority_class_id)
-                x_min_fold = torch.from_numpy(x_train_fold[is_min]).float().to(self.device)
+                # 2. 准备生成用的输入 (必须是归一化后的，因为 VAE Encoder 见过的是归一化分布)
+                # Inference 内部会自动处理 apply_zscore，所以传入 raw 即可
+                x_min_raw = torch.from_numpy(
+                    x_train_fold_raw[y_train_fold == self.cfg.model.minority_class_id]).float().to(self.device)
 
-                # 生成 9 倍新样本 (注意：这里使用 temp_vae)
+                # 3. 生成 9 倍新样本 (Inference 会自动反归一化回原始量级)
                 with torch.no_grad():
-                    # 此时没有 Oracle，直接生成
-                    x_gen = temp_vae.generate_vae_prior(x_min_fold, num_variations=9, alpha=0.5)
+                    # 注意：如果 Inference 接口没写 num_variations，请确保内部 repeat 逻辑
+                    x_gen = temp_vae.generate_vae_prior(x_min_raw, alpha=0.5)
 
-                # 构建增强后的训练集
-                x_train_fold_raw = self.normalizer.inverse_transform(X_tr[train_idx])
-                x_val_fold = self.normalizer.inverse_transform(x_val_fold)
+                # 4. 提取并转换验证折量级
+                x_val_raw = self.normalizer.inverse_transform(X_tr[val_idx].copy())
+                y_val_fold = y_tr[val_idx]
 
-                # 3. 合并
-                x_comb = torch.cat([torch.from_numpy(x_train_fold_raw).float(), x_gen.cpu()], dim=0)
-                x_combined = torch.cat([torch.from_numpy(x_train_fold).float().to(self.device), x_gen], dim=0)
+                # 5. 构建统一原始量级的增强训练集
+                # 将 numpy 的原始训练折转为 tensor 并移至设备
+                x_train_tensor = torch.from_numpy(x_train_fold_raw).float().to(self.device)
+                x_combined = torch.cat([x_train_tensor, x_gen], dim=0)
+
                 y_gen = torch.full((x_gen.size(0),), self.cfg.model.minority_class_id, device=self.device)
                 y_combined = torch.cat([torch.from_numpy(y_train_fold).long().to(self.device), y_gen], dim=0)
 
-                # 训练临时分类器并评估 (复用你 pl_model.py 里的函数)
-                from tsml_eval._wip.rt.transformations.collection.imbalance.LGD_VAE.src.nn.pl_model import train_and_eval_classifier
+                # 6. 训练与评估
                 metrics = train_and_eval_classifier(
                     x_combined, y_combined,
-                    torch.from_numpy(x_val_fold).float().to(self.device),
+                    torch.from_numpy(x_val_raw).float().to(self.device),
                     torch.from_numpy(y_val_fold).long().to(self.device),
                     input_chans=self.cfg.model.in_chans,
                     seq_len=X_tr.shape[-1],
@@ -610,7 +617,11 @@ class LGDVAEPipeline:
             ckpt_scores[path] = avg_f1
             print(f"   -> Avg Macro-F1: {avg_f1:.4f}")
 
-        # 返回最高分的路径
+            # 显存清理
+            del temp_vae
+            torch.cuda.empty_cache()
+            gc.collect()
+
         return max(ckpt_scores, key=ckpt_scores.get)
     # -------------------------
     # 公共接口：fit

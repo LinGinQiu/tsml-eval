@@ -635,7 +635,7 @@ def train_and_eval_classifier(train_data, train_labels, test_data, test_labels, 
         eval_trainer.fit(clf, train_loader, test_loader)
 
         # 6. 提取历史最高分
-        best_g_means = checkpoint_callback.best_model_score
+        best_g_means = eval_trainer.callback_metrics.get("val_g_means")
         best_acc = eval_trainer.callback_metrics.get("val_acc")  # 如果你想拿其他的
         best_f1 = eval_trainer.callback_metrics.get("val_f1_macro")
 
