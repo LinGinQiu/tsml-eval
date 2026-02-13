@@ -612,6 +612,7 @@ class LGDVAEPipeline:
                     device=self.device
                 )
                 fold_f1s.append(metrics["val_f1_macro"])
+                print(f'   Fold {fold + 1}/{k_folds} - Macro-F1: {metrics["val_f1_macro"]:.4f}')
 
             avg_f1 = np.mean(fold_f1s)
             ckpt_scores[path] = avg_f1
