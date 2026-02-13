@@ -131,9 +131,9 @@ class PrintLossCallback(Callback):
         kl_c = metrics.get("train/kl_c")
         align = metrics.get("train/align_loss")
         cls = metrics.get("train/cls_loss")
-        center = metrics.get("train/loss_center")
+        center = metrics.get("train_loss_center")
         disentangle = metrics.get("train/disentangle_loss")
-        total = metrics.get("train/loss")
+        total = metrics.get("train_loss")
 
         if total is None:
             return
@@ -446,6 +446,15 @@ class LGDVAEPipeline:
             filename="{epoch:02d}-{eval_gen:.4f}",
             monitor="eval_gen",
             mode="max",
+            save_top_k=3,
+            warmup_epochs=5,
+            save_last=False
+        ))
+        callbacks.append(DelayedModelCheckpoint(
+            dirpath=cfg.paths.ckpt_dir,
+            filename="{epoch:02d}-{train_loss:.4f}",
+            monitor="train_loss",
+            mode="min",
             save_top_k=3,
             warmup_epochs=5,
             save_last=False

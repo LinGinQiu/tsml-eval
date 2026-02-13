@@ -370,7 +370,7 @@ class LitAutoEncoder(pl.LightningModule):
 
         # 5) 总 loss
         self.log(
-            "train/loss",
+            "train_loss",
             loss,
             on_step=True,
             on_epoch=True,
@@ -384,7 +384,7 @@ class LitAutoEncoder(pl.LightningModule):
         self.log("train/kl_c", kl_c, on_step=False, on_epoch=True, sync_dist=True)
         self.log("train/align_loss", align_loss, on_step=False, on_epoch=True, sync_dist=True)
         self.log("train/disentangle_loss", disentangle_loss, on_step=False, on_epoch=True, sync_dist=True)
-        self.log("train/loss_center", loss_center, on_step=False, on_epoch=True, sync_dist=True)
+        self.log("train_loss_center", loss_center, on_step=False, on_epoch=True, sync_dist=True)
 
         if cls_loss is not None:
             self.log("train/cls_loss", cls_loss, on_step=False, on_epoch=True, sync_dist=True)
