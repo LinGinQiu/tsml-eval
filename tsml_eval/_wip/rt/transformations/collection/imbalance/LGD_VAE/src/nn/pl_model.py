@@ -613,41 +613,39 @@ def train_and_eval_classifier(train_data, train_labels, test_data, test_labels, 
     checkpoint_callback = pl.callbacks.ModelCheckpoint(
         dirpath=temp_dir,
         filename="best_eval",
-        monitor="val_loss",  # 监控 Macro-F1 作为主要指标
-        mode="min",  # loss 越小越好
+        monitor="val_f1_macro",
+        mode="max",  # F1 越大越好
         save_top_k=1,
         save_weights_only=True
     )
 
-    # 5. 轻量化 Trainer
     eval_trainer = pl.Trainer(
-        max_epochs=30,
+        max_epochs=20,  # 选拔赛建议缩短 epoch 提高效率
         accelerator="auto",
         devices=1,
-        enable_checkpointing=True,  # 必须开启才能追踪 best_score
+        enable_checkpointing=True,
         logger=False,
         callbacks=[checkpoint_callback],
         enable_progress_bar=False
     )
 
     try:
-        # 开始训练
         eval_trainer.fit(clf, train_loader, test_loader)
 
-        # 6. 提取历史最高分
-        best_g_means = eval_trainer.callback_metrics.get("val_g_means")
-        best_acc = eval_trainer.callback_metrics.get("val_acc")  # 如果你想拿其他的
-        best_f1 = eval_trainer.callback_metrics.get("val_f1_macro")
+        # 【纠正】：直接从回调中拿最高分
+        best_f1 = checkpoint_callback.best_model_score
+
+        # 获取最后一次记录的其他指标
+        best_acc = eval_trainer.callback_metrics.get("val_acc", 0.0)
+        best_g_means = eval_trainer.callback_metrics.get("val_g_means", 0.0)
 
         results = {
-            "val_g_means": best_g_means.item() if best_g_means is not None else 0.0,
-            "val_acc": best_acc.item() if best_acc is not None else 0.0,
-            "val_f1_macro": best_f1.item() if best_f1 is not None else 0.0
+            "val_f1_macro": float(best_f1) if best_f1 is not None else 0.0,
+            "val_acc": float(best_acc),
+            "val_g_means": float(best_g_means)
         }
     finally:
-        # 7. 销毁临时文件夹及其所有内容
         if os.path.exists(temp_dir):
             shutil.rmtree(temp_dir)
-            # print(f"🧹 Temporary evaluator files cleaned from {temp_dir}")
 
     return results

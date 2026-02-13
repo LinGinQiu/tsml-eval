@@ -641,17 +641,17 @@ class LGDVAEPipeline:
         """
         cfg = self.cfg
         dataset_name = cfg.data.dataset_name
-        normalizer = ZScoreNormalizer().fit(X_tr)
+        self.normalizer = ZScoreNormalizer().fit(X_tr)
         stats_dir = os.path.join(cfg.paths.work_root, "stats")
         os.makedirs(stats_dir, exist_ok=True)
         np.savez(os.path.join(stats_dir, f"{dataset_name}_zscore.npz"),
-                 mean=normalizer.mean_, std=normalizer.std_)
-        self.mean_ = normalizer.mean_
-        self.std_ = normalizer.std_
-        print(f"dataset mean: {normalizer.mean_} and std: {normalizer.std_}")
-        X_tr = normalizer.transform(X_tr)
+                 mean=self.normalizer.mean_, std=self.normalizer.std_)
+        self.mean_ = self.normalizer.mean_
+        self.std_ = self.normalizer.std_
+        print(f"dataset mean: {self.normalizer.mean_} and std: {self.normalizer.std_}")
+        X_tr = self.normalizer.transform(X_tr)
         if X_te is not None and y_te is not None:
-            X_te = normalizer.transform(X_te)
+            X_te = self.normalizer.transform(X_te)
         # prerebalance use smote
 
         # 2) DataLoader + Dataset
