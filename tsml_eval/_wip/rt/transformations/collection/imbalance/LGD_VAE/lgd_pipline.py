@@ -566,6 +566,8 @@ class LGDVAEPipeline:
             print(f"🧐 Evaluating CKPT: {os.path.basename(path)}")
             # 临时加载该 VAE
             temp_vae = Inference.from_checkpoint(path, LitAutoEncoder, device=self.device)
+            if self.mean_ is not None and self.std_ is not None:
+                temp_vae.load_zscore_values(mean=self.mean_, std=self.std_)
             fold_f1s = []
 
             for fold, (train_idx, val_idx) in enumerate(skf.split(X_tr, y_tr)):
@@ -580,9 +582,14 @@ class LGDVAEPipeline:
                 # 生成 9 倍新样本 (注意：这里使用 temp_vae)
                 with torch.no_grad():
                     # 此时没有 Oracle，直接生成
-                    x_gen = temp_vae.model.generate_vae_prior(x_min_fold, num_variations=9, alpha=0.5)
+                    x_gen = temp_vae.generate_vae_prior(x_min_fold, num_variations=9, alpha=0.5)
 
                 # 构建增强后的训练集
+                x_train_fold_raw = self.normalizer.inverse_transform(X_tr[train_idx])
+                x_val_fold = self.normalizer.inverse_transform(x_val_fold)
+
+                # 3. 合并
+                x_comb = torch.cat([torch.from_numpy(x_train_fold_raw).float(), x_gen.cpu()], dim=0)
                 x_combined = torch.cat([torch.from_numpy(x_train_fold).float().to(self.device), x_gen], dim=0)
                 y_gen = torch.full((x_gen.size(0),), self.cfg.model.minority_class_id, device=self.device)
                 y_combined = torch.cat([torch.from_numpy(y_train_fold).long().to(self.device), y_gen], dim=0)
