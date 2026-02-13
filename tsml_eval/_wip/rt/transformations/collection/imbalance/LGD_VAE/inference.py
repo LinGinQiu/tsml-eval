@@ -133,7 +133,7 @@ class Inference:
     def _invert_zscore(self, x_norm: Tensor) -> Tensor:
         assert self.mean_ is not None and self.std_ is not None
         """Invert z-score normalization: x_norm * std + mean. Shapes must be broadcastable."""
-        return x_norm * self.std + self.mean
+        return x_norm * self.std_ + self.mean_
 
     def feature_extract(
         self,
