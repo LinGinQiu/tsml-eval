@@ -450,8 +450,8 @@ class LitAutoEncoder(pl.LightningModule):
 
         # 3. 双分类器筛选生成
         target_count = minority_train.size(0) * 9
-        new_minority = self.get_filtered_samples(minority_train, target_count)
-        # new_minority = self.model.generate_vae_prior(minority_train, num_variations=9, alpha=0.5)
+        # new_minority = self.get_filtered_samples(minority_train, target_count)
+        new_minority = self.model.generate_vae_prior(minority_train, num_variations=9, alpha=0.5)
         # 4. 构建评估集
         all_x_train = torch.cat([majority_train, minority_train, new_minority], dim=0)
         all_y_train = torch.cat([
@@ -622,20 +622,21 @@ def train_and_eval_classifier(train_data, train_labels, test_data, test_labels, 
         d_model=64,
         top_k=3,
         lr=1e-3
-    ).to(device)
+    )  # 让 Trainer 自己处理设备
 
-    # 4. 配置 Checkpoint 记账员
+    # 4. 配置 Checkpoint (保持不变)
     checkpoint_callback = pl.callbacks.ModelCheckpoint(
         dirpath=temp_dir,
         filename="best_eval",
         monitor="val_f1_macro",
-        mode="max",  # F1 越大越好
+        mode="max",
         save_top_k=1,
         save_weights_only=True
     )
 
+    # 5. Trainer (保持不变)
     eval_trainer = pl.Trainer(
-        max_epochs=20,  # 选拔赛建议缩短 epoch 提高效率
+        max_epochs=30,
         accelerator="auto",
         devices=1,
         enable_checkpointing=True,
@@ -645,22 +646,52 @@ def train_and_eval_classifier(train_data, train_labels, test_data, test_labels, 
     )
 
     try:
+        # --- 训练 ---
         eval_trainer.fit(clf, train_loader, test_loader)
 
-        # 【纠正】：直接从回调中拿最高分
-        best_f1 = checkpoint_callback.best_model_score
+        # --- 【关键修正】重新加载最佳模型进行验证 ---
+        # 1. 获取最佳模型的路径
+        best_model_path = checkpoint_callback.best_model_path
 
-        # 获取最后一次记录的其他指标
-        best_acc = eval_trainer.callback_metrics.get("val_acc", 0.0)
-        best_g_means = eval_trainer.callback_metrics.get("val_g_means", 0.0)
+        if best_model_path:
+            # 2. 重新加载最佳权重
+            best_model = TimesNetQualityClassifier.load_from_checkpoint(
+                best_model_path,
+                input_channels=input_chans,  # 必须传入 init 参数
+                seq_len=seq_len,
+                num_classes=2,
+                d_model=64,
+                top_k=3,
+                lr=1e-3
+            )
 
-        results = {
-            "val_f1_macro": float(best_f1) if best_f1 is not None else 0.0,
-            "val_acc": float(best_acc),
-            "val_g_means": float(best_g_means)
-        }
+            # 3. 在测试集上运行一次验证，获取该状态下的所有指标
+            # validate 返回的是一个列表，里面是每个 dataloader 的结果字典
+            val_results = eval_trainer.validate(best_model, test_loader, verbose=False)[0]
+
+            results = {
+                "val_f1_macro": float(val_results.get("val_f1_macro", 0.0)),
+                "val_acc": float(val_results.get("val_acc", 0.0)),
+                "val_g_means": float(val_results.get("val_g_means", 0.0))
+            }
+        else:
+            # 极端情况：如果一次 validation 都没跑完（比如报错了）
+            results = {
+                "val_f1_macro": 0.0, "val_acc": 0.0, "val_g_means": 0.0
+            }
+
     finally:
         if os.path.exists(temp_dir):
             shutil.rmtree(temp_dir)
+
+            # 2. 【新增】显式清理模型和 Trainer 占用的显存
+        del clf
+        del eval_trainer
+        del best_model
+        # 如果有 best_model 也记得 del best_model
+
+        import gc
+        gc.collect()
+        torch.cuda.empty_cache()
 
     return results
