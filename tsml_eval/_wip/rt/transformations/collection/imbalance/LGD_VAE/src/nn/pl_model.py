@@ -463,12 +463,12 @@ class LitAutoEncoder(pl.LightningModule):
         res_gen = res_f1
         from tsml_eval._wip.rt.transformations.collection.imbalance.LGD_VAE.inference import Inference
         inference = Inference
-        mean = torch.from_numpy(self.mean_).to(device)
-        std = torch.from_numpy(self.std_).to(device)
+        mean = torch.from_numpy(self.mean_).float().to(device)
+        std = torch.from_numpy(self.std_).float().to(device)
         all_x_train = inference.invert_zscore(all_x_train, mean, std)
         all_x_test = inference.invert_zscore(all_x_test, mean, std)
         # 3. 每隔 N 个 Epoch 执行分类器评估
-        if self.current_epoch >= 5:
+        if self.current_epoch >= 0:
             metrics = train_and_eval_classifier(
                 all_x_train, all_y_train,
                 all_x_test, all_y_test,
