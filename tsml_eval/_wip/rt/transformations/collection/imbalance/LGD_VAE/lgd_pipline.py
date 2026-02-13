@@ -588,8 +588,11 @@ class LGDVAEPipeline:
                 # 3. 生成 9 倍新样本 (Inference 会自动反归一化回原始量级)
                 with torch.no_grad():
                     # 注意：如果 Inference 接口没写 num_variations，请确保内部 repeat 逻辑
-                    x_gen = temp_vae.generate_vae_prior(x_min_raw, alpha=0.5)
-
+                    num_min = x_min_raw.size(0)
+                    indexs = torch.randint(0, num_min, (num_min * 9,), device=self.device)
+                    x_min_raw_expanded = x_min_raw[indexs]
+                    x_gen = temp_vae.generate_vae_prior(x_min_raw_expanded, alpha=0.5)
+                    print('   Generated samples shape:', x_gen.shape)
                 # 4. 提取并转换验证折量级
                 x_val_raw = temp_vae._invert_zscore_numpy(X_tr[val_idx].copy())
                 y_val_fold = y_tr[val_idx]
