@@ -430,6 +430,8 @@ class LGDVAEPipeline:
             **model_kwargs,
             weights=getattr(train_dataset, "class_freq", None),
             oracle_model=oracle,  # <--- 关键修改：注入裁判
+            mean_=self.mean_,
+            std_=self.std_,
         )
         # 把完整 cfg 挂上，方便 pl_model 里读取 optim/trainer 配置
         autoencoder.cfg = cfg

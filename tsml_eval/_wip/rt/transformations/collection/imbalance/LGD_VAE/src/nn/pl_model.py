@@ -251,7 +251,10 @@ class LitAutoEncoder(pl.LightningModule):
         recon_metric = 'mse',
         val_data = None,
         oracle_model: nn.Module = None,
-        lr = 1e-3):
+        lr = 1e-3,
+        mean_ = None,
+        std_ = None
+                 ):
 
         super().__init__()
         self.model = LatentGatedDualVAE(
@@ -289,6 +292,8 @@ class LitAutoEncoder(pl.LightningModule):
         self.train_data = []
         self.train_data_sample = True
         self.oracle = oracle_model
+        self.mean_ = mean_
+        self.std_ = std_
         if self.oracle:
             self.oracle.eval()
             for param in self.oracle.parameters():
@@ -456,7 +461,12 @@ class LitAutoEncoder(pl.LightningModule):
         ], dim=0)
         res_g, res_f1, res_acc = 0., 0., 0.
         res_gen = res_f1
-
+        from tsml_eval._wip.rt.transformations.collection.imbalance.LGD_VAE.inference import Inference
+        inference = Inference
+        mean = torch.from_numpy(self.mean_).to(device)
+        std = torch.from_numpy(self.std_).to(device)
+        all_x_train = inference.invert_zscore(all_x_train, mean, std)
+        all_x_test = inference.invert_zscore(all_x_test, mean, std)
         # 3. 每隔 N 个 Epoch 执行分类器评估
         if self.current_epoch >= 5:
             metrics = train_and_eval_classifier(
