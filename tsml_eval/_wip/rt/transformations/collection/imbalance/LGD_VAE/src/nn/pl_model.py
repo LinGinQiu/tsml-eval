@@ -434,12 +434,23 @@ class LitAutoEncoder(pl.LightningModule):
 
         # 2. 划分训练/测试 (如果没有外部验证集)
         if self.val_data is None:
-            # ... 原有的切片逻辑 ...
-            # 建议加一个保险：
-            idx_min = max(1, int(X_minority.size(0) * 0.7))
-            idx_maj = max(1, int(X_majority.size(0) * 0.7))
-            minority_train, minority_test = X_minority[:idx_min], X_minority[idx_min:]
-            majority_train, majority_test = X_majority[:idx_maj], X_majority[idx_maj:]
+            num_min = X_minority.size(0)
+            num_maj = X_majority.size(0)
+
+            # 计算 70% 的分界点
+            idx_min = max(1, int(num_min * 0.7))
+            idx_maj = max(1, int(num_maj * 0.7))
+
+            # 生成随机打乱的索引 (注意保持在同一个 device 上，防止显存拷贝报错)
+            perm_min = torch.randperm(num_min, device=X_minority.device)
+            perm_maj = torch.randperm(num_maj, device=X_majority.device)
+
+            # 根据随机索引切分数据
+            minority_train = X_minority[perm_min[:idx_min]]
+            minority_test = X_minority[perm_min[idx_min:]]
+
+            majority_train = X_majority[perm_maj[:idx_maj]]
+            majority_test = X_majority[perm_maj[idx_maj:]]
         else:
             minority_train = X_minority
             majority_train = X_majority
