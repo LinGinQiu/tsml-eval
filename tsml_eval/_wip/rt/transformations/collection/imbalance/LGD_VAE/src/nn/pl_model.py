@@ -491,6 +491,9 @@ class LitAutoEncoder(pl.LightningModule):
         self.train_data.clear()
         # 如果希望下一轮继续收集，重置 flag (取决于你的逻辑需求)
         self.train_data_sample = True
+        self.f1_macro.reset()
+        self.acc_metric.reset()
+        self.recall_per_class.reset()
 
     def configure_optimizers(self):
         # 统一从 self.cfg 读取（由 train.py 赋值为 DotDict/ dict）
