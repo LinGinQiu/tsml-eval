@@ -554,6 +554,57 @@ class LGDVAEPipeline:
 
         print('✅ Static Oracle training and selection completed.')
         return oracle
+
+    def _tournament_selection(self, ckpt_paths, X_tr, y_tr, k_folds=5):
+        from sklearn.model_selection import StratifiedKFold
+        import torch
+
+        skf = StratifiedKFold(n_splits=k_folds, shuffle=True, random_state=42)
+        ckpt_scores = {}
+
+        for path in ckpt_paths:
+            print(f"🧐 Evaluating CKPT: {os.path.basename(path)}")
+            # 临时加载该 VAE
+            temp_vae = Inference.from_checkpoint(path, LitAutoEncoder, device=self.device)
+            fold_f1s = []
+
+            for fold, (train_idx, val_idx) in enumerate(skf.split(X_tr, y_tr)):
+                # 划分本折数据
+                x_train_fold, y_train_fold = X_tr[train_idx], y_tr[train_idx]
+                x_val_fold, y_val_fold = X_tr[val_idx], y_tr[val_idx]
+
+                # 少数类生成
+                is_min = (y_train_fold == self.cfg.model.minority_class_id)
+                x_min_fold = torch.from_numpy(x_train_fold[is_min]).float().to(self.device)
+
+                # 生成 9 倍新样本 (注意：这里使用 temp_vae)
+                with torch.no_grad():
+                    # 此时没有 Oracle，直接生成
+                    x_gen = temp_vae.model.generate_vae_prior(x_min_fold, num_variations=9, alpha=0.5)
+
+                # 构建增强后的训练集
+                x_combined = torch.cat([torch.from_numpy(x_train_fold).float().to(self.device), x_gen], dim=0)
+                y_gen = torch.full((x_gen.size(0),), self.cfg.model.minority_class_id, device=self.device)
+                y_combined = torch.cat([torch.from_numpy(y_train_fold).long().to(self.device), y_gen], dim=0)
+
+                # 训练临时分类器并评估 (复用你 pl_model.py 里的函数)
+                from tsml_eval._wip.rt.transformations.collection.imbalance.LGD_VAE.src.nn.pl_model import train_and_eval_classifier
+                metrics = train_and_eval_classifier(
+                    x_combined, y_combined,
+                    torch.from_numpy(x_val_fold).float().to(self.device),
+                    torch.from_numpy(y_val_fold).long().to(self.device),
+                    input_chans=self.cfg.model.in_chans,
+                    seq_len=X_tr.shape[-1],
+                    device=self.device
+                )
+                fold_f1s.append(metrics["val_f1_macro"])
+
+            avg_f1 = np.mean(fold_f1s)
+            ckpt_scores[path] = avg_f1
+            print(f"   -> Avg Macro-F1: {avg_f1:.4f}")
+
+        # 返回最高分的路径
+        return max(ckpt_scores, key=ckpt_scores.get)
     # -------------------------
     # 公共接口：fit
     # -------------------------
@@ -595,10 +646,11 @@ class LGDVAEPipeline:
         seq_len = X_tr.shape[-1]
         in_chans = X_tr.shape[1]
         # 我们在这里先练一个 Oracle
-        self.static_oracle = self._train_static_oracle(X_tr, y_tr, seq_len, in_chans)
+        # self.static_oracle = self._train_static_oracle(X_tr, y_tr, seq_len, in_chans)
         # -------------------------------------------------------
         # 3. 构建模型 (传入 Oracle)
-        autoencoder, trainer = self._build_model_and_trainer(train_dataset, oracle=self.static_oracle)
+        # autoencoder, trainer = self._build_model_and_trainer(train_dataset, oracle=self.static_oracle)
+        autoencoder, trainer = self._build_model_and_trainer(train_dataset)
 
         # 4) 训练：如果已有 checkpoint 则优先尝试加载；加载失败再回退到重新训练
         ckpt_path = None
@@ -616,30 +668,40 @@ class LGDVAEPipeline:
                 ckpt_candidates = [f for f in os.listdir(ckpt_dir) if f.endswith(".ckpt")]
 
                 if ckpt_candidates:
-                    print(f"[Experiment] No env var found, auto-loading best model from {ckpt_dir}...")
-                    import re
-                    def extract_loss(name: str):
-                        match = re.search(r"eval_gen=([0-9]+\.?[0-9]*)", name)
-                        if match:
-                            return float(match.group(1))
-                        return float('inf')
+                    print(f"[Tournament] Found {len(ckpt_candidates)} checkpoints. Starting selection...")
 
-                    # 过滤出包含 eval/gen_f1_macro 的文件
-                    eval_ckpts = [f for f in ckpt_candidates if "eval_gen=" in f]
+                    # 构建完整的候选路径列表
+                    full_ckpt_paths = [os.path.join(ckpt_dir, f) for f in ckpt_candidates]
 
-                    if eval_ckpts:
-                        # 使用 max() 找到 eval/gen_f1_macro 最大的文件
-                        best_ckpt_file = max(eval_ckpts, key=extract_loss)
-                        ckpt_path = os.path.join(ckpt_dir, best_ckpt_file)
-                        print(f"Loading best model: {best_ckpt_file}")
-                    else:
-                        # 其次：fallback 用 last.ckpt（如果存在）
-                        last_ckpts = [f for f in ckpt_candidates if "last" in f]
-                        if last_ckpts:
-                            ckpt_path = os.path.join(ckpt_dir, last_ckpts[0])
-                        else:
-                            # 最后：随便选一个
-                            ckpt_path = os.path.join(ckpt_dir, sorted(ckpt_candidates)[0])
+                    # 调用选拔赛逻辑（见下文实现）
+                    # 传入原始归一化后的数据 X_tr, y_tr
+                    ckpt_path = self._tournament_selection(full_ckpt_paths, X_tr, y_tr, k_folds=5)
+
+                    print(f"🥇 Tournament winner selected: {os.path.basename(ckpt_path)}")
+                    # print(f"[Experiment] No env var found, auto-loading best model from {ckpt_dir}...")
+                    # import re
+                    # def extract_loss(name: str):
+                    #     match = re.search(r"eval_gen=([0-9]+\.?[0-9]*)", name)
+                    #     if match:
+                    #         return float(match.group(1))
+                    #     return float('inf')
+                    #
+                    # # 过滤出包含 eval/gen_f1_macro 的文件
+                    # eval_ckpts = [f for f in ckpt_candidates if "eval_gen=" in f]
+                    #
+                    # if eval_ckpts:
+                    #     # 使用 max() 找到 eval/gen_f1_macro 最大的文件
+                    #     best_ckpt_file = max(eval_ckpts, key=extract_loss)
+                    #     ckpt_path = os.path.join(ckpt_dir, best_ckpt_file)
+                    #     print(f"Loading best model: {best_ckpt_file}")
+                    # else:
+                    #     # 其次：fallback 用 last.ckpt（如果存在）
+                    #     last_ckpts = [f for f in ckpt_candidates if "last" in f]
+                    #     if last_ckpts:
+                    #         ckpt_path = os.path.join(ckpt_dir, last_ckpts[0])
+                    #     else:
+                    #         # 最后：随便选一个
+                    #         ckpt_path = os.path.join(ckpt_dir, sorted(ckpt_candidates)[0])
                 else:
                     print(f"[Experiment] Checkpoint directory exists but is empty.")
 
@@ -687,21 +749,37 @@ class LGDVAEPipeline:
         # 5) 保存到 pipeline 成员里
         self.trainer = trainer
         self.model = autoencoder
-        print("training finished! exiting here and storage the model...")
 
-        # import sys
-        # sys.exit(0)
-        # 训练完 从 ckpt 读取模型（确保和推断阶段完全一致的模型权重）
-        best_path = trainer.checkpoint_callback.best_model_path
-        best_score = trainer.checkpoint_callback.best_model_score
-        print(f"最高 eval_gen score is: {best_score}")
+        # --- 新增：基于分类选拔赛的最优模型选择 ---
+        print("Starting Tournament to select the best CKPT based on classification performance...")
+
+        # 1. 获取 Top-3 CKPT 路径
+        checkpoint_callback = trainer.checkpoint_callback
+        best_k_models = checkpoint_callback.best_k_models  # dict: {path: score}
+        ckpt_paths = list(best_k_models.keys())
+        print(f'Candidate CKPTs for Tournament is {ckpt_paths}')
+        # 2. 执行选拔赛
+        best_path = self._tournament_selection(ckpt_paths, X_tr, y_tr)
+
+        # 3. 加载最终胜出的模型
+        print(f"🥇 Tournament winner: {best_path}")
         self.infer = Inference.from_checkpoint(
-                    best_path,
-                    model_class=LitAutoEncoder,
-                    model_kwargs=None,
-                    device=self.device,
-                    strict=False,
-                )
+            best_path,
+            model_class=LitAutoEncoder,
+            model_kwargs=None,
+            device=self.device,
+            strict=False,
+        )
+        # best_path = trainer.checkpoint_callback.best_model_path
+        # best_score = trainer.checkpoint_callback.best_model_score
+        # print(f"最高 eval_gen score is: {best_score}")
+        # self.infer = Inference.from_checkpoint(
+        #             best_path,
+        #             model_class=LitAutoEncoder,
+        #             model_kwargs=None,
+        #             device=self.device,
+        #             strict=False,
+        #         )
         if self.mean_ and self.std_:
             print(f"[LGDVAEPipeline] Loading mean and std: ")
             self.infer.load_zscore_values(mean=self.mean_, std=self.std_)
