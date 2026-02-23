@@ -788,10 +788,29 @@ class LGDVAEPipeline:
 
         # 1. 获取 Top-3 CKPT 路径
         checkpoint_callback = trainer.checkpoint_callback
+        ckpt_dir = checkpoint_callback.dirpath
         best_k_models = checkpoint_callback.best_k_models  # dict: {path: score}
         ckpt_paths = list(best_k_models.keys())
-        print(f'Candidate CKPTs for Tournament is {ckpt_paths}')
-        # 2. 执行选拔赛
+
+        # 3. 在该目录下搜索所有符合命名的 ckpt 文件
+        # 这样可以捞到由其他 callback（比如监控 train_loss 的）保存的文件
+        import glob
+        if ckpt_dir and os.path.exists(ckpt_dir):
+            search_pattern = os.path.join(ckpt_dir, "epoch=*.ckpt")
+            all_local_ckpts = glob.glob(search_pattern)
+
+            # 合并并去重（统一转为绝对路径防止重复）
+            # 使用 set 确保即便 best_k 里的文件在文件夹里被搜到，也只保留一份
+            all_ckpt_paths = list(set([os.path.abspath(p) for p in ckpt_paths] +
+                                      [os.path.abspath(p) for p in all_local_ckpts]))
+        else:
+            print(f"Warning: Directory {ckpt_dir} not found. Using only callback records.")
+            all_ckpt_paths = ckpt_paths
+
+        # 4. 打印结果
+        print(f'Total CKPTs found in {ckpt_dir}: {len(all_ckpt_paths)}')
+        for path in all_ckpt_paths:
+            print(f' - {os.path.basename(path)}')
         best_path = self._tournament_selection(ckpt_paths, X_tr, y_tr)
 
         # 3. 加载最终胜出的模型

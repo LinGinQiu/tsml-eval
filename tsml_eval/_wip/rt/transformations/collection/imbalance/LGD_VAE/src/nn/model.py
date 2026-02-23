@@ -916,9 +916,9 @@ class LatentGatedDualVAE(nn.Module):
         device = feat.device
         if y is not None and self.num_classes is not None and self.y_embed_latent is not None:
             y_onehot = F.one_hot(y, num_classes=self.num_classes).float()
-            epsilon = 0.1
-            y_soft = y_onehot * (1 - epsilon) + (epsilon / self.num_classes)
-            y_onehot = y_soft  # 替代原来的 y_onehot
+            # epsilon = 0.1
+            # y_soft = y_onehot * (1 - epsilon) + (epsilon / self.num_classes)
+            # y_onehot = y_soft  # 替代原来的 y_onehot
             y_cond = self.y_embed_latent(y_onehot)  # [B, d_model]
         else:
             y_cond = None
@@ -1045,8 +1045,8 @@ class LatentGatedDualVAE(nn.Module):
 
             epsilon = 0.1
             y_onehot = F.one_hot(y, num_classes=self.num_classes).float()
-            y_soft = y_onehot * (1 - epsilon) + (epsilon / self.num_classes)
-            y_onehot = y_soft  # 替代原来的 y_onehot
+            # y_soft = y_onehot * (1 - epsilon) + (epsilon / self.num_classes)
+            # y_onehot = y_soft  # 替代原来的 y_onehot
         else:
             y_onehot = None
         recon = self.decoder(z_full, y_onehot=y_onehot)
@@ -1170,12 +1170,12 @@ class LatentGatedDualVAE(nn.Module):
                 z_full = torch.cat([z_g_mix, z_c_mix], dim=1)
 
             # 6. 拼接并解码
-            # y_onehot = F.one_hot(y_min, num_classes=self.num_classes).float()
+            y_onehot = F.one_hot(y_min, num_classes=self.num_classes).float()
             epsilon = 0.1  # 平滑因子
-            y_soft = torch.full((B, self.num_classes), epsilon / self.num_classes, device=device)
-            y_soft.scatter_(1, y_min.unsqueeze(1), 1.0 - epsilon + (epsilon / self.num_classes))
-
-            y_onehot = y_soft  # 替代原来的 y_onehot
+            # y_soft = torch.full((B, self.num_classes), epsilon / self.num_classes, device=device)
+            # y_soft.scatter_(1, y_min.unsqueeze(1), 1.0 - epsilon + (epsilon / self.num_classes))
+            #
+            # y_onehot = y_soft  # 替代原来的 y_onehot
             x_gen = self.decoder(z_full, y_onehot=y_onehot)
 
             return x_gen
