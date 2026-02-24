@@ -573,7 +573,7 @@ class LGDVAEPipeline:
         from tsml_eval._wip.rt.transformations.collection.imbalance.LGD_VAE.src.nn.pl_model import \
             train_and_eval_classifier
         import gc
-        if self.mean_ and self.std_:
+        if self.mean_ is not None and self.std_ is not None:
             X_tr = X_tr * self.std_ + self.mean_
         skf = StratifiedKFold(n_splits=k_folds, shuffle=True, random_state=42)
         ckpt_scores = {}
