@@ -1144,10 +1144,16 @@ class LatentGatedDualVAE(nn.Module):
 
             # 1. 强制 Label 为少数类
             y_min = torch.full((B,), self.minority_class_id, device=device, dtype=torch.long)
+            # normalize each sample independently to prevent scale issues in interpolation
+            means = x_min.mean(dim=2, keepdim=True)
+            stds = x_min.std(dim=2, keepdim=True)
+
+            # 逐样本标准化
+            x_norm = (x_min- means) / (stds + 1e-8)
 
             # 2. 编码得到 Latent 分布
             # 注意：这里我们拿到的 mu 和 logvar 是这一批样本的
-            _, mu_g, logvar_g, mu_c, logvar_c = self.encode(x_min, y=y_min)
+            _, mu_g, logvar_g, mu_c, logvar_c = self.encode(x_norm, y=y_min)
 
             # 3. 重参数化得到 z
             z_g = self.reparameterize(mu_g, logvar_g)
@@ -1160,6 +1166,8 @@ class LatentGatedDualVAE(nn.Module):
             lam = torch.distributions.Beta(alpha, alpha).sample((B, 1)).to(device)
             z_g_mix = lam * z_g + (1 - lam) * z_g[perm]
             z_c_mix = lam * z_c + (1 - lam) * z_c[perm]
+            means_perm = lam * means + (1 - lam) * means[perm]
+            stds_perm = lam * stds + (1 - lam) * stds[perm]
             use_gate = True
             if self.z_g_maj_ema_inited and use_gate:
                 z_g_maj = self.z_g_maj_mean
@@ -1177,6 +1185,9 @@ class LatentGatedDualVAE(nn.Module):
             #
             # y_onehot = y_soft  # 替代原来的 y_onehot
             x_gen = self.decoder(z_full, y_onehot=y_onehot)
+            #
+            # 反标准化
+            x_gen = x_gen * stds_perm + means_perm
 
             return x_gen
     # @torch.no_grad()

@@ -619,6 +619,9 @@ def train_and_eval_classifier(train_data, train_labels, test_data, test_labels, 
     temp_dir = tempfile.mkdtemp()
 
     # 2. 准备数据
+    # normalisation
+    train_data = (train_data - train_data.mean(dim=0)) / (train_data.std(dim=0) + 1e-6)
+    test_data = (test_data - test_data.mean(dim=0)) / (test_data.std(dim=0) + 1e-6)
     train_ds = TensorDataset(train_data, train_labels)
     test_ds = TensorDataset(test_data, test_labels)
     train_loader = DataLoader(train_ds, batch_size=32, shuffle=True)

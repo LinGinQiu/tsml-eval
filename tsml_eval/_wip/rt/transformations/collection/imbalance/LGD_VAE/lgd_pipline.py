@@ -573,7 +573,8 @@ class LGDVAEPipeline:
         from tsml_eval._wip.rt.transformations.collection.imbalance.LGD_VAE.src.nn.pl_model import \
             train_and_eval_classifier
         import gc
-
+        if self.mean_ and self.std_:
+            X_tr = X_tr * self.std_ + self.mean_
         skf = StratifiedKFold(n_splits=k_folds, shuffle=True, random_state=42)
         ckpt_scores = {}
 
@@ -581,20 +582,16 @@ class LGDVAEPipeline:
             print(f"🧐 Evaluating CKPT: {os.path.basename(path)}")
             temp_vae = Inference.from_checkpoint(path, LitAutoEncoder, device=self.device)
 
-            if self.mean_ is not None and self.std_ is not None:
-                temp_vae.load_zscore_values(mean=self.mean_, std=self.std_)
-
             fold_f1s = []
 
             for fold, (train_idx, val_idx) in enumerate(skf.split(X_tr, y_tr)):
                 # 1. 提取训练折并转为原始量级 (使用 .copy() 确保安全)
-                x_train_fold_raw = temp_vae._invert_zscore_numpy(X_tr[train_idx].copy())
+                x_train_fold = X_tr[train_idx]
                 y_train_fold = y_tr[train_idx]
 
                 # 2. 准备生成用的输入 (必须是归一化后的，因为 VAE Encoder 见过的是归一化分布)
-                # Inference 内部会自动处理 apply_zscore，所以传入 raw 即可
                 x_min_raw = torch.from_numpy(
-                    x_train_fold_raw[y_train_fold == self.cfg.model.minority_class_id]).float().to(self.device)
+                    x_train_fold[y_train_fold == self.cfg.model.minority_class_id]).float().to(self.device)
 
                 # 3. 生成 9 倍新样本 (Inference 会自动反归一化回原始量级)
                 with torch.no_grad():
@@ -605,12 +602,12 @@ class LGDVAEPipeline:
                     x_gen = temp_vae.generate_vae_prior(x_min_raw_expanded, alpha=0.5)
                     print('   Generated samples shape:', x_gen.shape)
                 # 4. 提取并转换验证折量级
-                x_val_raw = temp_vae._invert_zscore_numpy(X_tr[val_idx].copy())
+                x_val_raw = X_tr[val_idx]
                 y_val_fold = y_tr[val_idx]
 
                 # 5. 构建统一原始量级的增强训练集
                 # 将 numpy 的原始训练折转为 tensor 并移至设备
-                x_train_tensor = torch.from_numpy(x_train_fold_raw).float().to(self.device)
+                x_train_tensor = torch.from_numpy(x_train_fold).float().to(self.device)
                 x_combined = torch.cat([x_train_tensor, x_gen], dim=0)
 
                 y_gen = torch.full((x_gen.size(0),), self.cfg.model.minority_class_id, device=self.device)
@@ -656,22 +653,37 @@ class LGDVAEPipeline:
         """
         cfg = self.cfg
         dataset_name = cfg.data.dataset_name
-        X_train_maj = X_tr[y_tr != cfg.model.minority_class_id]
-        X_train_min = X_tr[y_tr == cfg.model.minority_class_id]
-        normalizer_maj = ZScoreNormalizer().fit(X_train_maj)
-        self.normalizer = ZScoreNormalizer().fit(X_train_min)
-        print(f"dataset maj mean: {normalizer_maj.mean_} and std: {normalizer_maj.std_}")
-        stats_dir = os.path.join(cfg.paths.work_root, "stats")
-        os.makedirs(stats_dir, exist_ok=True)
-        np.savez(os.path.join(stats_dir, f"{dataset_name}_zscore.npz"),
-                 mean=self.normalizer.mean_, std=self.normalizer.std_)
-        self.mean_ = self.normalizer.mean_
-        self.std_ = self.normalizer.std_
-        print(f"dataset mean: {self.normalizer.mean_} and std: {self.normalizer.std_}")
-        X_tr[y_tr != cfg.model.minority_class_id] = normalizer_maj.transform(X_tr[y_tr != cfg.model.minority_class_id])
-        X_tr[y_tr == cfg.model.minority_class_id] = self.normalizer.transform(X_tr[y_tr == cfg.model.minority_class_id])
+        # X_train_maj = X_tr[y_tr != cfg.model.minority_class_id]
+        # X_train_min = X_tr[y_tr == cfg.model.minority_class_id]
+        means = X_tr.mean(axis=2, keepdims=True)  # 得到 (n_sample, 1, 1)
+        stds = X_tr.std(axis=2, keepdims=True)  # 得到 (n_sample, 1, 1)
+        X_norm = (X_tr - means) / (stds + 1e-8)
+
+        print(f"X_norm shape: {X_norm.shape}")
+        # 验证：随机选一个样本看均值是否为 0
+        print(f"Sample 0 mean: {X_norm[0, 0, :].mean():.4f}")
+        # normalizer_maj = ZScoreNormalizer().fit(X_train_maj)
+        # self.normalizer = ZScoreNormalizer().fit(X_train_min)
+        # print(f"dataset maj mean: {normalizer_maj.mean_} and std: {normalizer_maj.std_}")
+        # stats_dir = os.path.join(cfg.paths.work_root, "stats")
+        # os.makedirs(stats_dir, exist_ok=True)
+        # np.savez(os.path.join(stats_dir, f"{dataset_name}_zscore.npz"),
+        #          mean=self.normalizer.mean_, std=self.normalizer.std_)
+
+        # print(f"dataset mean: {self.normalizer.mean_} and std: {self.normalizer.std_}")
+        # X_tr[y_tr != cfg.model.minority_class_id] = normalizer_maj.transform(X_tr[y_tr != cfg.model.minority_class_id])
+        # X_tr[y_tr == cfg.model.minority_class_id] = self.normalizer.transform(X_tr[y_tr == cfg.model.minority_class_id])
+
+        X_tr = X_norm
+        minority_mask = (y_tr == cfg.model.minority_class_id)
+        self.mean_ = means
+        self.std_ = stds
+
+        # self.mean_ = self.normalizer.mean_
+        # self.std_ = self.normalizer.std_
         if X_te is not None and y_te is not None:
-            X_te = self.normalizer.transform(X_te)
+            # X_te = self.normalizer.transform(X_te)
+            X_te = (X_te - X_te.mean(axis=2, keepdims=True)) / (X_te.std(axis=2, keepdims=True) + 1e-8)
         # prerebalance use smote
 
         # 2) DataLoader + Dataset
@@ -756,10 +768,6 @@ class LGDVAEPipeline:
                     strict=False,
                 )
                 print("load successfully!")
-
-                if self.mean_ is not None and self.std_ is not None:
-                    print(f"[LGDVAEPipeline] Loading mean and std: mean: {self.mean_}, std: {self.std_}")
-                    self.infer.load_zscore_values(mean=self.mean_, std=self.std_)
                 return self
 
             except Exception as e:
@@ -837,10 +845,6 @@ class LGDVAEPipeline:
         #             device=self.device,
         #             strict=False,
         #         )
-        if self.mean_ and self.std_:
-            print(f"[LGDVAEPipeline] Loading mean and std: ")
-            self.infer.load_zscore_values(mean=self.mean_, std=self.std_)
-            print(f"[LGDVAEPipeline] Loaded mean and std: {self.infer.mean_, self.infer.std_}")
         return self
 
 

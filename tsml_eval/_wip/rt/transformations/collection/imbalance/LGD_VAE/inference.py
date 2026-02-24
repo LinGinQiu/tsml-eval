@@ -96,49 +96,46 @@ class Inference:
         self.model.to(self.device)
 
         self.mean_, self.std_ = None, None
-
-
-
-    # -----------------------------
-    # Z-score utilities and helpers
-    # -----------------------------
-    def load_zscore_stats(self, stats_path: str) -> tuple[Tensor, Tensor]:
-        """Load train z-score stats and ensure float32 dtype for MPS compatibility."""
-        obj = np.load(stats_path)
-        mean_np = obj["mean"]
-        std_np = obj["std"]
-        mean = torch.from_numpy(mean_np).float().to(self.device)
-        std = torch.from_numpy(std_np).float().to(self.device)
-        return mean, std
-
-    def load_zscore_values(self, mean:np.array, std:np.array):
-        mean = torch.from_numpy(mean).float().to(self.device)
-        std = torch.from_numpy(std).float().to(self.device)
-        self.mean_, self.std_ = mean, std
-        return self
-
-
-    @staticmethod
-    def apply_zscore(x: Tensor, mean: Tensor, std: Tensor, eps: float = 1e-8) -> Tensor:
-        """Apply z-score normalization: (x - mean) / (std + eps). Shapes must be broadcastable.
-        x: [B,C,T], mean/std: typically [1,C,1].
-        """
-        return (x - mean) / (std + eps)
-
-    @staticmethod
-    def invert_zscore(x_norm: Tensor, mean: Tensor, std: Tensor) -> Tensor:
-        """Invert z-score normalization: x_norm * std + mean. Shapes must be broadcastable."""
-        return x_norm * std + mean
-
-    def _invert_zscore_numpy(self, x_norm):
-        assert self.mean_ is not None and self.std_ is not None
-        if isinstance(x_norm, np.ndarray):
-            mean = self.mean_.cpu().numpy()
-            std = self.std_.cpu().numpy()
-            return x_norm * std + mean
-        else:
-            """Invert z-score normalization: x_norm * std + mean. Shapes must be broadcastable."""
-            return x_norm * self.std_ + self.mean_
+    # # -----------------------------
+    # # Z-score utilities and helpers
+    # # -----------------------------
+    # def load_zscore_stats(self, stats_path: str) -> tuple[Tensor, Tensor]:
+    #     """Load train z-score stats and ensure float32 dtype for MPS compatibility."""
+    #     obj = np.load(stats_path)
+    #     mean_np = obj["mean"]
+    #     std_np = obj["std"]
+    #     mean = torch.from_numpy(mean_np).float().to(self.device)
+    #     std = torch.from_numpy(std_np).float().to(self.device)
+    #     return mean, std
+    #
+    # def load_zscore_values(self, mean:np.array, std:np.array):
+    #     mean = torch.from_numpy(mean).float().to(self.device)
+    #     std = torch.from_numpy(std).float().to(self.device)
+    #     self.mean_, self.std_ = mean, std
+    #     return self
+    #
+    #
+    # @staticmethod
+    # def apply_zscore(x: Tensor, mean: Tensor, std: Tensor, eps: float = 1e-8) -> Tensor:
+    #     """Apply z-score normalization: (x - mean) / (std + eps). Shapes must be broadcastable.
+    #     x: [B,C,T], mean/std: typically [1,C,1].
+    #     """
+    #     return (x - mean) / (std + eps)
+    #
+    # @staticmethod
+    # def invert_zscore(x_norm: Tensor, mean: Tensor, std: Tensor) -> Tensor:
+    #     """Invert z-score normalization: x_norm * std + mean. Shapes must be broadcastable."""
+    #     return x_norm * std + mean
+    #
+    # def _invert_zscore_numpy(self, x_norm):
+    #     assert self.mean_ is not None and self.std_ is not None
+    #     if isinstance(x_norm, np.ndarray):
+    #         mean = self.mean_.cpu().numpy()
+    #         std = self.std_.cpu().numpy()
+    #         return x_norm * std + mean
+    #     else:
+    #         """Invert z-score normalization: x_norm * std + mean. Shapes must be broadcastable."""
+    #         return x_norm * self.std_ + self.mean_
 
     def feature_extract(
         self,
@@ -163,72 +160,79 @@ class Inference:
         """
         lite_model = getattr(self.model, "model", self.model)
         if hasattr(lite_model, "generate_vae_prior"):
-            if self.mean_ and self.std_:
-                x_min = self.apply_zscore(x_min, self.mean_, self.std_)
-            return self.invert_zscore(
-                lite_model.generate_vae_prior(x_min.to(self.device),alpha=alpha),
-                mean=self.mean_,
-                std=self.std_
-            )
+
+            return  lite_model.generate_vae_prior(x_min.to(self.device),alpha=alpha)
+
         raise AttributeError("Underlying model does not implement `generate_from_pair`.")
+    # def generate_vae_prior(
+    #     self,x_min: Tensor,alpha: Optional[float] = None,) -> Tensor:
+    #     """
+    #     use vae prior to interpret the latent embedding to generate new samples
+    #     """
+    #     lite_model = getattr(self.model, "model", self.model)
+    #     if hasattr(lite_model, "generate_vae_prior"):
+    #         if self.mean_ and self.std_:
+    #             x_min = self.apply_zscore(x_min, self.mean_, self.std_)
+    #         return self.invert_zscore(
+    #             lite_model.generate_vae_prior(x_min.to(self.device),alpha=alpha),
+    #             mean=self.mean_,
+    #             std=self.std_
+    #         )
+    #     raise AttributeError("Underlying model does not implement `generate_from_pair`.")
 
-    def generate_mix_pair(self, x_min: Tensor, x_maj: Tensor, use_y:bool=False,) -> Tensor:
-        """
-        方式二：给一条 minority 序列和一条 majority 序列，生成门控混合版。
-        要求底层模型（或其 .model）实现 `generate_from_pair` 方法。
-        """
-        lite_model = getattr(self.model, "model", self.model)
-        if hasattr(lite_model, "generate_from_pair"):
-            if self.mean_ and self.std_:
-                x_min = self.apply_zscore(x_min, self.mean_, self.std_)
-                x_maj = self.apply_zscore(x_maj, self.mean_, self.std_)
-            return self.invert_zscore(
-                lite_model.generate_from_pair(x_min.to(self.device), x_maj.to(self.device), use_y=use_y),
-                mean = self.mean_,
-                std = self.std_
-            )
-        raise AttributeError("Underlying model does not implement `generate_from_pair`.")
-
-    def generate_smote_latent(
-        self,
-        x_min1: Tensor,
-        x_min2: Tensor,
-        alpha: Optional[float] = None,
-        num_samples: int = 1,
-    ) -> Tensor:
-        """
-        方式三：在少数类 latent 空间做 SMOTE 风格的插值生成。
-        要求底层模型（或其 .model）实现 `generate_from_latent_smote` 方法。
-        """
-        lite_model = getattr(self.model, "model", self.model)
-        if hasattr(lite_model, "generate_from_latent_smote"):
-            if self.mean_ and self.std_:
-                x_min1 = self.apply_zscore(x_min1, self.mean_, self.std_)
-                x_min2 = self.apply_zscore(x_min2, self.mean_, self.std_)
-            return self.invert_zscore(
-                lite_model.generate_from_latent_smote(
-                x_min1.to(self.device),
-                x_min2.to(self.device),
-                alpha=alpha,
-                num_samples=num_samples,),
-                mean = self.mean_,
-                std = self.std_
-            )
-        raise AttributeError("Underlying model does not implement `generate_from_latent_smote`.")
-
-    def generate_from_prototype(
-        self,
-            x_min: Tensor) -> Tensor:
-        """
-
-        """
-        lite_model = getattr(self.model, "model", self.model)
-        if hasattr(lite_model, "generate_from_prototype"):
-            if self.mean_ and self.std_:
-                x_min = self.apply_zscore(x_min, self.mean_, self.std_)
-            return self.invert_zscore(
-                lite_model.generate_from_prototype(x_min.to(self.device)),
-                mean=self.mean_,
-                std=self.std_
-            )
-        raise AttributeError("Underlying model does not implement `generate_from_pair`.")
+    # def generate_mix_pair(self, x_min: Tensor, x_maj: Tensor, use_y:bool=False,) -> Tensor:
+    #     """
+    #     方式二：给一条 minority 序列和一条 majority 序列，生成门控混合版。
+    #     要求底层模型（或其 .model）实现 `generate_from_pair` 方法。
+    #     """
+    #     lite_model = getattr(self.model, "model", self.model)
+    #     if hasattr(lite_model, "generate_from_pair"):
+    #         if self.mean_ and self.std_:
+    #             x_min = self.apply_zscore(x_min, self.mean_, self.std_)
+    #             x_maj = self.apply_zscore(x_maj, self.mean_, self.std_)
+    #         return lite_model.generate_from_pair(x_min.to(self.device), x_maj.to(self.device), use_y=use_y),
+    #
+    #     raise AttributeError("Underlying model does not implement `generate_from_pair`.")
+    # def generate_smote_latent(
+    #     self,
+    #     x_min1: Tensor,
+    #     x_min2: Tensor,
+    #     alpha: Optional[float] = None,
+    #     num_samples: int = 1,
+    # ) -> Tensor:
+    #     """
+    #     方式三：在少数类 latent 空间做 SMOTE 风格的插值生成。
+    #     要求底层模型（或其 .model）实现 `generate_from_latent_smote` 方法。
+    #     """
+    #     lite_model = getattr(self.model, "model", self.model)
+    #     if hasattr(lite_model, "generate_from_latent_smote"):
+    #         if self.mean_ and self.std_:
+    #             x_min1 = self.apply_zscore(x_min1, self.mean_, self.std_)
+    #             x_min2 = self.apply_zscore(x_min2, self.mean_, self.std_)
+    #         return self.invert_zscore(
+    #             lite_model.generate_from_latent_smote(
+    #             x_min1.to(self.device),
+    #             x_min2.to(self.device),
+    #             alpha=alpha,
+    #             num_samples=num_samples,),
+    #             mean = self.mean_,
+    #             std = self.std_
+    #         )
+    #     raise AttributeError("Underlying model does not implement `generate_from_latent_smote`.")
+    #
+    # def generate_from_prototype(
+    #     self,
+    #         x_min: Tensor) -> Tensor:
+    #     """
+    #
+    #     """
+    #     lite_model = getattr(self.model, "model", self.model)
+    #     if hasattr(lite_model, "generate_from_prototype"):
+    #         if self.mean_ and self.std_:
+    #             x_min = self.apply_zscore(x_min, self.mean_, self.std_)
+    #         return self.invert_zscore(
+    #             lite_model.generate_from_prototype(x_min.to(self.device)),
+    #             mean=self.mean_,
+    #             std=self.std_
+    #         )
+    #     raise AttributeError("Underlying model does not implement `generate_from_pair`.")
