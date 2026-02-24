@@ -619,8 +619,6 @@ def train_and_eval_classifier(train_data, train_labels, test_data, test_labels, 
     # 2. 准备数据
     # 注意：这里的 normalisation 是针对评估阶段的分类器而言的，确保它们在同一分布上训练和测试
     # 检查数据是否为原始数据
-    print('Before normalization:')
-    print(train_data.mean())
     # normalisation
     train_data = (train_data - train_data.mean(dim=0)) / (train_data.std(dim=0) + 1e-6)
     test_data = (test_data - test_data.mean(dim=0)) / (test_data.std(dim=0) + 1e-6)
