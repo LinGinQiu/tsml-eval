@@ -656,7 +656,11 @@ class LGDVAEPipeline:
         """
         cfg = self.cfg
         dataset_name = cfg.data.dataset_name
-        self.normalizer = ZScoreNormalizer().fit(X_tr)
+        X_train_maj = X_tr[y_tr != cfg.model.minority_class_id]
+        X_train_min = X_tr[y_tr == cfg.model.minority_class_id]
+        normalizer_maj = ZScoreNormalizer().fit(X_train_maj)
+        self.normalizer = ZScoreNormalizer().fit(X_train_min)
+        print(f"dataset maj mean: {normalizer_maj.mean_} and std: {normalizer_maj.std_}")
         stats_dir = os.path.join(cfg.paths.work_root, "stats")
         os.makedirs(stats_dir, exist_ok=True)
         np.savez(os.path.join(stats_dir, f"{dataset_name}_zscore.npz"),
@@ -664,7 +668,8 @@ class LGDVAEPipeline:
         self.mean_ = self.normalizer.mean_
         self.std_ = self.normalizer.std_
         print(f"dataset mean: {self.normalizer.mean_} and std: {self.normalizer.std_}")
-        X_tr = self.normalizer.transform(X_tr)
+        X_tr[y_tr != cfg.model.minority_class_id] = normalizer_maj.transform(X_tr[y_tr != cfg.model.minority_class_id])
+        X_tr[y_tr == cfg.model.minority_class_id] = self.normalizer.transform(X_tr[y_tr == cfg.model.minority_class_id])
         if X_te is not None and y_te is not None:
             X_te = self.normalizer.transform(X_te)
         # prerebalance use smote
