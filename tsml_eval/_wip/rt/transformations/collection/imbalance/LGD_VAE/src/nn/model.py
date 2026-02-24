@@ -1166,8 +1166,10 @@ class LatentGatedDualVAE(nn.Module):
             lam = torch.distributions.Beta(alpha, alpha).sample((B, 1)).to(device)
             z_g_mix = lam * z_g + (1 - lam) * z_g[perm]
             z_c_mix = lam * z_c + (1 - lam) * z_c[perm]
-            means_perm = lam * means + (1 - lam) * means[perm]
-            stds_perm = lam * stds + (1 - lam) * stds[perm]
+            lam_expanded = lam.view(B, 1, 1)
+
+            means_perm = lam_expanded * means + (1 - lam_expanded) * means[perm]
+            stds_perm = lam_expanded * stds + (1 - lam_expanded) * stds[perm]
             use_gate = True
             if self.z_g_maj_ema_inited and use_gate:
                 z_g_maj = self.z_g_maj_mean

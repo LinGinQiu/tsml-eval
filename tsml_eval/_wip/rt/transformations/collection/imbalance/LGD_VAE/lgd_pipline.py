@@ -362,7 +362,7 @@ class LGDVAEPipeline:
             augmentation_ratio=0.0,
             rebalance=False,
         )
-            print("use train data for evaluation since test data is not provided.")
+
         print(
             f"{datetime.now()} : Train size: {len(train_dataset)}; "
             f"Eval size: {len(eval_dataset)if eval_dataset else None}."
@@ -651,6 +651,10 @@ class LGDVAEPipeline:
         如果不传 X_tr/y_tr/X_te/y_te，则会自动按照 cfg 从 UCR 目录读取；
         如果你已经在外面自己做好了 split，就可以把 numpy 数组直接传进来。
         """
+        if X_te is None:
+            print("use train data for evaluation since test data is not provided.")
+            X_te = X_tr
+            y_te = y_tr
         cfg = self.cfg
         dataset_name = cfg.data.dataset_name
         # X_train_maj = X_tr[y_tr != cfg.model.minority_class_id]
@@ -681,9 +685,7 @@ class LGDVAEPipeline:
 
         # self.mean_ = self.normalizer.mean_
         # self.std_ = self.normalizer.std_
-        if X_te is not None and y_te is not None:
-            # X_te = self.normalizer.transform(X_te)
-            X_te = (X_te - X_te.mean(axis=2, keepdims=True)) / (X_te.std(axis=2, keepdims=True) + 1e-8)
+
         # prerebalance use smote
 
         # 2) DataLoader + Dataset

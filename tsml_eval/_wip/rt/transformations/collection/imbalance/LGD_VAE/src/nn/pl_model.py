@@ -479,10 +479,8 @@ class LitAutoEncoder(pl.LightningModule):
         res_gen = res_f1
         from tsml_eval._wip.rt.transformations.collection.imbalance.LGD_VAE.inference import Inference
         inference = Inference
-        mean = torch.from_numpy(self.mean_).float().to(device)
-        std = torch.from_numpy(self.std_).float().to(device)
-        all_x_train = inference.invert_zscore(all_x_train, mean, std)
-        all_x_test = inference.invert_zscore(all_x_test, mean, std)
+        all_x_train = all_x_train
+        all_x_test = all_x_test
         # 3. 每隔 N 个 Epoch 执行分类器评估
         if self.current_epoch >= 0:
             metrics = train_and_eval_classifier(
@@ -619,6 +617,10 @@ def train_and_eval_classifier(train_data, train_labels, test_data, test_labels, 
     temp_dir = tempfile.mkdtemp()
 
     # 2. 准备数据
+    # 注意：这里的 normalisation 是针对评估阶段的分类器而言的，确保它们在同一分布上训练和测试
+    # 检查数据是否为原始数据
+    print('Before normalization:')
+    print(train_data.mean())
     # normalisation
     train_data = (train_data - train_data.mean(dim=0)) / (train_data.std(dim=0) + 1e-6)
     test_data = (test_data - test_data.mean(dim=0)) / (test_data.std(dim=0) + 1e-6)
