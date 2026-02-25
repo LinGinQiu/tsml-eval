@@ -666,6 +666,7 @@ def train_and_eval_classifier(train_data, train_labels, test_data, test_labels, 
         if best_model_path:
             # 2. 重新加载最佳权重
             best_model = TSQualityClassifier.load_from_checkpoint(
+                best_model_path,
                 input_channels=input_chans,
                 num_classes=2,
                 lr=1e-3
