@@ -138,8 +138,8 @@ def submit_jobs():
         os.makedirs(log_dir, exist_ok=True)
 
         for i, ckpt_file in enumerate(files):
-            if i > 2:
-                continue
+            # if i > 2:
+            #     continue
             ckpt_full_path = os.path.join(ckpt_dir, ckpt_file)
             ckpt_name_clean = ckpt_file.replace(".ckpt", "").replace("=", "_")
 
