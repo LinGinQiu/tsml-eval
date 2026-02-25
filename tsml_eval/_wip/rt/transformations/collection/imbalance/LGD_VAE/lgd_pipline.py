@@ -826,7 +826,7 @@ class LGDVAEPipeline:
         print(f'Total CKPTs found in {ckpt_dir}: {len(all_ckpt_paths)}')
         for path in all_ckpt_paths:
             print(f' - {os.path.basename(path)}')
-        best_path = self._tournament_selection(ckpt_paths, X_tr, y_tr)
+        best_path = self._tournament_selection(all_ckpt_paths, X_tr, y_tr)
 
         # 3. 加载最终胜出的模型
         print(f"🥇 Tournament winner: {best_path}")
