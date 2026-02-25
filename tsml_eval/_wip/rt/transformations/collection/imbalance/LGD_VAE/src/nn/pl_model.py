@@ -24,8 +24,11 @@ class TSQualityClassifier(pl.LightningModule):
             nn.ReLU(),
             nn.AdaptiveAvgPool1d(1)
         )
-        self.classifier = nn.Linear(128, num_classes)
-
+        self.classifier = nn.Sequential(
+            nn.Linear(128,  64),
+            nn.ReLU(),
+            nn.Linear(64, num_classes)
+        )
         # 初始化评估指标
         # num_classes=2 时，task 可以设为 'multiclass' 也可以设为 'binary'
         # 这里用 multiclass 确保通用性
@@ -662,13 +665,9 @@ def train_and_eval_classifier(train_data, train_labels, test_data, test_labels, 
 
         if best_model_path:
             # 2. 重新加载最佳权重
-            best_model = TimesNetQualityClassifier.load_from_checkpoint(
-                best_model_path,
-                input_channels=input_chans,  # 必须传入 init 参数
-                seq_len=seq_len,
+            best_model = TSQualityClassifier.load_from_checkpoint(
+                input_channels=input_chans,
                 num_classes=2,
-                d_model=64,
-                top_k=3,
                 lr=1e-3
             )
 
