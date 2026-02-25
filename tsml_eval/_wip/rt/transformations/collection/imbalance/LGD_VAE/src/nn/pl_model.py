@@ -7,79 +7,67 @@ import torchmetrics
 from typing import Tuple
 from torchmetrics import Accuracy, F1Score, Recall
 from TimesNet.models import TimesNet
-# class TSQualityClassifier(pl.LightningModule):
-#     def __init__(self, input_channels, num_classes=2, lr=1e-3):
-#         super().__init__()
-#         self.save_hyperparameters()
-#         self.lr = lr
-#
-#         # 定义特征提取器
-#         self.features = nn.Sequential(
-#             nn.Conv1d(input_channels, 64, kernel_size=5, padding=2),
-#             nn.BatchNorm1d(64),
-#             nn.ReLU(),
-#             nn.MaxPool1d(2),
-#             nn.Conv1d(64, 128, kernel_size=3, padding=1),
-#             nn.BatchNorm1d(128),
-#             nn.ReLU(),
-#             nn.AdaptiveAvgPool1d(1)
-#         )
-#         self.classifier = nn.Linear(128, num_classes)
-#
-#         # 初始化评估指标
-#         # num_classes=2 时，task 可以设为 'multiclass' 也可以设为 'binary'
-#         # 这里用 multiclass 确保通用性
-#         task = "multiclass"
-#         self.acc_metric = Accuracy(task=task, num_classes=num_classes)
-#         self.f1_metric = Accuracy(task=task, num_classes=num_classes, average='macro')  # 也就是 Macro-F1 的逻辑
-#         self.f1_macro = F1Score(task=task, num_classes=num_classes, average='macro')
-#
-#         # G-Means 是每个类别召回率（Recall）的几何平均值
-#         # 我们先记录每个类的 Recall
-#         self.recall_per_class = Recall(task=task, num_classes=num_classes, average='none')
-#
-#     def forward(self, x):
-#         if x.ndim == 2:  # 如果是 (Batch, Length) 自动补齐通道维度
-#             x = x.unsqueeze(1)
-#         elif x.shape[1] != self.hparams.input_channels:
-#             x = x.transpose(1, 2)
-#
-#         x = self.features(x)
-#         x = torch.flatten(x, 1)
-#         return self.classifier(x)
-#
-#     def training_step(self, batch, batch_idx):
-#         x, y = batch
-#         logits = self(x)
-#         loss = F.cross_entropy(logits, y)
-#         return loss
-#
-#     def validation_step(self, batch, batch_idx):
-#         x, y = batch
-#         logits = self(x)
-#         loss = F.cross_entropy(logits, y)
-#         preds = torch.argmax(logits, dim=1)
-#
-#         # 计算指标
-#         acc = self.acc_metric(preds, y)
-#         f1 = self.f1_macro(preds, y)
-#
-#         # 计算 G-Means: 先拿所有类的 Recall，然后求乘积再开方
-#         recalls = self.recall_per_class(preds, y)
-#         g_means = torch.prod(recalls).pow(1 / len(recalls))
-#
-#         # 日志记录，这样你在训练生成模型时可以拿到这些结果
-#         metrics = {
-#             "val_loss": loss,
-#             "val_acc": acc,
-#             "val_f1_macro": f1,
-#             "val_g_means": g_means
-#         }
-#         self.log_dict(metrics, prog_bar=True)
-#         return metrics
-#
-#     def configure_optimizers(self):
-#         return torch.optim.Adam(self.parameters(), lr=self.lr)
+class TSQualityClassifier(pl.LightningModule):
+    def __init__(self, input_channels, num_classes=2, lr=1e-3):
+        super().__init__()
+        self.save_hyperparameters()
+        self.lr = lr
+
+        # 定义特征提取器
+        self.features = nn.Sequential(
+            nn.Conv1d(input_channels, 64, kernel_size=5, padding=2),
+            nn.BatchNorm1d(64),
+            nn.ReLU(),
+            nn.MaxPool1d(2),
+            nn.Conv1d(64, 128, kernel_size=3, padding=1),
+            nn.BatchNorm1d(128),
+            nn.ReLU(),
+            nn.AdaptiveAvgPool1d(1)
+        )
+        self.classifier = nn.Linear(128, num_classes)
+
+        # 初始化评估指标
+        # num_classes=2 时，task 可以设为 'multiclass' 也可以设为 'binary'
+        # 这里用 multiclass 确保通用性
+        task = "multiclass"
+        self.acc_metric = Accuracy(task=task, num_classes=num_classes)
+        self.f1_macro = F1Score(task=task, num_classes=num_classes, average='macro')
+        self.recall_per_class = Recall(task=task, num_classes=num_classes, average='none')
+
+
+    def forward(self, x):
+        if x.ndim == 2:  # 如果是 (Batch, Length) 自动补齐通道维度
+            x = x.unsqueeze(1)
+        elif x.shape[1] != self.hparams.input_channels:
+            x = x.transpose(1, 2)
+
+        x = self.features(x)
+        x = torch.flatten(x, 1)
+        return self.classifier(x)
+
+    def training_step(self, batch, batch_idx):
+        x, y = batch
+        logits = self(x)
+        loss = F.cross_entropy(logits, y)
+        return loss
+
+    def validation_step(self, batch, batch_idx):
+        x, y = batch
+        logits = self(x)
+        loss = F.cross_entropy(logits, y)
+        preds = torch.argmax(logits, dim=1)
+
+        acc = self.acc_metric(preds, y)
+        f1 = self.f1_macro(preds, y)
+        rec = self.recall_per_class(preds, y)
+        g_means = torch.prod(rec).pow(1 / len(rec))
+
+        metrics = {"val_loss": loss, "val_acc": acc, "val_f1_macro": f1, "val_g_means": g_means}
+        self.log_dict(metrics, prog_bar=True, sync_dist=True)
+        return metrics
+
+    def configure_optimizers(self):
+        return torch.optim.Adam(self.parameters(), lr=self.lr)
 
 
 # define the LightningModule
@@ -629,15 +617,20 @@ def train_and_eval_classifier(train_data, train_labels, test_data, test_labels, 
 
     # 3. 初始化分类器 (使用 TimesNetQualityClassifier)
     # 这里的参数根据你的数据情况调整
-    clf = TimesNetQualityClassifier(
+    # clf = TimesNetQualityClassifier(
+    #     input_channels=input_chans,
+    #     seq_len=seq_len,
+    #     num_classes=2,
+    #     d_model=64,
+    #     top_k=3,
+    #     lr=1e-3
+    # )  # 让 Trainer 自己处理设备
+    clf = TSQualityClassifier(
         input_channels=input_chans,
-        seq_len=seq_len,
         num_classes=2,
-        d_model=64,
-        top_k=3,
         lr=1e-3
-    )  # 让 Trainer 自己处理设备
-
+    )
+    # 让 Trainer 自己处理设备
     # 4. 配置 Checkpoint (保持不变)
     checkpoint_callback = pl.callbacks.ModelCheckpoint(
         dirpath=temp_dir,
