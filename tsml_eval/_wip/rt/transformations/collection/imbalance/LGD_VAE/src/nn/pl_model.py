@@ -638,7 +638,7 @@ def train_and_eval_classifier(train_data, train_labels, test_data, test_labels, 
     checkpoint_callback = pl.callbacks.ModelCheckpoint(
         dirpath=temp_dir,
         filename="best_eval",
-        monitor="val_f1_macro",
+        monitor="val_acc",
         mode="max",
         save_top_k=1,
         save_weights_only=True
@@ -646,7 +646,7 @@ def train_and_eval_classifier(train_data, train_labels, test_data, test_labels, 
 
     # 5. Trainer (保持不变)
     eval_trainer = pl.Trainer(
-        max_epochs=30,
+        max_epochs=100,
         accelerator="auto",
         devices=1,
         enable_checkpointing=True,
