@@ -126,7 +126,7 @@ class PrintLossCallback(Callback):
         metrics = trainer.callback_metrics
         epoch = trainer.current_epoch
 
-        recon = metrics.get("train/recon_loss")
+        recon = metrics.get("train_recon_loss")
         kl_g = metrics.get("train/kl_g")
         kl_c = metrics.get("train/kl_c")
         align = metrics.get("train/align_loss")

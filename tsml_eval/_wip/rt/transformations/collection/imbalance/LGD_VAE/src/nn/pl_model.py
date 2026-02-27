@@ -370,7 +370,7 @@ class LitAutoEncoder(pl.LightningModule):
         )
 
         # 6) 各项 raw loss
-        self.log("train/recon_loss", recon_loss, on_step=False, on_epoch=True, sync_dist=True)
+        self.log("train_recon_loss", recon_loss, on_step=False, on_epoch=True, sync_dist=True)
         self.log("train/kl_g", kl_g, on_step=False, on_epoch=True, sync_dist=True)
         self.log("train/kl_c", kl_c, on_step=False, on_epoch=True, sync_dist=True)
         self.log("train/align_loss", align_loss, on_step=False, on_epoch=True, sync_dist=True)
