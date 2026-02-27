@@ -1168,8 +1168,10 @@ class LatentGatedDualVAE(nn.Module):
             z_c_mix = lam * z_c + (1 - lam) * z_c[perm]
             lam_expanded = lam.view(B, 1, 1)
 
-            means_perm = lam_expanded * means + (1 - lam_expanded) * means[perm]
-            stds_perm = lam_expanded * stds + (1 - lam_expanded) * stds[perm]
+            # means_perm = lam_expanded * means + (1 - lam_expanded) * means[perm]
+            # stds_perm = lam_expanded * stds + (1 - lam_expanded) * stds[perm]
+            means_perm = means
+            stds_perm = stds
             use_gate = True
             if self.z_g_maj_ema_inited and use_gate:
                 z_g_maj = self.z_g_maj_mean
