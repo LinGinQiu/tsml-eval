@@ -39,7 +39,7 @@ model:
   in_chans: 1
   embed_dim: 64          # 原 d_model
   depth: 4               # 原 enc_depth
-  num_heads: 6           # 原 n_heads
+  num_heads: 8           # 原 n_heads
   d_hid: 256             # Latents
   latent_dim_global: 32
   latent_dim_class: 32
@@ -48,7 +48,7 @@ model:
   # Decoder
   decoder_embed_dim: 64  # 原 dec_dim
   decoder_depth: 3       # 原 dec_depth
-  decoder_num_heads: 6   # 若无单独 dec_heads 就与 num_heads 一致
+  decoder_num_heads: 8   # 若无单独 dec_heads 就与 num_heads 一致
 
   # Conv1d embedder (由我们在 Embedder 中实现)
   kernel_size: 3         # 原 conv.kernel_size
