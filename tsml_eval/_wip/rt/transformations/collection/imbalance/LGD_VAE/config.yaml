@@ -117,7 +117,7 @@ callbacks:
   early_stopping:
     monitor: "train_recon_loss"
     mode: "min"
-    patience: 10
+    patience: 5
     min_delta: 0.0
     warmup_epochs: 5
 
