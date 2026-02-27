@@ -395,19 +395,20 @@ class LitAutoEncoder(pl.LightningModule):
 
 
     def validation_step(self, batch, batch_idx):
-        if len(batch) == 2:
-            x, y = batch
-        else:
-            x, y = batch, None
-
-        if self.train_data_sample:
-            is_min = (y == self.minority_class_id)
-            is_maj = ~is_min
-            # 必须使用 .detach() 避免计算图积压
-            self.train_data.append({
-                "x_majority": x[is_maj].detach(),
-                "x_minority": x[is_min].detach()
-            })
+        pass
+        # if len(batch) == 2:
+        #     x, y = batch
+        # else:
+        #     x, y = batch, None
+        #
+        # if self.train_data_sample:
+        #     is_min = (y == self.minority_class_id)
+        #     is_maj = ~is_min
+        #     # 必须使用 .detach() 避免计算图积压
+        #     self.train_data.append({
+        #         "x_majority": x[is_maj].detach(),
+        #         "x_minority": x[is_min].detach()
+        #     })
 
 
     def on_validation_epoch_end(self):
@@ -420,7 +421,8 @@ class LitAutoEncoder(pl.LightningModule):
         # 如果你只想采样一次训练集作为 benchmark，保留此 flag
         # 如果希望每轮都刷新，就在末尾把此 flag 设为 True
         # self.train_data_sample = False
-
+        if len(X_majority) is 0 or len(X_minority) is 0:
+            return
         device = X_majority.device
 
         # 2. 划分训练/测试 (如果没有外部验证集)
@@ -620,19 +622,19 @@ def train_and_eval_classifier(train_data, train_labels, test_data, test_labels, 
 
     # 3. 初始化分类器 (使用 TimesNetQualityClassifier)
     # 这里的参数根据你的数据情况调整
-    # clf = TimesNetQualityClassifier(
-    #     input_channels=input_chans,
-    #     seq_len=seq_len,
-    #     num_classes=2,
-    #     d_model=64,
-    #     top_k=3,
-    #     lr=1e-3
-    # )  # 让 Trainer 自己处理设备
-    clf = TSQualityClassifier(
+    clf = TimesNetQualityClassifier(
         input_channels=input_chans,
+        seq_len=seq_len,
         num_classes=2,
+        d_model=64,
+        top_k=3,
         lr=1e-3
-    )
+    )  # 让 Trainer 自己处理设备
+    # clf = TSQualityClassifier(
+    #     input_channels=input_chans,
+    #     num_classes=2,
+    #     lr=1e-3
+    # )
     # 让 Trainer 自己处理设备
     # 4. 配置 Checkpoint (保持不变)
     checkpoint_callback = pl.callbacks.ModelCheckpoint(
@@ -665,10 +667,13 @@ def train_and_eval_classifier(train_data, train_labels, test_data, test_labels, 
 
         if best_model_path:
             # 2. 重新加载最佳权重
-            best_model = TSQualityClassifier.load_from_checkpoint(
+            best_model = TimesNetQualityClassifier.load_from_checkpoint(
                 best_model_path,
                 input_channels=input_chans,
+                seq_len=seq_len,
                 num_classes=2,
+                d_model=64,
+                top_k=3,
                 lr=1e-3
             )
 

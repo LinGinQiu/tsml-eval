@@ -441,21 +441,21 @@ class LGDVAEPipeline:
 
         # 策略 B: 保存“重构质量最高”的模型 (Fidelity Best)
         # 这个模型生成的波形最平滑，最像真实数据
-        callbacks.append(DelayedModelCheckpoint(
-            dirpath=cfg.paths.ckpt_dir,
-            filename="{epoch:02d}-{eval_gen:.4f}",
-            monitor="eval_gen",
-            mode="max",
-            save_top_k=3,
-            warmup_epochs=5,
-            save_last=False
-        ))
+        # callbacks.append(DelayedModelCheckpoint(
+        #     dirpath=cfg.paths.ckpt_dir,
+        #     filename="{epoch:02d}-{eval_gen:.4f}",
+        #     monitor="eval_gen",
+        #     mode="max",
+        #     save_top_k=3,
+        #     warmup_epochs=5,
+        #     save_last=False
+        # ))
         callbacks.append(DelayedModelCheckpoint(
             dirpath=cfg.paths.ckpt_dir,
             filename="{epoch:02d}-{train_loss:.4f}",
             monitor="train_loss",
             mode="min",
-            save_top_k=3,
+            save_top_k=6,
             warmup_epochs=5,
             save_last=False
         ))
