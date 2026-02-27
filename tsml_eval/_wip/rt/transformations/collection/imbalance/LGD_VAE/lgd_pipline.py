@@ -837,16 +837,6 @@ class LGDVAEPipeline:
             device=self.device,
             strict=False,
         )
-        # best_path = trainer.checkpoint_callback.best_model_path
-        # best_score = trainer.checkpoint_callback.best_model_score
-        # print(f"最高 eval_gen score is: {best_score}")
-        # self.infer = Inference.from_checkpoint(
-        #             best_path,
-        #             model_class=LitAutoEncoder,
-        #             model_kwargs=None,
-        #             device=self.device,
-        #             strict=False,
-        #         )
         return self
 
 
