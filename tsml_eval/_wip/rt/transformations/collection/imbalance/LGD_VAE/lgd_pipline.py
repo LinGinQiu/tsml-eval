@@ -455,7 +455,7 @@ class LGDVAEPipeline:
             filename="{epoch:02d}-{train_loss:.4f}",
             monitor="train_loss",
             mode="min",
-            save_top_k=6,
+            save_top_k=3,
             warmup_epochs=5,
             save_last=False
         ))
@@ -623,11 +623,11 @@ class LGDVAEPipeline:
                     device=self.device
                 )
                 print(f'   Fold {fold + 1}/{k_folds} - Metrics: {metrics}')
-                fold_f1s.append(metrics["val_f1_macro"])
+                fold_f1s.append(metrics["val_acc"])
 
             avg_f1 = np.mean(fold_f1s)
             ckpt_scores[path] = avg_f1
-            print(f"   -> Avg Macro-F1: {avg_f1:.4f}")
+            print(f"   -> Avg val_acc: {avg_f1:.4f}")
 
             # 显存清理
             del temp_vae
