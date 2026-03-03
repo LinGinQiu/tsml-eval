@@ -824,6 +824,9 @@ class LGDVAEPipeline:
 
         # 4. 打印结果
         print(f'Total CKPTs found in {ckpt_dir}: {len(all_ckpt_paths)}')
+        print('finish training, exit here')
+        import sys
+        sys.exit(0)
         for path in all_ckpt_paths:
             print(f' - {os.path.basename(path)}')
         best_path = self._tournament_selection(all_ckpt_paths, X_tr, y_tr)
