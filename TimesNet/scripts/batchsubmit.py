@@ -24,7 +24,7 @@ SCRIPT_PATH = f"/home/{USERNAME}/tsml-eval/TimesNet/run.py"
 CONFIG_DIR = f"/home/{USERNAME}/tsml-eval/TimesNet/TSTConfig/"
 DATA_DIR_BASE = f"/scratch/{USERNAME}/Data/imbalanced_9_1/"
 BASE_RESULTS_ROOT = f"/scratch/{USERNAME}/AA/results_TimesNet_MGD_CVAE/"
-CKPT_ROOT = f"/scratch/{USERNAME}/models/MGD_CVAE/checkpoints/"
+CKPT_ROOT = f"/scratch/{USERNAME}/models/MGD_CVAE_v17/checkpoints/"
 
 # ================= ⚙️ 环境与资源配置 =================
 
