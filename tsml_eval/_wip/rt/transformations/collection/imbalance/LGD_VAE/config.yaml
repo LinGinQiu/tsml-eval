@@ -67,7 +67,7 @@ model:
   kl_c_lambda: 0.1         # 类别 KL 系数  1.0
   recon_lambda: 1.00        # 重构项系数
   disentangle_lambda: 0.1  # 0.10
-  center_lambda: 0.01       # 0.01
+  center_lambda: 0.1       # 0.01
   # Other flags
   minority_class_id: 1      # 你的少数类 id（UCR 使用 np.unique 后得到的索引）
   cls_embed: true
