@@ -95,7 +95,7 @@ class MultiScaleConvEmbedder(nn.Module):
             kernel_sizes= [1, 3, 15, 31],
             dilations=[1, 1, 1, 1],
             stride: int = 1,
-            dropout: float = 0.1,
+            dropout: float = 0.2,
     ) -> None:
         super().__init__()
 
