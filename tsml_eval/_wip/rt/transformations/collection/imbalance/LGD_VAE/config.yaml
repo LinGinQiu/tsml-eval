@@ -6,10 +6,10 @@ experiment:
 
 paths:
   data_root: "/scratch/cq2u24/Data/imbalanced_9_1"
-  work_root: "/scratch/cq2u24/models/MGD_CVAE_v18"
-  logs_dir: "/scratch/cq2u24/models/MGD_CVAE_v18/logs"          # 不用 ${} 插值
-  ckpt_dir: "/scratch/cq2u24/models/MGD_CVAE_v18/checkpoints"
-  outputs_dir: "/scratch/cq2u24/models/MGD_CVAE_v18/imputations"
+  work_root: "/scratch/cq2u24/models/MGD_CVAE_v19"
+  logs_dir: "/scratch/cq2u24/models/MGD_CVAE_v19/logs"          # 不用 ${} 插值
+  ckpt_dir: "/scratch/cq2u24/models/MGD_CVAE_v19/checkpoints"
+  outputs_dir: "/scratch/cq2u24/models/MGD_CVAE_v19/imputations"
 
 data:
   # 由 CLI 覆盖：--dataset_name <UCR_NAME>
@@ -38,7 +38,7 @@ model:
   # Encoder
   in_chans: 1
   embed_dim: 64          # 原 d_model
-  depth: 4               # 原 enc_depth
+  depth: 2               # 原 enc_depth
   num_heads: 8           # 原 n_heads
   d_hid: 256             # Latents
   latent_dim_global: 32
@@ -47,7 +47,7 @@ model:
   gate_hidden: 64
   # Decoder
   decoder_embed_dim: 64  # 原 dec_dim
-  decoder_depth: 3       # 原 dec_depth
+  decoder_depth: 2       # 原 dec_depth
   decoder_num_heads: 8   # 若无单独 dec_heads 就与 num_heads 一致
 
   # Conv1d embedder (由我们在 Embedder 中实现)
@@ -105,7 +105,7 @@ trainer:
 # —— 新增：配合 train.py 里 callbacks 的访问 ——
 callbacks:
   checkpointing:
-    dirpath: "/scratch/cq2u24/models/MGD_CVAE_v18/checkpoints"
+    dirpath: "/scratch/cq2u24/models/MGD_CVAE_v19/checkpoints"
     filename: "MGD_CVAE-{epoch:02d}"
     monitor: "eval_f1_min"
     mode: "max"
