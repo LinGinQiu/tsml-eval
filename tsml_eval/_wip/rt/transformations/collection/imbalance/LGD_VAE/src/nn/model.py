@@ -137,7 +137,7 @@ class MultiScaleConvEmbedder(nn.Module):
 
         # 可选：如果你希望拼接后特征融合得更好，可以加一个 1x1 卷积混合一下
         self.project = nn.Sequential(
-            nn.Conv1d(d_model, d_model, kernel_size=1, bias=False),
+            nn.Conv1d(d_model, d_model, kernel_size=1), # bias=False
             # nn.BatchNorm1d(d_model),  # BatchNorm 在一维时序提取中效果很好
             # nn.GELU(),
             # nn.Dropout(dropout)
