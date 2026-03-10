@@ -246,7 +246,7 @@ class LitAutoEncoder(pl.LightningModule):
         padding =1,
         recon_metric = 'mse',
         val_data = None,
-        oracle_model: nn.Module = None,
+        oracle_model = None,
         lr = 1e-3,
         mean_ = None,
         std_ = None
@@ -290,10 +290,10 @@ class LitAutoEncoder(pl.LightningModule):
         self.oracle = oracle_model
         self.mean_ = mean_
         self.std_ = std_
-        if self.oracle:
-            self.oracle.eval()
-            for param in self.oracle.parameters():
-                param.requires_grad = False  # 确保不被误训练
+        # if self.oracle:
+            # self.oracle.eval()
+            # for param in self.oracle.parameters():
+            #     param.requires_grad = False  # 确保不被误训练
         if cls_embed and weights is not None:
             num_c = len(weights)
             print(weights)
@@ -395,104 +395,65 @@ class LitAutoEncoder(pl.LightningModule):
 
 
     def validation_step(self, batch, batch_idx):
-        pass
-        # if len(batch) == 2:
-        #     x, y = batch
-        # else:
-        #     x, y = batch, None
-        #
-        # if self.train_data_sample:
-        #     is_min = (y == self.minority_class_id)
-        #     is_maj = ~is_min
-        #     # 必须使用 .detach() 避免计算图积压
-        #     self.train_data.append({
-        #         "x_majority": x[is_maj].detach(),
-        #         "x_minority": x[is_min].detach()
-        #     })
+        # pass
+        if len(batch) == 2:
+            x, y = batch
+        else:
+            x, y = batch, None
+
+        if self.train_data_sample:
+            is_min = (y == self.minority_class_id)
+            self.train_data.append({
+
+                "x_minority": x[is_min].detach()
+            })
 
 
     def on_validation_epoch_end(self):
         # 1. 检查是否有数据
         if not self.train_data:
             return
-
-        X_majority = torch.cat([d["x_majority"] for d in self.train_data], dim=0)
         X_minority = torch.cat([d["x_minority"] for d in self.train_data], dim=0)
         # 如果你只想采样一次训练集作为 benchmark，保留此 flag
         # 如果希望每轮都刷新，就在末尾把此 flag 设为 True
         # self.train_data_sample = False
-        if len(X_majority) is 0 or len(X_minority) is 0:
+        if len(X_minority) is 0:
             return
-        device = X_majority.device
-
-        # 2. 划分训练/测试 (如果没有外部验证集)
-        if self.val_data is None:
-            num_min = X_minority.size(0)
-            num_maj = X_majority.size(0)
-
-            # 计算 70% 的分界点
-            idx_min = max(1, int(num_min * 0.7))
-            idx_maj = max(1, int(num_maj * 0.7))
-
-            # 生成随机打乱的索引 (注意保持在同一个 device 上，防止显存拷贝报错)
-            perm_min = torch.randperm(num_min, device=X_minority.device)
-            perm_maj = torch.randperm(num_maj, device=X_majority.device)
-
-            # 根据随机索引切分数据
-            minority_train = X_minority[perm_min[:idx_min]]
-            minority_test = X_minority[perm_min[idx_min:]]
-
-            majority_train = X_majority[perm_maj[:idx_maj]]
-            majority_test = X_majority[perm_maj[idx_maj:]]
-        else:
-            minority_train = X_minority
-            majority_train = X_majority
-            # 确保 val_data 也在正确的设备上
-            v_x, v_y = self.val_data["x_test"].to(device), self.val_data["y_test"].to(device)
-            minority_test = v_x[v_y == self.minority_class_id]
-            majority_test = v_x[v_y != self.minority_class_id]
-
-        # 3. 双分类器筛选生成
-        target_count = minority_train.size(0) * 9
-        # new_minority = self.get_filtered_samples(minority_train, target_count)
-        new_minority = self.model.generate_vae_prior(minority_train, num_variations=9, alpha=0.5)
-        # 4. 构建评估集
-        all_x_train = torch.cat([majority_train, minority_train, new_minority], dim=0)
-        all_y_train = torch.cat([
-            torch.full((len(majority_train),), 0, device=device),
-            torch.full((len(minority_train) + len(new_minority),), 1, device=device)
-        ], dim=0)
-
-        all_x_test = torch.cat([majority_test, minority_test], dim=0)
-        all_y_test = torch.cat([
-            torch.full((len(majority_test),), 0, device=device),
-            torch.full((len(minority_test),), 1, device=device)
-        ], dim=0)
-        res_g, res_f1, res_acc = 0., 0., 0.
-        res_gen = res_f1
+        device = X_minority.device
+        new_minority = self.model.generate_vae_prior(X_minority, num_variations=9, alpha=0.5)
+        new_minority = new_minority.cpu().numpy()
         from tsml_eval._wip.rt.transformations.collection.imbalance.LGD_VAE.inference import Inference
-        inference = Inference
-        all_x_train = all_x_train
-        all_x_test = all_x_test
-        # 3. 每隔 N 个 Epoch 执行分类器评估
-        if self.current_epoch >= 0:
-            metrics = train_and_eval_classifier(
-                all_x_train, all_y_train,
-                all_x_test, all_y_test,
-                input_chans=self.input_channels,
-                seq_len=all_x_train.shape[-1],
-                device=self.device
-            )
-            res_g = metrics["val_g_means"]
-            res_f1 = metrics["val_f1_macro"]
-            res_acc = metrics["val_acc"]
-            res_gen = res_f1
+        # inference = Inference
+        # all_x_train = all_x_train
+        # all_x_test = all_x_test
+        # # 3. 每隔 N 个 Epoch 执行分类器评估
+        # if self.current_epoch >= 0:
+        #     metrics = train_and_eval_classifier(
+        #         all_x_train, all_y_train,
+        #         all_x_test, all_y_test,
+        #         input_chans=self.input_channels,
+        #         seq_len=all_x_train.shape[-1],
+        #         device=self.device
+        #     )
+        #     res_g = metrics["val_g_means"]
+        #     res_f1 = metrics["val_f1_macro"]
+        #     res_acc = metrics["val_acc"]
+        #     res_gen = res_f1
+        if self.oracle is not None:
+            import numpy as np
+            from sklearn.metrics import accuracy_score
+            new_minority = new_minority.squeeze()
+            y_pred_val = self.oracle.predict(new_minority)
+            y_true = np.full(shape=y_pred_val.shape, fill_value=self.minority_class_id)
+            res_acc = accuracy_score(y_true, y_pred_val)
 
-        # 4. 统一在分支外 Log，确保参数永远一致
-        self.log("eval/gen_g_means", res_g, prog_bar=True)
-        self.log("eval/gen_f1_macro", res_f1, prog_bar=True)
-        self.log("eval/acc", res_acc, prog_bar=True)
-        self.log("eval_gen", res_gen, prog_bar=True)
+        else:
+            res_acc = 0.0
+        # # 4. 统一在分支外 Log，确保参数永远一致
+        # self.log("eval/gen_g_means", res_g, prog_bar=True)
+        # self.log("eval/gen_f1_macro", res_f1, prog_bar=True)
+        self.log("eval_acc", res_acc, prog_bar=True)
+        # self.log("eval_gen", res_gen, prog_bar=True)
 
         # 5. 清空列表
         self.train_data.clear()

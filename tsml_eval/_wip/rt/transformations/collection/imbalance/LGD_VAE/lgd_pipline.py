@@ -152,15 +152,15 @@ class PrintLossCallback(Callback):
     def on_validation_epoch_end(self, trainer, pl_module):
         metrics = trainer.callback_metrics
         epoch = trainer.current_epoch
-        gmeans = metrics.get("eval/gen_g_means")
-        macrof1 = metrics.get("eval/gen_f1_macro")
-        acc = metrics.get("eval/acc")
+        gmeans = metrics.get("eval_gen_g_means")
+        macrof1 = metrics.get("eval_gen_f1_macro")
+        acc = metrics.get("eval_acc")
         gen_metrics = metrics.get("eval_gen")
         if acc is not None:
             print(f"[Epoch {epoch}] Val acc={float(acc):.4f}"
-                  f", gmeans={float(gmeans):.4f}"
-                    f", macrof1={float(macrof1):.4f}"
-                    f", gen={float(gen_metrics):.4f}"
+                  # f", gmeans={float(gmeans):.4f}"
+                  #   f", macrof1={float(macrof1):.4f}"
+                  #   f", gen={float(gen_metrics):.4f}"
                   )
 
 
@@ -398,7 +398,7 @@ class LGDVAEPipeline:
     # -------------------------
     # 内部工具：构建 pl_model + Trainer
     # -------------------------
-    def _build_model_and_trainer(self, train_dataset: UCRDataset, oracle: torch.nn.Module = None) -> tuple[LitAutoEncoder, pl.Trainer]:
+    def _build_model_and_trainer(self, train_dataset: UCRDataset, oracle: torch.nn.Module = None, classifier=None) -> tuple[LitAutoEncoder, pl.Trainer]:
         cfg = self.cfg
         train_size = len(train_dataset)
         seq_len = int(train_dataset.data.shape[-1])
@@ -429,7 +429,7 @@ class LGDVAEPipeline:
         autoencoder = LitAutoEncoder(
             **model_kwargs,
             weights=getattr(train_dataset, "class_freq", None),
-            oracle_model=oracle,  # <--- 关键修改：注入裁判
+            oracle_model=classifier,  # <--- 关键修改：注入裁判
             mean_=self.mean_,
             std_=self.std_,
         )
@@ -441,18 +441,18 @@ class LGDVAEPipeline:
 
         # 策略 B: 保存“重构质量最高”的模型 (Fidelity Best)
         # 这个模型生成的波形最平滑，最像真实数据
-        # callbacks.append(DelayedModelCheckpoint(
-        #     dirpath=cfg.paths.ckpt_dir,
-        #     filename="{epoch:02d}-{eval_gen:.4f}",
-        #     monitor="eval_gen",
-        #     mode="max",
-        #     save_top_k=3,
-        #     warmup_epochs=5,
-        #     save_last=False
-        # ))
         callbacks.append(DelayedModelCheckpoint(
             dirpath=cfg.paths.ckpt_dir,
-            filename="{epoch:02d}-{train_loss:.4f}",
+            filename="{eval_acc:.4f}-{epoch:02d}",
+            monitor="eval_acc",
+            mode="max",
+            save_top_k=3,
+            warmup_epochs=5,
+            save_last=False
+        ))
+        callbacks.append(DelayedModelCheckpoint(
+            dirpath=cfg.paths.ckpt_dir,
+            filename="{train_loss:.4f}-{epoch:02d}",
             monitor="train_loss",
             mode="min",
             save_top_k=3,
@@ -651,6 +651,12 @@ class LGDVAEPipeline:
         如果不传 X_tr/y_tr/X_te/y_te，则会自动按照 cfg 从 UCR 目录读取；
         如果你已经在外面自己做好了 split，就可以把 numpy 数组直接传进来。
         """
+        print("🚀 Starting LGD-VAE training pipeline...")
+        print("train a rf classifier to check the generated data quality")
+        from sklearn.ensemble import RandomForestClassifier
+        clf = RandomForestClassifier(n_estimators=300, class_weight='balanced', n_jobs=-1)
+        clf.fit(X_tr.squeeze(), y_tr)
+
         if X_te is None:
             print("use train data for evaluation since test data is not provided.")
             X_te = X_tr
@@ -702,7 +708,7 @@ class LGDVAEPipeline:
         # -------------------------------------------------------
         # 3. 构建模型 (传入 Oracle)
         # autoencoder, trainer = self._build_model_and_trainer(train_dataset, oracle=self.static_oracle)
-        autoencoder, trainer = self._build_model_and_trainer(train_dataset)
+        autoencoder, trainer = self._build_model_and_trainer(train_dataset, classifier=clf)
 
         # 4) 训练：如果已有 checkpoint 则优先尝试加载；加载失败再回退到重新训练
         ckpt_path = None
@@ -724,12 +730,12 @@ class LGDVAEPipeline:
 
                     # 构建完整的候选路径列表
                     full_ckpt_paths = [os.path.join(ckpt_dir, f) for f in ckpt_candidates]
-
+                    ckpt_path = os.path.join(ckpt_dir, sorted(ckpt_candidates)[0])
                     # 调用选拔赛逻辑（见下文实现）
                     # 传入原始归一化后的数据 X_tr, y_tr
-                    ckpt_path = self._tournament_selection(full_ckpt_paths, X_tr, y_tr, k_folds=5)
-
-                    print(f"🥇 Tournament winner selected: {os.path.basename(ckpt_path)}")
+                    # ckpt_path = self._tournament_selection(full_ckpt_paths, X_tr, y_tr, k_folds=5)
+                    #
+                    # print(f"🥇 Tournament winner selected: {os.path.basename(ckpt_path)}")
                     # print(f"[Experiment] No env var found, auto-loading best model from {ckpt_dir}...")
                     # import re
                     # def extract_loss(name: str):
