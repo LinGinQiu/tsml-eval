@@ -651,8 +651,10 @@ class LGDVAEPipeline:
         如果不传 X_tr/y_tr/X_te/y_te，则会自动按照 cfg 从 UCR 目录读取；
         如果你已经在外面自己做好了 split，就可以把 numpy 数组直接传进来。
         """
+
         print("🚀 Starting LGD-VAE training pipeline...")
         print("train a rf classifier to check the generated data quality")
+        y_tr = y_tr.astype(np.int64)
         from sklearn.ensemble import RandomForestClassifier
         clf = RandomForestClassifier(n_estimators=300, class_weight='balanced', n_jobs=-1)
         clf.fit(X_tr.squeeze(), y_tr)
@@ -661,6 +663,8 @@ class LGDVAEPipeline:
             print("use train data for evaluation since test data is not provided.")
             X_te = X_tr
             y_te = y_tr
+        else:
+            y_te = y_te.astype(np.int64)
         cfg = self.cfg
         dataset_name = cfg.data.dataset_name
         # X_train_maj = X_tr[y_tr != cfg.model.minority_class_id]
