@@ -656,8 +656,9 @@ class LGDVAEPipeline:
         print("train a rf classifier to check the generated data quality")
 
         from sklearn.ensemble import RandomForestClassifier
-        clf = RandomForestClassifier(n_estimators=300, class_weight='balanced', n_jobs=-1)
-        clf.fit(X_tr.squeeze(), y_tr)
+        from aeon.classification.convolution_based import MultiRocketHydraClassifier
+        clf = MultiRocketHydraClassifier(random_state=self.seed)
+        clf.fit(X_tr, y_tr)
         X_train_maj = X_tr[y_tr != self.cfg.model.minority_class_id]
         X_train_min = X_tr[y_tr == self.cfg.model.minority_class_id]
         print(f"Original Majority class size: {len(X_train_maj)}, Minority class size: {len(X_train_min)}")

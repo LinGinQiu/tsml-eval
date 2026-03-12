@@ -441,7 +441,7 @@ class LitAutoEncoder(pl.LightningModule):
         if self.oracle is not None:
             import numpy as np
             from sklearn.metrics import accuracy_score
-            new_minority = new_minority.squeeze()
+            new_minority = new_minority
             y_pred_val = self.oracle.predict(new_minority)
             y_true = np.full(shape=y_pred_val.shape, fill_value=self.minority_class_id)
             print(y_pred_val[0:20], y_true[0:20])
