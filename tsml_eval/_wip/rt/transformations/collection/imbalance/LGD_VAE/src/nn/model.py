@@ -1178,7 +1178,7 @@ class LatentGatedDualVAE(nn.Module):
             stds_perm = lam_expanded * stds + (1 - lam_expanded) * stds[perm]
             # means_perm = means
             # stds_perm = stds
-            use_gate = True
+            use_gate = False
             if self.z_g_maj_ema_inited and use_gate:
                 z_g_maj = self.z_g_maj_mean
                 gate = self.gate(z_c_mix)
