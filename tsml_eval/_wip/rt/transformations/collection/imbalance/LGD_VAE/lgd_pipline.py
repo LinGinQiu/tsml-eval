@@ -658,7 +658,9 @@ class LGDVAEPipeline:
         from sklearn.ensemble import RandomForestClassifier
         clf = RandomForestClassifier(n_estimators=300, class_weight='balanced', n_jobs=-1)
         clf.fit(X_tr.squeeze(), y_tr)
-
+        X_train_maj = X_tr[y_tr != self.cfg.model.minority_class_id]
+        X_train_min = X_tr[y_tr == self.cfg.model.minority_class_id]
+        print(f"Original Majority class size: {len(X_train_maj)}, Minority class size: {len(X_train_min)}")
         if X_te is None:
             print("use train data for evaluation since test data is not provided.")
             X_te = X_tr
