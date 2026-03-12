@@ -654,7 +654,7 @@ class LGDVAEPipeline:
 
         print("🚀 Starting LGD-VAE training pipeline...")
         print("train a rf classifier to check the generated data quality")
-        y_tr = y_tr.astype(np.int64)
+
         from sklearn.ensemble import RandomForestClassifier
         clf = RandomForestClassifier(n_estimators=300, class_weight='balanced', n_jobs=-1)
         clf.fit(X_tr.squeeze(), y_tr)
@@ -663,8 +663,6 @@ class LGDVAEPipeline:
             print("use train data for evaluation since test data is not provided.")
             X_te = X_tr
             y_te = y_tr
-        else:
-            y_te = y_te.astype(np.int64)
         cfg = self.cfg
         dataset_name = cfg.data.dataset_name
         # X_train_maj = X_tr[y_tr != cfg.model.minority_class_id]

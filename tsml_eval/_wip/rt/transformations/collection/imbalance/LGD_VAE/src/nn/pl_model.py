@@ -404,7 +404,6 @@ class LitAutoEncoder(pl.LightningModule):
         if self.train_data_sample:
             is_min = (y == self.minority_class_id)
             self.train_data.append({
-
                 "x_minority": x[is_min].detach()
             })
 
@@ -445,8 +444,9 @@ class LitAutoEncoder(pl.LightningModule):
             new_minority = new_minority.squeeze()
             y_pred_val = self.oracle.predict(new_minority)
             y_true = np.full(shape=y_pred_val.shape, fill_value=self.minority_class_id)
+            print(y_pred_val[0:20], y_true[0:20])
+            print(y_pred_val.type, y_true.dtype)
             res_acc = accuracy_score(y_true, y_pred_val)
-
         else:
             res_acc = 0.0
         # # 4. 统一在分支外 Log，确保参数永远一致
