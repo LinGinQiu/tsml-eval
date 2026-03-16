@@ -131,7 +131,7 @@ impute_infer:
   save_format: "npy"
 
 repro:
-  cudnn_benchmark: true
+  cudnn_benchmark: false
   seed: 42
 
 ddp:
