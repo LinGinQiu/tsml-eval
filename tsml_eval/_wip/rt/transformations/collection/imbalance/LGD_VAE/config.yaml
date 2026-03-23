@@ -47,7 +47,7 @@ model:
   gate_hidden: 64
   # Decoder
   decoder_embed_dim: 64  # 原 dec_dim
-  decoder_depth: 3       # 原 dec_depth
+  decoder_depth: 2       # 原 dec_depth
   decoder_num_heads: 8   # 若无单独 dec_heads 就与 num_heads 一致
 
   # Conv1d embedder (由我们在 Embedder 中实现)
@@ -56,7 +56,7 @@ model:
   padding: 1             # 原 conv.padding
 
   # Regularization / layout
-  dropout: 0.2  # 0.1
+  dropout: 0.1  # 0.1
   norm_first: true
   # Initialization & extras
 
@@ -80,7 +80,7 @@ loss:
 
 optim:
   optimizer: "adamw"
-  lr: 0.0001
+  lr: 0.001
   weight_decay: 0.01
   betas: [0.9, 0.999]
   scheduler: "cosine"
