@@ -770,8 +770,8 @@ class LGDVAEPipeline:
 
         # ---------------- Step 2: 尝试加载 ----------------
         if ckpt_path is not None:  # <--- [关键修改] 只有找到了路径才尝试加载
-            import sys
-            sys.exit(0)
+            # import sys
+            # sys.exit(0)
             try:
                 print(f"[LGDVAEPipeline] Attempting to load checkpoint: {ckpt_path}")
 
