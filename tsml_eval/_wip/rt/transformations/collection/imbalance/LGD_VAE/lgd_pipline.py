@@ -727,7 +727,7 @@ class LGDVAEPipeline:
         else:
             # 只有在没有环境变量指定时，才去目录自动搜索
             if ckpt_dir is not None and os.path.isdir(ckpt_dir):
-                # print(f"loading checkpoint from {ckpt_dir}")
+                print(f"loading checkpoint from {ckpt_dir}")
                 ckpt_candidates = [f for f in os.listdir(ckpt_dir) if f.endswith(".ckpt")]
 
                 if ckpt_candidates:
