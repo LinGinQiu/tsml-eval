@@ -6,10 +6,10 @@ experiment:
 
 paths:
   data_root: "/scratch/cq2u24/Data/imbalanced_9_1"
-  work_root: "/scratch/cq2u24/models/MGD_CVAE_re_5"
-  logs_dir: "/scratch/cq2u24/models/MGD_CVAE_re_5/logs"          # 不用 ${} 插值
-  ckpt_dir: "/scratch/cq2u24/models/MGD_CVAE_re_5/checkpoints"
-  outputs_dir: "/scratch/cq2u24/models/MGD_CVAE_re_5/imputations"
+  work_root: "/scratch/cq2u24/models/MGD_CVAE_re_6"
+  logs_dir: "/scratch/cq2u24/models/MGD_CVAE_re_6/logs"          # 不用 ${} 插值
+  ckpt_dir: "/scratch/cq2u24/models/MGD_CVAE_re_6/checkpoints"
+  outputs_dir: "/scratch/cq2u24/models/MGD_CVAE_re_6/imputations"
 
 data:
   # 由 CLI 覆盖：--dataset_name <UCR_NAME>
@@ -86,7 +86,7 @@ optim:
   scheduler: "cosine"
   cosine:
     T_max: 100              # 对齐本地 epochs
-    eta_min: 1e-4
+    eta_min: 1e-2
     warmup_epochs: 5
 
 trainer:
@@ -105,7 +105,7 @@ trainer:
 # —— 新增：配合 train.py 里 callbacks 的访问 ——
 callbacks:
   checkpointing:
-    dirpath: "/scratch/cq2u24/models/MGD_CVAE_re_5/checkpoints"
+    dirpath: "/scratch/cq2u24/models/MGD_CVAE_re_6/checkpoints"
     filename: "MGD_CVAE-{epoch:02d}"
     monitor: "eval_f1_min"
     mode: "max"
